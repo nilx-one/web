@@ -12,6 +12,9 @@ use nilxone_contracts::{SubscriptionClock, SubscriptionTier};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IssuerSpecialOrderSnapshot {
     pub order_id: String,
+    /// SHA-256 of the authenticated 0x1 session active when checkout started.
+    /// The issuer worker resolves and verifies this binding server-side.
+    pub active_session_hash: Vec<u8>,
     pub issuer: String,
     pub denomination: String,
     pub status: String,
@@ -36,6 +39,45 @@ pub enum SpecialSeedsOutcome {
     InvalidTerms,
     /// Order id was committed under different immutable terms.
     ConflictingReplay,
+    /// The buyer's active session changed or another activation is pending.
+    SessionChanged,
+}
+
+/// Called while the same SQLite writer transaction owns the wallet. This
+/// checks the Single Active Client snapshot and blocks spending during a real,
+/// open activation request from another client. Mere login does not interrupt.
+pub(crate) async fn spend_session_active_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    owner: &PubDress,
+    session_hash: &[u8],
+    now_seconds: u64,
+) -> Result<bool, RepositoryError> {
+    let Ok(now) = i64::try_from(now_seconds) else { return Ok(false); };
+    if session_hash.len() != 32 { return Ok(false); }
+    let current = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM native_sessions
+         WHERE pub_dress = ? AND token_hash = ? AND active = 1
+         AND revoked_at IS NULL AND expires_at > ?)",
+    )
+    .bind(owner.as_str())
+    .bind(session_hash)
+    .bind(now)
+    .fetch_one(&mut **transaction)
+    .await? != 0;
+    if !current { return Ok(false); }
+    let takeover_in_progress = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM session_activation_requests
+         WHERE pub_dress = ? AND requester_token_hash != ?
+         AND ((status = 'pending' AND responds_by > ?)
+              OR (status = 'objectable' AND objection_deadline > ?)))",
+    )
+    .bind(owner.as_str())
+    .bind(session_hash)
+    .bind(now)
+    .bind(now)
+    .fetch_one(&mut **transaction)
+    .await? != 0;
+    Ok(!takeover_in_progress)
 }
 
 impl IdentityRepository {
@@ -75,6 +117,7 @@ impl IdentityRepository {
         );
         if !valid_order_id
             || !valid_sku
+            || order.active_session_hash.len() != 32
             || order.issuer != "0x1"
             || order.denomination != "seeds"
             || order.status != "processing"
@@ -95,6 +138,9 @@ impl IdentityRepository {
         };
 
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        if !spend_session_active_in(&mut transaction, owner, &order.active_session_hash, now_ms / 1000).await? {
+            return Ok(SpecialSeedsOutcome::SessionChanged);
+        }
 
         // Replay is checked first, before inspecting the current wallet or
         // clock: later legitimate operations must not invalidate this receipt.
@@ -240,12 +286,22 @@ mod special_seeds_tests {
         .execute(&repository.pool)
         .await
         .expect("identity");
+        sqlx::query(
+            "INSERT INTO native_sessions (token_hash, pub_dress, expires_at, created_at, active) \\
+             VALUES (?, ?, 100000, 1, 1)",
+        )
+        .bind(vec![9; 32])
+        .bind(owner.as_str())
+        .execute(&repository.pool)
+        .await
+        .expect("active session");
         (repository, owner)
     }
 
     fn order(id: &str) -> IssuerSpecialOrderSnapshot {
         IssuerSpecialOrderSnapshot {
             order_id: id.to_owned(),
+            active_session_hash: vec![9; 32],
             issuer: "0x1".to_owned(),
             denomination: "seeds".to_owned(),
             status: "processing".to_owned(),
@@ -311,6 +367,45 @@ mod special_seeds_tests {
             repository.settle_special_seeds(&owner, &conflict, 200).await.unwrap(),
             SpecialSeedsOutcome::ConflictingReplay
         );
+    }
+
+    #[tokio::test]
+    async fn activation_or_session_switch_cancels_purchase_without_debit() {
+        let (repository, owner) = setup().await;
+        fund_fixture(&repository, &owner, 1000).await;
+        sqlx::query(
+            "INSERT INTO native_sessions(token_hash, pub_dress, expires_at, created_at, active)
+             VALUES (?, ?, 100000, 2, 0)",
+        )
+        .bind(vec![7; 32]).bind(owner.as_str())
+        .execute(&repository.pool).await.unwrap();
+        sqlx::query(
+            "INSERT INTO session_activation_requests
+             (id, pub_dress, requester_token_hash, client_label, status, created_at, responds_by)
+             VALUES (?, ?, ?, 'Second device', 'pending', 1, 500)",
+        )
+        .bind(vec![1; 16]).bind(owner.as_str()).bind(vec![7; 32])
+        .execute(&repository.pool).await.unwrap();
+
+        let snapshot = order("order-switch-1");
+        assert_eq!(repository.settle_special_seeds(&owner, &snapshot, 100_000).await.unwrap(),
+                   SpecialSeedsOutcome::SessionChanged);
+        sqlx::query("UPDATE session_activation_requests SET status='declined', resolved_at=101")
+            .execute(&repository.pool).await.unwrap();
+        // The active session still holds authority after the request was declined.
+        assert_eq!(repository.settle_special_seeds(&owner, &snapshot, 100_000).await.unwrap(),
+                   SpecialSeedsOutcome::Granted);
+        // A verified switch invalidates the previous session even for replays.
+        sqlx::query("UPDATE native_sessions SET active=0 WHERE token_hash = ?")
+            .bind(vec![9;32]).execute(&repository.pool).await.unwrap();
+        sqlx::query("UPDATE native_sessions SET active=1 WHERE token_hash = ?")
+            .bind(vec![7;32]).execute(&repository.pool).await.unwrap();
+        assert_eq!(repository.settle_special_seeds(&owner, &snapshot, 100_000).await.unwrap(),
+                   SpecialSeedsOutcome::SessionChanged);
+        let balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM bond_seeds WHERE owner_pub_dress=?",
+        ).bind(owner.as_str()).fetch_one(&repository.pool).await.unwrap();
+        assert_eq!(balance, 360);
     }
 
     #[tokio::test]
