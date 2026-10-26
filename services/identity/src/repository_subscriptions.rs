@@ -287,7 +287,7 @@ mod special_seeds_tests {
         .await
         .expect("identity");
         sqlx::query(
-            "INSERT INTO native_sessions (token_hash, pub_dress, expires_at, created_at, active) \\
+            "INSERT INTO native_sessions (token_hash, pub_dress, expires_at, created_at, active) \
              VALUES (?, ?, 100000, 1, 1)",
         )
         .bind(vec![9; 32])
