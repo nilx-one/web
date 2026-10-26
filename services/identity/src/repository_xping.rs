@@ -5,7 +5,71 @@
 // `XpingEngine`, read and replaced in one write transaction so two devices
 // forcing at once cannot both spend from the same energy.
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XpingSeedsRepairRefusal {
+    SessionChanged,
+    StaleEngine,
+    InsufficientSeeds,
+    Engine(nilxone_contracts::XpingEngineError),
+}
+
 impl IdentityRepository {
+    /// Repairs xPing and debits the Identity-owned seeds wallet in one
+    /// transaction. Local inventory is never payment evidence.
+    pub async fn repair_xping_with_seeds(
+        &self,
+        owner: &PubDress,
+        active_session_hash: &[u8],
+        expected: nilxone_contracts::XpingEngine,
+        now_ms: u64,
+    ) -> Result<Result<nilxone_contracts::XpingEngine, XpingSeedsRepairRefusal>, RepositoryError> {
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        if !spend_session_active_in(&mut tx, owner, active_session_hash, now_ms / 1000).await? {
+            return Ok(Err(XpingSeedsRepairRefusal::SessionChanged));
+        }
+
+        let current = read_xping_engine_in(&mut tx, owner, now_ms).await?;
+        if current != expected {
+            return Ok(Err(XpingSeedsRepairRefusal::StaleEngine));
+        }
+        let price = current.repair_seeds(now_ms);
+        let next = match current.repaired(price, now_ms) {
+            Ok(next) => next,
+            Err(error) => return Ok(Err(XpingSeedsRepairRefusal::Engine(error))),
+        };
+        let amount = i64::try_from(price).map_err(|_| RepositoryError::CorruptSeedsBalance)?;
+        let spent = sqlx::query(
+            "UPDATE bond_seeds SET balance = balance - ? \
+             WHERE owner_pub_dress = ? AND balance >= ?",
+        )
+        .bind(amount)
+        .bind(owner.as_str())
+        .bind(amount)
+        .execute(&mut *tx)
+        .await?;
+        if spent.rows_affected() != 1 {
+            return Ok(Err(XpingSeedsRepairRefusal::InsufficientSeeds));
+        }
+
+        let to_i64 = |value: u64| i64::try_from(value).map_err(|_| RepositoryError::CorruptPubInfo);
+        sqlx::query(
+            "INSERT INTO xping_engines \
+             (owner_pub_dress, energy_permille, at_ms, empty_forced_ms, broken_at_ms) \
+             VALUES (?, ?, ?, ?, ?) ON CONFLICT(owner_pub_dress) DO UPDATE SET \
+             energy_permille = excluded.energy_permille, at_ms = excluded.at_ms, \
+             empty_forced_ms = excluded.empty_forced_ms, broken_at_ms = excluded.broken_at_ms",
+        )
+        .bind(owner.as_str())
+        .bind(i64::from(next.energy_permille))
+        .bind(to_i64(next.at_ms.get())?)
+        .bind(to_i64(next.empty_forced_ms.get())?)
+        .bind(next.broken_at_ms.map(|at| to_i64(at.get())).transpose()?)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(Ok(next))
+    }
+
     /// Applies `change` to the Bond's engine at `now_ms` and stores the
     /// answer. A Bond with no stored engine starts from a full one. A refused
     /// change stores nothing and is answered as it was refused.
