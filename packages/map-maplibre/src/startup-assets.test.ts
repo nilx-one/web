@@ -52,8 +52,9 @@ describe("startup model settlement", () => {
   });
 
   it("starts decoding an upserted body before MapLibre adds the custom layer", () => {
-    const loadAsset = vi.fn(async () =>
-      ({ scene: new Object3D(), animations: [] }) as unknown as GLTF,
+    const loadAsset = vi.fn(
+      async () =>
+        ({ scene: new Object3D(), animations: [] }) as unknown as GLTF,
     );
     const layer = createAvatarLayer({ loadAsset });
     layer.upsert({
