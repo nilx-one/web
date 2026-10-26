@@ -32,7 +32,6 @@ enum XpingEngineCommand {
 #[derive(Debug)]
 enum XpingEngineRefusal {
     Engine(nilxone_contracts::XpingEngineError),
-    Stale,
 }
 
 #[derive(Serialize)]
@@ -183,11 +182,7 @@ async fn command_xping_engine_response(
         .await;
     match changed {
         Ok(Ok(engine)) => no_store_json(StatusCode::OK, xping_engine_body(&engine, now_ms)),
-        Ok(Err(XpingEngineRefusal::Stale)) => no_store_error(
-            StatusCode::CONFLICT,
-            "stale_engine",
-            "The engine changed since this repair was priced; price it again.",
-        ),
+
         Ok(Err(XpingEngineRefusal::Engine(refused))) => no_store_error(
             StatusCode::CONFLICT,
             refused.code(),
