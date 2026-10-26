@@ -20,14 +20,30 @@ Versioned migration 0037 introduces these private Identity tables:
   duration and committed timestamp.
 
 `IdentityRepository::settle_special_seeds` performs **one SQLite immediate
-write transaction**: validate an internally supplied issuer snapshot, reject
-different replay terms, check the authoritative balance, use Core to grant
-Special, deduct seeds, write the new clock and record the receipt. Either all
-three writes commit or none do. The same order ID and unchanged terms yield
+write transaction**: validate an internally supplied issuer snapshot, assert
+the order's original 32-byte hashed Identity client session is **still the
+active session**, reject a live competing Single Active Client activation
+request, reject different replay terms, check the authoritative balance, use
+Core to grant Special, deduct seeds, write the new clock and record the
+receipt. Either all three writes commit or none do. A different session or
+pending activation returns `SessionChanged`, with no debit or grant. The same order ID and unchanged terms yield
 `AlreadyGranted`, never a second debit. A changed replay is rejected.
 Missing or insufficient balance returns `InsufficientSeeds`. Exclusive SKUs
 are explicitly rejected. This method has **no HTTP route** and is never
 callable by a client or through an untrusted balance assertion.
+
+`GET /api/v1/identity/seeds` provides the current server-owned,
+authenticated, **read-only** balance as a decimal string with
+`authority: "identity"`. It never accepts a browser-side balance, carry or
+credit request. The browser's legacy inventory `seeds` hint in
+`/api/v1/identity/market-visit` is ignored: Identity sends its own wallet
+snapshot to 0xda-market. The snapshot is presentation-only, **never a spend
+authorization**; Market must still claim and settle the issuer order.
+
+SQLite serializes writer commits. A new client activation recorded before the
+spend gains the writer lock cancels the debit; an activation that begins
+after the spend already holds the lock is processed afterwards. An unverified
+login attempt does not cancel a transaction.
 
 Tests fund a wallet **directly inside the test database** solely to exercise
 the repository transaction. This fixture is not a crediting mechanism.
