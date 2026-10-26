@@ -138,10 +138,6 @@ impl IdentityRepository {
         };
 
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        if !spend_session_active_in(&mut transaction, owner, &order.active_session_hash, now_ms / 1000).await? {
-            return Ok(SpecialSeedsOutcome::SessionChanged);
-        }
-
         // Replay is checked first, before inspecting the current wallet or
         // clock: later legitimate operations must not invalidate this receipt.
         let prior = sqlx::query(
@@ -163,6 +159,12 @@ impl IdentityRepository {
             } else {
                 SpecialSeedsOutcome::ConflictingReplay
             });
+        }
+
+        // Existing committed receipts can be confirmed after a device handoff.
+        // Only a *new* debit requires the original active session.
+        if !spend_session_active_in(&mut transaction, owner, &order.active_session_hash, now_ms / 1000).await? {
+            return Ok(SpecialSeedsOutcome::SessionChanged);
         }
 
         let balance = sqlx::query_scalar::<_, i64>(
@@ -401,7 +403,7 @@ mod special_seeds_tests {
         sqlx::query("UPDATE native_sessions SET active=1 WHERE token_hash = ?")
             .bind(vec![7;32]).execute(&repository.pool).await.unwrap();
         assert_eq!(repository.settle_special_seeds(&owner, &snapshot, 100_000).await.unwrap(),
-                   SpecialSeedsOutcome::SessionChanged);
+                   SpecialSeedsOutcome::AlreadyGranted);
         let balance: i64 = sqlx::query_scalar(
             "SELECT balance FROM bond_seeds WHERE owner_pub_dress=?",
         ).bind(owner.as_str()).fetch_one(&repository.pool).await.unwrap();
