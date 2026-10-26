@@ -41,7 +41,8 @@ export type XpingEngineRejection =
   | "broken"
   | "full"
   | "underpaid"
-  | "stale";
+  | "stale"
+  | "not_enough_seeds";
 
 export type XpingEngineResult =
   | ({ readonly kind: "read" } & XpingEngineRead)
@@ -52,11 +53,8 @@ export interface XpingEngineAccessPort {
   readXpingEngine(): Promise<XpingEngineResult>;
   /** Reports forcing spent; Core breaks the engine past two seconds on empty. */
   forceXpingEngine(forcedMs: number): Promise<XpingEngineResult>;
-  /** Records a repair paid at the price of `expected`, the state it read. */
-  repairXpingEngine(
-    paidSeeds: number,
-    expected: XpingEngineState,
-  ): Promise<XpingEngineResult>;
+  /** Requests a repair: Identity alone prices, debits, and records it. */
+  repairXpingEngine(expected: XpingEngineState): Promise<XpingEngineResult>;
 }
 
 export function hasXpingEngineAccess(

@@ -34,6 +34,7 @@ pub mod repository {
     include!("repository_avaia_lifecycle.rs");
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
+    include!("repository_subscriptions.rs");
     include!("repository_business_stations.rs");
     include!("repository_xping.rs");
 }
