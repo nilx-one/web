@@ -13,6 +13,23 @@ pub enum XpingSeedsRepairRefusal {
     Engine(nilxone_contracts::XpingEngineError),
 }
 
+#[cfg(test)]
+impl IdentityRepository {
+    /// Test-only seed fixture; never compiled into the issuer/runtime API.
+    pub(crate) async fn fund_xping_test_seeds(
+        &self,
+        owner: &str,
+        amount: i64,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query("INSERT INTO bond_seeds (owner_pub_dress, balance) VALUES (?, ?)")
+            .bind(owner)
+            .bind(amount)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
 impl IdentityRepository {
     /// Repairs xPing and debits the Identity-owned seeds wallet in one
     /// transaction. Local inventory is never payment evidence.
