@@ -5,7 +5,9 @@
 #[serde(deny_unknown_fields)]
 struct MarketVisitRequest {
     point: String,
-    seeds: String,
+    // Legacy client inventory hint; ignored for all economy authority.
+    #[serde(default, rename = "seeds")]
+    _untrusted_seeds: Option<String>,
     avaia: MarketVisitPosition,
 }
 
@@ -37,7 +39,6 @@ async fn create_market_visit(
     }
     if request.point.is_empty() || request.point.chars().count() > 64
         || !request.point.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-        || request.seeds.parse::<u64>().is_err()
         || !(-180.0..=180.0).contains(&request.avaia.longitude)
         || !(-90.0..=90.0).contains(&request.avaia.latitude)
     {
@@ -46,6 +47,19 @@ async fn create_market_visit(
     if state.limiter.consume(format!("market-visit:{}", identity.pub_dress), now, 10, 60).is_err() {
         return api_error(StatusCode::TOO_MANY_REQUESTS, "market_visit_limit", "Please retry later.");
     }
+    let owner = match PubDress::from_str(&identity.pub_dress) {
+        Ok(owner) => owner,
+        Err(_) => return unavailable(),
+    };
+    // Read exactly the same server-owned wallet the issuer debits.
+    // Do not forward the browser's legacy inventory number to the Market.
+    let seeds = match state.repository.read_seeds_balance(&owner).await {
+        Ok(balance) => balance.to_string(),
+        Err(error) => {
+            tracing::error!(%error, "market-visit seeds lookup failed");
+            return unavailable();
+        }
+    };
     let token = match std::env::var("NILX_BROWSER_HANDOFF_TOKEN") {
         Ok(value) if value.len() >= 32 => value,
         _ => return unavailable(),
@@ -65,7 +79,7 @@ async fn create_market_visit(
     let result = client.post("https://0xda-market.nilx.one/nilx-browser/handoffs")
         .bearer_auth(token)
         .json(&serde_json::json!({"subject": subject, "point": request.point,
-            "seeds": request.seeds, "avaia": request.avaia}))
+            "seeds": seeds, "seeds_authority": "identity_snapshot", "avaia": request.avaia}))
         .send().await;
     let response = match result {
         Ok(response) if response.status().as_u16() == 201 => response,
