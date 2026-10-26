@@ -31,6 +31,46 @@ function map() {
 const gl = {} as WebGL2RenderingContext;
 
 describe("startup model settlement", () => {
+  it("preloads both studies and shares their decoded assets before the layer mounts", async () => {
+    const asset = { scene: new Object3D(), animations: [] } as unknown as GLTF;
+    const loadAsset = vi.fn(async () => asset);
+    const layer = createAvatarLayer({ loadAsset });
+    await layer.preload(["sky-study", "kai-study", "sky-study"]);
+    expect(loadAsset).toHaveBeenCalledTimes(2);
+    layer.upsert({
+      id: "driver",
+      modelId: "sky-study",
+      lngLat: [30.5636, 50.4267],
+      bearingDeg: 0,
+      clipId: "idle",
+      clipPhase: 0,
+      scale: 1,
+      visible: true,
+    });
+    expect(loadAsset).toHaveBeenCalledTimes(2);
+    layer.dispose();
+  });
+
+  it("starts decoding an upserted body before MapLibre adds the custom layer", () => {
+    const loadAsset = vi.fn(
+      async () =>
+        ({ scene: new Object3D(), animations: [] }) as unknown as GLTF,
+    );
+    const layer = createAvatarLayer({ loadAsset });
+    layer.upsert({
+      id: "driver",
+      modelId: "sky-study",
+      lngLat: [30.5636, 50.4267],
+      bearingDeg: 0,
+      clipId: "idle",
+      clipPhase: 0,
+      scale: 1,
+      visible: true,
+    });
+    expect(loadAsset).toHaveBeenCalledOnce();
+    layer.dispose();
+  });
+
   it("waits for a delayed monument and invalidates its state on style removal", async () => {
     let complete!: (asset: Object3D) => void;
     const layer = createMonumentLayer({

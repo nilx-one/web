@@ -14,12 +14,36 @@ export function waitForScene(
     let stableFrames = 0;
     let previousView:
       { longitude: number; latitude: number; framing: string } | undefined;
+    let frame: number | undefined;
+    let finished = false;
     const finish = (error?: Error) => {
+      if (finished) return;
+      finished = true;
+      if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
       map.off("render", render);
       map.off("remove", removed);
       signal.removeEventListener("abort", aborted);
       if (error) reject(error);
       else resolve();
+    };
+    // An embedded WebView can stop painting until a gesture invalidates the
+    // camera. While the opening scene is concealed, request frames ourselves.
+    // Pause when backgrounded and stop immediately after the paint barrier.
+    const pump = () => {
+      frame = undefined;
+      if (finished || signal.aborted || document.visibilityState === "hidden")
+        return;
+      map.triggerRepaint();
+      if (!finished) frame = globalThis.requestAnimationFrame(pump);
+    };
+    const onVisibility = () => {
+      if (
+        document.visibilityState !== "hidden" &&
+        frame === undefined &&
+        !finished
+      )
+        frame = globalThis.requestAnimationFrame(pump);
     };
     const aborted = () =>
       finish(new DOMException("Scene wait aborted", "AbortError"));
@@ -65,6 +89,8 @@ export function waitForScene(
     signal.addEventListener("abort", aborted, { once: true });
     map.on("render", render);
     map.on("remove", removed);
+    document.addEventListener("visibilitychange", onVisibility);
+    onVisibility();
     map.triggerRepaint();
   });
 }
