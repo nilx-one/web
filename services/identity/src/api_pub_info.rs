@@ -953,6 +953,13 @@ mod pub_info_api_tests {
         assert_eq!(repaired["engine"]["energy_permille"], 1000);
         assert_eq!(repaired["engine"]["broken"], false);
         assert_eq!(repaired["authority"], "identity");
+        let wallet = app.clone().oneshot(
+            Request::get("/api/v1/identity/seeds")
+                .header(COOKIE, sky_session.as_deref().expect("session"))
+                .body(Body::empty()).expect("wallet request")
+        ).await.expect("wallet response");
+        assert_eq!(wallet.status(), StatusCode::OK);
+        assert_eq!(json(wallet).await["balance"], "50");
         // The same payment again repairs nothing twice.
         let replay = engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await;
         assert_eq!(json(replay).await["error"]["code"], "stale_engine");
