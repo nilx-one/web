@@ -878,6 +878,8 @@ export interface AvatarHandle {
  * state and never publishes viewport or position telemetry.
  */
 export interface AvatarLayerContract {
+  /** Fetch and decode known study assets without asserting world presence. */
+  preload?(models: readonly AvatarModelId[]): Promise<void>;
   upsert(handle: AvatarHandle): void;
   remove(id: string): void;
   setCamera(camera: MapCamera): void;

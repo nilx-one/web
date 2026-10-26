@@ -931,6 +931,9 @@ export function createMapLibreRenderer(
     },
   };
   const avatars: AvatarLayerContract = {
+    preload(models) {
+      return requestAvatarLayer().then((layer) => layer.preload(models));
+    },
     upsert(handle) {
       avatarHandles.set(handle.id, handle);
       if (avatarLayer !== undefined) avatarLayer.upsert(handle);
@@ -1075,6 +1078,9 @@ export function createMapLibreRenderer(
 
     firstPaintDone = true;
     applyPresentation(mountedMap);
+    // The custom layers were added after the basemap frame. Request a new
+    // frame even when an embedded WebView stops painting on its own.
+    mountedMap.triggerRepaint();
     publish({ kind: "ready" });
   }
 
@@ -2372,6 +2378,7 @@ export function createMapLibreRenderer(
           const bounds = container.getBoundingClientRect();
           if (bounds.width <= 0 || bounds.height <= 0) return;
           mountedMap.resize();
+          mountedMap.triggerRepaint();
           if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
         };
         const scheduleViewportSync = () => {
@@ -2384,7 +2391,10 @@ export function createMapLibreRenderer(
             : new ResizeObserver(scheduleViewportSync);
         observer?.observe(container);
         const onVisible = () => {
-          if (document.visibilityState === "visible") scheduleViewportSync();
+          if (document.visibilityState === "visible") {
+            scheduleViewportSync();
+            mountedMap.triggerRepaint();
+          }
         };
         globalThis.addEventListener("resize", scheduleViewportSync);
         globalThis.visualViewport?.addEventListener(
@@ -2458,6 +2468,8 @@ export function createMapLibreRenderer(
         mountedMap.on("style.load", () => {
           styleResolved = true;
           styleReadyForPaint = true;
+          scheduleViewportSync();
+          mountedMap.triggerRepaint();
         });
         mountedMap.on("render", () => {
           if (styleReadyForPaint) completeFirstPaint(mountedMap, container);

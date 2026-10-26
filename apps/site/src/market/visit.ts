@@ -29,8 +29,8 @@ export const beginMarketVisit: NonNullable<
       signal: controller.signal,
       body: JSON.stringify({
         point: input.point,
-        // No currency originates in the browser. Identity reads its wallet
-        // before issuing the Market handoff.
+        // The server reads seeds from the authoritative Identity wallet.
+        // Never ship a browser inventory amount across the market handoff.
         avaia: input.avaia,
       }),
     });

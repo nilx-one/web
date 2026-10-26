@@ -73,6 +73,7 @@ interface FakeMap {
   readonly easeTo: ReturnType<typeof vi.fn>;
   readonly flyTo: ReturnType<typeof vi.fn>;
   readonly resize: ReturnType<typeof vi.fn>;
+  readonly triggerRepaint: ReturnType<typeof vi.fn>;
   readonly setStyle: ReturnType<typeof vi.fn>;
   readonly addSource: ReturnType<typeof vi.fn>;
   readonly removeSource: ReturnType<typeof vi.fn>;
@@ -148,6 +149,7 @@ function makeFakeMap(): FakeMap {
     easeTo: vi.fn(),
     flyTo: vi.fn(),
     resize: vi.fn(),
+    triggerRepaint: vi.fn(),
     setStyle: vi.fn(),
     addSource: vi.fn((id: string) => {
       sources.set(id, { setData: vi.fn() });
@@ -334,6 +336,16 @@ describe("createMapLibreRenderer", () => {
       bearing: 4,
       pitch: 5,
     });
+  });
+
+  it("requests a paint after style load without requiring camera input", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = mountedRenderer(fakeMap);
+    renderer.mount(document.createElement("div"));
+    fakeMap.triggerRepaint.mockClear();
+    fakeMap.emit("style.load");
+    expect(fakeMap.triggerRepaint).toHaveBeenCalled();
+    renderer.unmount();
   });
 
   it("publishes loading then ready and owns renderer cleanup", () => {
