@@ -26,8 +26,9 @@ active session**, reject a live competing Single Active Client activation
 request, reject different replay terms, check the authoritative balance, use
 Core to grant Special, deduct seeds, write the new clock and record the
 receipt. Either all three writes commit or none do. A different session or
-pending activation returns `SessionChanged`, with no debit or grant. The same order ID and unchanged terms yield
-`AlreadyGranted`, never a second debit. A changed replay is rejected.
+pending activation returns `SessionChanged`, with no debit or grant.
+The same order ID and unchanged terms yield `AlreadyGranted`,
+never a second debit. A changed replay is rejected.
 Missing or insufficient balance returns `InsufficientSeeds`. Exclusive SKUs
 are explicitly rejected. This method has **no HTTP route** and is never
 callable by a client or through an untrusted balance assertion.
