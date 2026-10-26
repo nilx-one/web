@@ -218,6 +218,7 @@ export interface AvatarCustomLayer
   removeAnimal(id: string): void;
   setFlightLoot(handles: readonly MapFlightLoot[]): void;
   hasInstances(): boolean;
+  preload(models: readonly AvatarModelId[]): Promise<void>;
   assetsSettled(): boolean;
   dispose(): void;
 }
@@ -658,8 +659,12 @@ export function createAvatarLayer(
       applyVisibility(instance);
       applyClip(instance);
       map?.triggerRepaint();
-    } catch {
-      // Fail closed: a missing study asset renders nothing and does not affect the map.
+    } catch (error) {
+      // The map may still render without an optional study, but the missing
+      // model must be diagnosable instead of silently disappearing.
+      if (!disposed && localGeneration === instance.loadGeneration) {
+        console.error(`Unable to render 0x1 model: ${instance.handle.modelId}`, error);
+      }
     } finally {
       if (!disposed && localGeneration === instance.loadGeneration) {
         instance.settled = true;
@@ -705,6 +710,11 @@ export function createAvatarLayer(
       loadGeneration: ++generation,
     };
     instances.set(handle.id, instance);
+    // Start download and glTF decode before MapLibre's first paint. The
+    // custom layer can mount later and reuse this same in-flight asset.
+    if (handle.modelId !== "system-ping") {
+      void requestAsset(handle.modelId).catch(() => undefined);
+    }
     requestMount();
     if (map !== undefined) void hydrate(instance);
   }
@@ -779,6 +789,12 @@ export function createAvatarLayer(
     },
 
     upsert: upsertBody,
+
+    preload(models) {
+      return Promise.all(models.map((model) => requestAsset(model))).then(
+        () => undefined,
+      );
+    },
 
     upsertAnimal(handle) {
       upsertBody(animalSceneHandle(handle));
