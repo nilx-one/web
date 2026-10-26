@@ -12,6 +12,9 @@ use nilxone_contracts::{SubscriptionClock, SubscriptionTier};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IssuerSpecialOrderSnapshot {
     pub order_id: String,
+    pub issuer: String,
+    pub denomination: String,
+    pub status: String,
     pub recipient_pub_dress: String,
     pub sku: String,
     pub price_id: u64,
@@ -59,6 +62,9 @@ impl IdentityRepository {
         );
         if !valid_order_id
             || !valid_sku
+            || order.issuer != "0x1"
+            || order.denomination != "seeds"
+            || order.status != "processing"
             || order.recipient_pub_dress != owner.as_str()
             || order.price_id == 0
             || order.amount_minor == 0
@@ -227,6 +233,9 @@ mod special_seeds_tests {
     fn order(id: &str) -> IssuerSpecialOrderSnapshot {
         IssuerSpecialOrderSnapshot {
             order_id: id.to_owned(),
+            issuer: "0x1".to_owned(),
+            denomination: "seeds".to_owned(),
+            status: "processing".to_owned(),
             recipient_pub_dress: "0x0sky".to_owned(),
             sku: "0x1_special_1m".to_owned(),
             price_id: 42,
@@ -307,6 +316,20 @@ mod special_seeds_tests {
             repository.settle_special_seeds(&owner, &invalid, 100).await.unwrap(),
             SpecialSeedsOutcome::InvalidTerms
         );
+        invalid.recipient_pub_dress = owner.as_str().to_owned();
+        for (issuer, denomination, status) in [
+            ("another-issuer", "seeds", "processing"),
+            ("0x1", "USDT", "processing"),
+            ("0x1", "seeds", "pending"),
+        ] {
+            invalid.issuer = issuer.to_owned();
+            invalid.denomination = denomination.to_owned();
+            invalid.status = status.to_owned();
+            assert_eq!(
+                repository.settle_special_seeds(&owner, &invalid, 100).await.unwrap(),
+                SpecialSeedsOutcome::InvalidTerms
+            );
+        }
         assert_eq!(
             repository.read_subscription_clock(&owner, 100).await.unwrap().special_remaining_ms.get(),
             0
