@@ -47,8 +47,9 @@ export const KYIV_MARKET_POINTS: readonly MarketPoint[] = [
   {
     id: "batkivshchyna",
     number: 1,
-    longitude: 30.5632,
-    latitude: 50.4265,
+    // Preview arrival anchor ~80 m northeast of the statue, outside terraces.
+    longitude: 30.56393,
+    latitude: 50.42702,
     uk: "Батьківщина-Мати",
     en: "Motherland Monument",
     ru: "Родина-мать",
