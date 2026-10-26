@@ -1401,6 +1401,8 @@ class IdentityHttpAdapter
         return { kind: "rejected", reason: "full" };
       case "underpaid":
         return { kind: "rejected", reason: "underpaid" };
+      case "not_enough_seeds":
+        return { kind: "rejected", reason: "not_enough_seeds" };
       case "stale_engine":
         return { kind: "rejected", reason: "stale" };
       case "invalid_forcing":
