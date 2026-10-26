@@ -48,6 +48,25 @@ login attempt does not cancel a transaction.
 Tests fund a wallet **directly inside the test database** solely to exercise
 the repository transaction. This fixture is not a crediting mechanism.
 
+## Staged once-only starter issuance
+
+Migration `0038_seeds_credit_provenance.sql` adds a server-only credit
+record with unique `(owner_pub_dress, source_kind, source_id)`. The
+`grant_starter_seeds_once` repository method uses **Core
+`STARTER_SEEDS = 10,000`**, holds a SQLite write transaction, credits the
+authoritative wallet, and writes that receipt in the **same commit**.
+Its second invocation is an exact no-op regardless of how much the
+Bond spent in the meantime. A `pub_dress` rename cascades to wallet and
+credit evidence.
+
+**The starter-issuance method has no HTTP endpoint or automatic
+registration hook.** This is intentional: existing Bonds may hold legacy
+encrypted local inventories. They must not automatically import claimed
+local balances, nor be given a second reward under an unclear migration.
+A reviewed, replay-safe migration/registration activation policy and
+authoritative receipt reconciliation are still required before live credit
+issuance.
+
 ## Required before customers can actually buy
 
 1. Implement an authoritative, server-verified source of **seeds credits**
