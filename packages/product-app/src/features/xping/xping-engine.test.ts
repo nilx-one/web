@@ -60,62 +60,34 @@ beforeEach(() => {
 });
 
 describe("repairXping", () => {
-  it("prices from the engine it read, records it there, then stores the Seeds", async () => {
+  it("asks Identity to debit and repair, never local Core inventory", async () => {
     const service = engine({ kind: "read", ...BROKEN });
     const core = {
-      xpingRepair: vi.fn(async () => ({
-        ok: true as const,
-        inventory: '{"seeds":"50"}',
-        seedsSpent: 50,
-      })),
+      xpingRepair: vi.fn(),
     };
     const outcome = await repairXping("0x1sky", service, core);
     expect(outcome.kind).toBe("repaired");
-    expect(core.xpingRepair).toHaveBeenCalledWith(
-      JSON.stringify(BROKEN.state),
-      '{"seeds":"100"}',
-      5_000,
-    );
-    expect(service.repairXpingEngine).toHaveBeenCalledWith(50, BROKEN.state);
-    expect(stored.state).toBe('{"seeds":"50"}');
-  });
-
-  it("keeps the Seeds when the service refuses the repair", async () => {
-    const service = engine({ kind: "rejected", reason: "stale" });
-    const core = {
-      xpingRepair: vi.fn(async () => ({
-        ok: true as const,
-        inventory: '{"seeds":"50"}',
-        seedsSpent: 50,
-      })),
-    };
-    await expect(repairXping("0x1sky", service, core)).resolves.toEqual({
-      kind: "refused",
-      reason: "stale",
-    });
+    expect(service.repairXpingEngine).toHaveBeenCalledWith(BROKEN.state);
+    expect(core.xpingRepair).not.toHaveBeenCalled();
     expect(stored.state).toBe('{"seeds":"100"}');
   });
 
-  it("asks the service nothing when the Seeds do not cover it", async () => {
+  it("keeps local history untouched when Identity refuses stale or insufficient funds", async () => {
+    for (const reason of ["stale", "not_enough_seeds"] as const) {
+      const service = engine({ kind: "rejected", reason });
+      await expect(repairXping("0x1sky", service)).resolves.toEqual({
+        kind: "refused",
+        reason,
+      });
+      expect(stored.state).toBe('{"seeds":"100"}');
+    }
+  });
+
+  it("does not require a local Core repair port", async () => {
     const service = engine({ kind: "read", ...BROKEN });
-    const core = {
-      xpingRepair: vi.fn(async () => ({
-        ok: false as const,
-        error: "not_enough_seeds",
-      })),
-    };
-    await expect(repairXping("0x1sky", service, core)).resolves.toEqual({
-      kind: "refused",
-      reason: "not_enough_seeds",
+    await expect(repairXping("0x1sky", service)).resolves.toMatchObject({
+      kind: "repaired",
     });
-    expect(service.repairXpingEngine).not.toHaveBeenCalled();
-    expect(stored.state).toBe('{"seeds":"100"}');
-  });
-
-  it("is unavailable on a Core without the repair", async () => {
-    await expect(
-      repairXping("0x1sky", engine({ kind: "read", ...BROKEN }), {}),
-    ).resolves.toEqual({ kind: "unavailable" });
   });
 });
 

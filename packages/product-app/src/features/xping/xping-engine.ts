@@ -9,7 +9,6 @@ import type {
 } from "@nilx-one/application";
 import { useCallback, useEffect, useState } from "react";
 
-import { updateInventory } from "../progression/committed-journal";
 import { applyInventory, type InventoryPort } from "../inventory/inventory";
 
 /** How often the Dock reads the engine again while it is shown. */
@@ -26,58 +25,26 @@ export type XpingRepairOutcome =
   | { readonly kind: "unavailable" };
 
 /**
- * Pays for a repair and records it, in the order Core's hosting obligations
- * set (`docs/xping-engine.md`): read the engine and the service's clock,
- * price the payment from that engine against the inventory, have the
- * service record it on exactly that state, and only then store the
- * inventory. All of it runs inside the owner's inventory queue, so nothing
- * else changes the Seeds in between; a refusal stores nothing.
+ * Repairs xPing exclusively through the Identity wallet. The client reads
+ * the engine and sends its expected state; it never claims seeds were paid
+ * or writes a local spending event. Identity atomically debits and repairs.
  */
 export async function repairXping(
-  owner: string,
+  _owner: string,
   engine: XpingEngineAccessPort,
-  core: XpingRepairPort,
+  _core?: XpingRepairPort,
 ): Promise<XpingRepairOutcome> {
-  const pay = core.xpingRepair;
-  if (pay === undefined) return { kind: "unavailable" };
-  let outcome: XpingRepairOutcome = { kind: "unavailable" };
-  await updateInventory(owner, async (current) => {
-    const read = await engine.readXpingEngine();
-    if (read.kind !== "read") {
-      outcome =
-        read.kind === "rejected"
-          ? { kind: "refused", reason: read.reason }
-          : { kind: "unavailable" };
-      return undefined;
-    }
-    const payment = await pay.call(
-      core,
-      JSON.stringify(read.state),
-      current.state,
-      read.nowMs,
-    );
-    if (!payment.ok) {
-      outcome =
-        payment.error === "not_enough_seeds" || payment.error === "not_due"
-          ? { kind: "refused", reason: payment.error }
-          : { kind: "unavailable" };
-      return undefined;
-    }
-    const recorded = await engine.repairXpingEngine(
-      payment.seedsSpent,
-      read.state,
-    );
-    if (recorded.kind !== "read") {
-      outcome =
-        recorded.kind === "rejected"
-          ? { kind: "refused", reason: recorded.reason }
-          : { kind: "unavailable" };
-      return undefined;
-    }
-    outcome = { kind: "repaired", read: recorded };
-    return { state: payment.inventory };
-  });
-  return outcome;
+  const read = await engine.readXpingEngine();
+  if (read.kind !== "read") {
+    return read.kind === "rejected"
+      ? { kind: "refused", reason: read.reason }
+      : { kind: "unavailable" };
+  }
+  const repaired = await engine.repairXpingEngine(read.state);
+  if (repaired.kind === "read") return { kind: "repaired", read: repaired };
+  return repaired.kind === "rejected"
+    ? { kind: "refused", reason: repaired.reason }
+    : { kind: "unavailable" };
 }
 
 const granted = new Set<string>();
@@ -158,7 +125,7 @@ export function useXpingEngine(
     };
   }, [engine, owner, setRead]);
   const repair = useCallback(() => {
-    if (engine === undefined || core === undefined || busy) return;
+    if (engine === undefined || busy) return;
     setBusy(true);
     setError(undefined);
     void repairXping(owner, engine, core)

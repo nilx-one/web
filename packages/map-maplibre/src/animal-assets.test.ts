@@ -109,7 +109,7 @@ describe("the city's animals as the layer draws them", () => {
   });
 
   it("share the layer with bodies without taking their ids", () => {
-    const loadAsset = vi.fn();
+    const loadAsset = vi.fn(() => new Promise<never>(() => undefined));
     const layer = createAvatarLayer({ loadAsset });
     const dog = {
       id: "bond",

@@ -56,6 +56,7 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/pub-info",
             get(read_pub_info).post(publish_pub_info),
         )
+        .route("/api/v1/identity/seeds", get(read_seeds_balance))
         .route("/api/v1/identity/pub-info/awards", post(commit_awards))
         .route("/api/v1/identity/finds/claims", get(read_claims))
         .route(
@@ -75,6 +76,37 @@ const PUB_INFO_MAX_BYTES: usize = 16 * 1024;
 const MAX_EVENTS: usize = 64;
 const MAX_EVENT_AMOUNT: u64 = 10_000;
 const MAX_CARRY_XP: u64 = 1_000_000_000;
+
+/// No client-supplied balance, carry or mutation endpoint. A seeds balance is
+/// a wallet fact, not Core inventory provenance or a confirmed checkout.
+async fn read_seeds_balance(State(state): State<ApiState>, headers: HeaderMap) -> Response {
+    let now = match now(&state) {
+        Ok(value) => value,
+        Err(_) => return unavailable(),
+    };
+    let (identity, _active, _hash, cookie) =
+        match authenticated_bond(&state, &headers, now).await {
+            Ok(value) => value,
+            Err(error) => return error.into_response(),
+        };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
+        return unavailable();
+    };
+    let mut response = match state.repository.read_seeds_balance(&owner).await {
+        Ok(balance) => no_store_json(StatusCode::OK, serde_json::json!({
+            "balance": balance.to_string(), "denomination": "seeds",
+            "symbol": "₴€£", "authority": "identity"
+        })),
+        Err(error) => {
+            tracing::error!(%error, "authoritative seeds read failed");
+            unavailable()
+        }
+    };
+    if let Some(cookie) = cookie {
+        append_cookie(&mut response, cookie);
+    }
+    response
+}
 
 async fn read_pub_info(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     let now = match now(&state) {
@@ -403,6 +435,41 @@ mod pub_info_api_tests {
     }
 
     #[tokio::test]
+    async fn seeds_balance_is_private_read_only_and_authoritative() {
+        let (app, auth) = app(8810, "0x1sky").await;
+        let anonymous = app.clone().oneshot(
+            Request::get("/api/v1/identity/seeds")
+                .body(Body::empty()).expect("request")
+        ).await.expect("response");
+        assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+
+        let result = app.clone().oneshot(
+            Request::get("/api/v1/identity/seeds")
+                .header(AUTHORIZATION, format!("tma {auth}"))
+                .body(Body::empty()).expect("request")
+        ).await.expect("response");
+        assert_eq!(result.status(), StatusCode::OK);
+        assert_eq!(result.headers()["cache-control"], "no-store");
+        let cookie = session_cookie(&result);
+        let body = json(result).await;
+        assert_eq!(body["balance"], "0");
+        assert_eq!(body["symbol"], "₴€£");
+        assert_eq!(body["denomination"], "seeds");
+        assert_eq!(body["authority"], "identity");
+
+        // No public mutation or "carry" path exists for seeds.
+        let forbidden = app.oneshot(
+            Request::post("/api/v1/identity/seeds")
+                .header(COOKIE, cookie)
+                .header("x-0x1-csrf", "1")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"balance":"100000000"}"#))
+                .expect("request")
+        ).await.expect("response");
+        assert_eq!(forbidden.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
     async fn publishing_requires_the_owner_and_csrf_and_is_idempotent() {
         let (app, auth) = app(8810, "0x1sky").await;
         let anonymous = app
@@ -501,6 +568,9 @@ mod pub_info_api_tests {
                 .await
                 .expect("registration");
         }
+        // Server-owned fixture funding, unrelated to Web's local inventory.
+        repository.fund_xping_test_seeds("0x1sky", 100)
+            .await.expect("fixture wallet");
         let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await
             .expect("provider links");
@@ -872,19 +942,24 @@ mod pub_info_api_tests {
         let repair = |paid: u64, expected: &Value| {
             Some(serde_json::json!({ "op": "repaired", "paid_seeds": paid, "expected": expected }))
         };
-        let underpaid =
-            engine_request(&app, &sky, &mut sky_session, repair(49, &broken["state"])).await;
-        assert_eq!(underpaid.status(), StatusCode::CONFLICT);
-        assert_eq!(json(underpaid).await["error"]["code"], "underpaid");
-        let stale = engine_request(&app, &sky, &mut sky_session, repair(50, &half["state"])).await;
+        // An outdated browser's paid_seeds hint is not debit authority.
+        // Only the Core price and the authoritative server wallet matter.
+        let stale = engine_request(&app, &sky, &mut sky_session, repair(0, &half["state"])).await;
         assert_eq!(json(stale).await["error"]["code"], "stale_engine");
         let repaired = json(
-            engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await,
+            engine_request(&app, &sky, &mut sky_session, repair(0, &broken["state"])).await,
         )
         .await;
         assert_eq!(repaired["engine"]["energy_permille"], 1000);
         assert_eq!(repaired["engine"]["broken"], false);
-        assert_eq!(repaired["authority"], "client");
+        assert_eq!(repaired["authority"], "identity");
+        let wallet = app.clone().oneshot(
+            Request::get("/api/v1/identity/seeds")
+                .header(COOKIE, sky_session.as_deref().expect("session"))
+                .body(Body::empty()).expect("wallet request")
+        ).await.expect("wallet response");
+        assert_eq!(wallet.status(), StatusCode::OK);
+        assert_eq!(json(wallet).await["balance"], "50");
         // The same payment again repairs nothing twice.
         let replay = engine_request(&app, &sky, &mut sky_session, repair(50, &broken["state"])).await;
         assert_eq!(json(replay).await["error"]["code"], "stale_engine");

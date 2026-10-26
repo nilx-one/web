@@ -302,6 +302,12 @@ impl IdentityRepository {
         sqlx::raw_sql(include_str!("../migrations/0036_cell_orb_claims.sql"))
             .execute(&self.pool)
             .await?;
+        sqlx::raw_sql(include_str!("../migrations/0037_seeds_special_subscriptions.sql"))
+            .execute(&self.pool)
+            .await?;
+        sqlx::raw_sql(include_str!("../migrations/0038_seeds_credit_provenance.sql"))
+            .execute(&self.pool)
+            .await?;
         if !self.has_native_sessions_column("active").await? {
             sqlx::raw_sql(include_str!("../migrations/0016_session_activation.sql"))
                 .execute(&self.pool)
@@ -2163,6 +2169,10 @@ pub enum RepositoryError {
     CorruptActivationRequestStatus,
     #[error("stored pub_info experience is not a known total")]
     CorruptPubInfo,
+    #[error("stored Special/Exclusive subscription clock is invalid")]
+    CorruptSubscriptionClock,
+    #[error("stored seeds balance is invalid")]
+    CorruptSeedsBalance,
 }
 
 #[cfg(test)]
