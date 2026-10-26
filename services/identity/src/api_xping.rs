@@ -7,6 +7,8 @@
 // debit the authoritative seeds wallet and update the engine in the SAME
 // session-guarded transaction. The local inventory never pays.
 
+use crate::repository::XpingSeedsRepairRefusal;
+
 /// The most forcing one report may spend: two full engines.
 const MAX_FORCED_MS: u64 = 2 * nilxone_contracts::XPING_FORCE_FULL_MS;
 
