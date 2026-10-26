@@ -39,6 +39,19 @@ pub enum SpecialSeedsOutcome {
 }
 
 impl IdentityRepository {
+    /// One authoritative seeds balance, owned exclusively by this service.
+    /// Missing wallet means zero credited seeds; clients cannot supply a carry.
+    pub async fn read_seeds_balance(&self, owner: &PubDress) -> Result<u64, RepositoryError> {
+        let stored = sqlx::query_scalar::<_, i64>(
+            "SELECT balance FROM bond_seeds WHERE owner_pub_dress = ?",
+        )
+        .bind(owner.as_str())
+        .fetch_optional(&self.pool)
+        .await?
+        .unwrap_or(0);
+        u64::try_from(stored).map_err(|_| RepositoryError::CorruptSeedsBalance)
+    }
+
     /// Atomic debit and Special grant for a verified 0xda-market issuer order.
     ///
     /// This is **not** proof that the caller actually authenticated the issuer;
