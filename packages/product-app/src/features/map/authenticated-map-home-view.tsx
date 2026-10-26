@@ -2699,6 +2699,19 @@ export function AuthenticatedMapHomeView({
     };
   }, [renderer]);
 
+  // Prepare both studies as soon as the identities resolve, before the
+  // camera or first visible map frame requires their geometry. Loading is
+  // presentation-only; the current wheel/position still decides what is drawn.
+  useEffect(() => {
+    const models = [avatarChoice?.rendered, avaiaAvatar?.modelId].filter(
+      (model): model is AvatarModelId => model !== undefined,
+    );
+    if (models.length === 0) return;
+    void renderer.avatars?.preload?.(models).catch(() => {
+      // A failed prefetch is retried by the layer when a body is requested.
+    });
+  }, [renderer, avatarChoice?.rendered, avaiaAvatar?.modelId]);
+
   useEffect(() => {
     const avatars = renderer.avatars;
     const bondStudy = avatarChoice?.rendered;
