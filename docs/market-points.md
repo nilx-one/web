@@ -27,7 +27,7 @@ owners' station models continue to work.
 | Point                      | Latitude, longitude | Placement source                                                                                                                           |
 | -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Золоті Ворота              | 50.44890, 30.51310  | Existing `use-business-stations.test.tsx` station coordinate                                                                               |
-| Батьківщина-Мати           | 50.42650, 30.56320  | Existing `use-business-stations.test.tsx` station coordinate                                                                               |
+| Батьківщина-Мати           | 50.42702, 30.56393  | Approximate preview arrival anchor ~80 m northeast of statue, beyond the renderer’s 60 m terrace radius                                    |
 | Пейзажна алея              | 50.45642, 30.51562  | [Find Way](https://www.find-way.com.ua/en/regions/kyiv-region/kyiv/art-park-peizajna-alleya-landscape-alley-kyiv)                          |
 | Космополіт · Шулявка       | 50.45060, 30.44237  | [Novobudovy](https://novobudovy.com/torhovi-tsentry-kyieva/torgovo-rozvazhalnij-centr); [current COSMO name](https://cosmo-multimall.com/) |
 | Gorodok Gallery            | 50.48974, 30.49582  | [Novobudovy](https://novobudovy.com/torhovi-tsentry-kyieva/torgovij-centr-gorodok)                                                         |

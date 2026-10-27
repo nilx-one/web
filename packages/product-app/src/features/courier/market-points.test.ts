@@ -88,3 +88,22 @@ it("names a BusinessPoint by its localized display name, not its id", () => {
     ),
   ).toBe("0xda-market Kiosk");
 });
+
+it("keeps Motherland arrivals outside the monument terraces without changing identity", () => {
+  const point = KYIV_MARKET_POINTS.find((p) => p.id === "batkivshchyna")!;
+  // Geographic clearance, not a survey or a verified business entrance.
+  const north = (point.latitude - 50.42655) * 111_320;
+  const east =
+    (point.longitude - 30.56307) *
+    111_320 *
+    Math.cos((50.42655 * Math.PI) / 180);
+  expect(Math.hypot(north, east)).toBeGreaterThan(70);
+  expect(Math.hypot(north, east)).toBeLessThan(100);
+  const destination = seededMarketDestination(courierCoordinate(point));
+  expect(destination.id).toEqual({ owner_pub_dress: "0xda-market", number: 1 });
+  expect(destination.pub_dress).toBe("0xda-market-batkivshchyna");
+  const pin = marketMapPoints("uk-UA", "xPing").find(
+    (p) => p.id === marketPinId(destination),
+  )!;
+  expect(courierCoordinate(pin)).toEqual(destination.coordinate);
+});
