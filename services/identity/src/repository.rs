@@ -323,6 +323,9 @@ impl IdentityRepository {
         .execute(&mut *subject_transaction)
         .await?;
         subject_transaction.commit().await?;
+        sqlx::raw_sql(include_str!("../migrations/0039_business_memberships.sql"))
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
