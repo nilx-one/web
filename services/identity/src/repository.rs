@@ -3318,4 +3318,59 @@ mod tests {
             .expect("activation");
         repository
     }
+
+    #[tokio::test]
+    async fn business_memberships_replay_and_follow_identity_renames() {
+        let database = tempfile::NamedTempFile::new().expect("database");
+        let url = format!("sqlite://{}", database.path().display());
+        let repository = IdentityRepository::connect(&url).await.expect("repository");
+        for address in ["0x0business", "0x0member"] {
+            sqlx::query("INSERT INTO identities (pub_dress, identity_kind, created_at) VALUES (?, 'human', 1)")
+                .bind(address).execute(&repository.pool).await.expect("identity");
+        }
+        sqlx::query("INSERT INTO business_memberships VALUES ('0x0business', '0x0member', 'owner', 1)")
+            .execute(&repository.pool)
+            .await
+            .expect("membership");
+        for (business, member, role) in [
+            ("0x0missing", "0x0member", "owner"),
+            ("0x0business", "0x0member", "member"),
+            ("0x0member", "0x0member", "owner"),
+            ("0x0member", "0x0business", "special"),
+        ] {
+            assert!(
+                sqlx::query("INSERT INTO business_memberships VALUES (?, ?, ?, 1)")
+                    .bind(business)
+                    .bind(member)
+                    .bind(role)
+                    .execute(&repository.pool)
+                    .await
+                    .is_err(),
+                "{business}/{member}/{role} accepted"
+            );
+        }
+        repository.pool.close().await;
+        let replayed = IdentityRepository::connect(&url).await.expect("replay");
+        let member: PubDress = "0x0member".parse().expect("member");
+        let renamed: PubDress = "0x0renamed".parse().expect("renamed");
+        assert!(matches!(
+            replayed.rename_pub_dress(&member, &renamed).await.expect("rename"),
+            PubDressRenameOutcome::Renamed(_)
+        ));
+        let row: (String, String) =
+            sqlx::query_as("SELECT member_pub_dress, role FROM business_memberships")
+                .fetch_one(&replayed.pool)
+                .await
+                .expect("membership after rename");
+        assert_eq!(row, ("0x0renamed".to_owned(), "owner".to_owned()));
+        sqlx::query("DELETE FROM identities WHERE pub_dress = '0x0business'")
+            .execute(&replayed.pool)
+            .await
+            .expect("delete business");
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM business_memberships")
+            .fetch_one(&replayed.pool)
+            .await
+            .expect("count");
+        assert_eq!(remaining, 0);
+    }
 }
