@@ -488,6 +488,33 @@
   gap: 0.5rem;
 }
 
+.bond-organizations__form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.bond-organizations__form input,
+.bond-organizations__form select {
+  min-width: 0;
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(245, 243, 247, 0.24);
+  border-radius: 0.75rem;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
+.bond-organizations__form option {
+  color: #161419;
+}
+
+.bond-organizations__form .profile-edit__save {
+  justify-self: start;
+  margin-top: 0.25rem;
+}
+
 .profile-edit__address {
   display: flex;
   align-items: center;
