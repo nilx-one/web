@@ -37,6 +37,7 @@ pub mod repository {
     include!("repository_awards.rs");
     include!("repository_subscriptions.rs");
     include!("repository_business_stations.rs");
+    include!("repository_business_creation.rs");
     include!("repository_xping.rs");
 }
 pub mod speech;
