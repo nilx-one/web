@@ -227,6 +227,36 @@ function validNativePassword(password: string): boolean {
   );
 }
 
+interface OrganizationMembership {
+  readonly pubDress: string;
+  readonly role: string;
+  readonly createdAt: number;
+}
+type OrganizationsAccess = {
+  readOrganizations(): Promise<
+    | { kind: "available"; organizations: readonly OrganizationMembership[] }
+    | { kind: "authentication-required" | "service-unavailable" }
+  >;
+  createOrganization(
+    pubDress: string,
+    creatorRole: "owner" | "maintainer",
+  ): Promise<
+    | { kind: "created" | "already-created" }
+    | { kind: "rejected"; reason: string }
+    | { kind: "service-unavailable" }
+  >;
+};
+function hasOrganizationsAccess(
+  identity: IdentityAccessPort,
+): identity is IdentityAccessPort & OrganizationsAccess {
+  return (
+    "readOrganizations" in identity &&
+    typeof identity.readOrganizations === "function" &&
+    "createOrganization" in identity &&
+    typeof identity.createOrganization === "function"
+  );
+}
+
 function providerDisplayName(provider: BrowserIdentityProvider): string {
   switch (provider) {
     case "telegram":
@@ -420,6 +450,30 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     : providerIdentityQuery.data?.kind === "registered"
       ? providerIdentityQuery.data.identity.pubDress
       : undefined;
+  const organizationsAccess = hasOrganizationsAccess(dependencies.identity)
+    ? dependencies.identity
+    : undefined;
+  const organizationsQuery = useQuery({
+    queryKey: ["bond-organizations", adminIdentity],
+    queryFn: () =>
+      organizationsAccess?.readOrganizations() ??
+      Promise.resolve({ kind: "service-unavailable" as const }),
+    enabled: adminIdentity !== undefined && organizationsAccess !== undefined,
+    retry: false,
+    staleTime: 0,
+  });
+  const createOrganization = useMutation({
+    mutationFn: (input: { pubDress: string; role: "owner" | "maintainer" }) =>
+      organizationsAccess?.createOrganization(input.pubDress, input.role) ??
+      Promise.resolve({ kind: "service-unavailable" as const }),
+    onSuccess: (result) => {
+      if (result.kind === "created" || result.kind === "already-created") {
+        void queryClient.invalidateQueries({
+          queryKey: ["bond-organizations"],
+        });
+      }
+    },
+  });
   const adminInboxQuery = useQuery({
     queryKey: ["admin-role-inbox", adminIdentity],
     queryFn: () =>
@@ -1152,6 +1206,40 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
                 ),
               })}
           {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
+          {...(organizationsAccess === undefined
+            ? {}
+            : {
+                organizations: {
+                  loading: organizationsQuery.isPending,
+                  items:
+                    organizationsQuery.data?.kind === "available"
+                      ? organizationsQuery.data.organizations
+                      : [],
+                  error:
+                    organizationsQuery.data !== undefined &&
+                    organizationsQuery.data.kind !== "available"
+                      ? organizationsQuery.data.kind
+                      : undefined,
+                  busy: createOrganization.isPending,
+                  feedback:
+                    createOrganization.data?.kind === "created"
+                      ? "Organization created"
+                      : createOrganization.data?.kind === "already-created"
+                        ? "Organization already exists"
+                        : createOrganization.data?.kind === "rejected"
+                          ? createOrganization.data.reason
+                          : createOrganization.data?.kind ===
+                              "service-unavailable"
+                            ? "Service unavailable"
+                            : undefined,
+                  onCreate: (
+                    pubDress: string,
+                    role: "owner" | "maintainer",
+                  ) => {
+                    createOrganization.mutate({ pubDress, role });
+                  },
+                },
+              })}
           hostLabel={viewModel.hostLabel}
           key={viewModel.identity.pubDress}
           pubDress={viewModel.identity.pubDress}

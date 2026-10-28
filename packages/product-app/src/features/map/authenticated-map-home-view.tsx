@@ -338,6 +338,19 @@ export interface AuthenticatedMapHomeViewProps {
     readonly failed: boolean;
     onDecide(pubDress: string, approve: boolean): void;
   };
+  /** The server-authenticated Bond's own organizations. Never an editable role list. */
+  readonly organizations?: {
+    readonly loading: boolean;
+    readonly items: readonly {
+      readonly pubDress: string;
+      readonly role: string;
+      readonly createdAt: number;
+    }[];
+    readonly error?: string | undefined;
+    readonly busy: boolean;
+    readonly feedback?: string | undefined;
+    onCreate(pubDress: string, role: "owner" | "maintainer"): void;
+  };
   readonly hostLabel: string;
   readonly pubDress: string;
   /** Canonical, server-allocated public address for this authenticated Bond. */
@@ -963,6 +976,7 @@ export function AuthenticatedMapHomeView({
   onAvatarChoice,
   onSlugChange,
   onSlugSubmit,
+  organizations,
   onLogout,
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
@@ -971,6 +985,10 @@ export function AuthenticatedMapHomeView({
   const returnToPickup = useRef(false);
   const renderedDetailScreenKey = useRef<string | undefined>(undefined);
   const location = useDeviceLocation(geolocation);
+  const [organizationDraft, setOrganizationDraft] = useState("");
+  const [organizationRole, setOrganizationRole] = useState<
+    "owner" | "maintainer"
+  >("owner");
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
@@ -3647,6 +3665,113 @@ export function AuthenticatedMapHomeView({
                         onChange={onSlugChange}
                         onSubmit={onSlugSubmit}
                       />
+                      {organizations === undefined ? null : (
+                        <section
+                          className="avaia-notebook"
+                          aria-labelledby="bond-organizations-title"
+                        >
+                          <span
+                            className="interface-settings__eyebrow"
+                            id="bond-organizations-title"
+                          >
+                            Organizations
+                          </span>
+                          {organizations.loading ? (
+                            <p className="profile-edit__note" role="status">
+                              Loading organizations…
+                            </p>
+                          ) : organizations.error !== undefined ? (
+                            <p className="profile-edit__error" role="alert">
+                              Unable to load organizations:{" "}
+                              {organizations.error}
+                            </p>
+                          ) : organizations.items.length === 0 ? (
+                            <p className="profile-edit__note">
+                              This Bond is not part of an organization yet.
+                            </p>
+                          ) : (
+                            <ul className="avaia-notebook__list">
+                              {organizations.items.map((item) => (
+                                <li key={item.pubDress}>
+                                  <strong>{item.pubDress}</strong>
+                                  <span>{item.role.replaceAll("_", " ")}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <form
+                            className="bond-organizations__form"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              const address = organizationDraft.trim();
+                              if (address !== "" && !organizations.busy) {
+                                organizations.onCreate(
+                                  address,
+                                  organizationRole,
+                                );
+                              }
+                            }}
+                          >
+                            <label
+                              className="interface-settings__eyebrow"
+                              htmlFor="business-pub-dress"
+                            >
+                              Create a Business Bond
+                            </label>
+                            <input
+                              id="business-pub-dress"
+                              className="profile-edit__input"
+                              type="text"
+                              value={organizationDraft}
+                              placeholder="0xda-company"
+                              autoComplete="off"
+                              maxLength={40}
+                              onChange={(event) =>
+                                setOrganizationDraft(event.target.value)
+                              }
+                              disabled={organizations.busy}
+                            />
+                            <label
+                              className="interface-settings__eyebrow"
+                              htmlFor="business-creator-role"
+                            >
+                              Your role
+                            </label>
+                            <select
+                              id="business-creator-role"
+                              value={organizationRole}
+                              disabled={organizations.busy}
+                              onChange={(event) =>
+                                setOrganizationRole(
+                                  event.target.value === "maintainer"
+                                    ? "maintainer"
+                                    : "owner",
+                                )
+                              }
+                            >
+                              <option value="owner">Owner</option>
+                              <option value="maintainer">Maintainer</option>
+                            </select>
+                            <button
+                              className="profile-edit__save"
+                              type="submit"
+                              disabled={
+                                organizations.busy ||
+                                organizationDraft.trim() === ""
+                              }
+                            >
+                              {organizations.busy
+                                ? "Creating…"
+                                : "Create organization"}
+                            </button>
+                          </form>
+                          {organizations.feedback === undefined ? null : (
+                            <p className="profile-edit__note" role="status">
+                              {organizations.feedback}
+                            </p>
+                          )}
+                        </section>
+                      )}
                       {adminRoleInbox !== undefined &&
                       adminRoleInbox.requests.length > 0 ? (
                         <section
