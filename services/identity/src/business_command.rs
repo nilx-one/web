@@ -17,6 +17,7 @@
 use crate::{
     BondAccessRole, BusinessRegistrationOutcome, BusinessStationOutcome, GeoCoordinate,
     IdentityRepository, PubDress, StationPubDress,
+    repository::{BusinessBootstrapRole, BusinessMembershipBootstrapOutcome},
 };
 
 /// Runs one operation and answers the line to print. `Err` is a refusal or a
@@ -47,6 +48,47 @@ pub async fn run(
                 BusinessRegistrationOutcome::PublicLabelUnavailable => {
                     Err(format!("{pub_dress}: its public label is taken"))
                 }
+            }
+        }
+        [
+            "business",
+            "membership",
+            "bootstrap",
+            member,
+            business,
+            role,
+        ] => {
+            let member = parse_pub_dress(member)?;
+            let business = parse_pub_dress(business)?;
+            let role = match *role {
+                "owner" => BusinessBootstrapRole::Owner,
+                "maintainer" => BusinessBootstrapRole::Maintainer,
+                _ => return Err("role must be owner or maintainer".to_owned()),
+            };
+            let result = repository
+                .bootstrap_business_membership(&member, &business, role, now)
+                .await
+                .map_err(|error| error.to_string())?;
+            match result {
+                BusinessMembershipBootstrapOutcome::Created => Ok(format!(
+                    "{member}: {} of {business} (created)",
+                    role.as_str()
+                )),
+                BusinessMembershipBootstrapOutcome::AlreadyPresent => {
+                    Ok(format!("{member}: already {} of {business}", role.as_str()))
+                }
+                BusinessMembershipBootstrapOutcome::MemberNotHuman => {
+                    Err(format!("{member}: not an existing human member"))
+                }
+                BusinessMembershipBootstrapOutcome::BusinessNotFound => {
+                    Err(format!("{business}: not an existing Business Bond"))
+                }
+                BusinessMembershipBootstrapOutcome::SameBond => {
+                    Err("a Business Bond cannot be its own member".to_owned())
+                }
+                BusinessMembershipBootstrapOutcome::RoleConflict => Err(format!(
+                    "{member}: an existing membership of {business} has another role; no changes made"
+                )),
             }
         }
         ["business", "grant", pub_dress] => {
@@ -98,6 +140,7 @@ pub async fn run(
 
 const USAGE: &str = "usage:\n  \
     identity-bot business register <pub_dress>\n  \
+    identity-bot business membership bootstrap <human> <business> <owner|maintainer>\n  \
     identity-bot business grant <pub_dress>\n  \
     identity-bot business station <owner> \"<caption>\" <longitude> <latitude>";
 
