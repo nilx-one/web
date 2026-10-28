@@ -468,7 +468,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       Promise.resolve({ kind: "service-unavailable" as const }),
     onSuccess: (result) => {
       if (result.kind === "created" || result.kind === "already-created") {
-        void queryClient.invalidateQueries({ queryKey: ["bond-organizations"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["bond-organizations"],
+        });
       }
     },
   });
@@ -1209,24 +1211,31 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             : {
                 organizations: {
                   loading: organizationsQuery.isPending,
-                  items: organizationsQuery.data?.kind === "available"
-                    ? organizationsQuery.data.organizations
-                    : [],
-                  error: organizationsQuery.data !== undefined &&
+                  items:
+                    organizationsQuery.data?.kind === "available"
+                      ? organizationsQuery.data.organizations
+                      : [],
+                  error:
+                    organizationsQuery.data !== undefined &&
                     organizationsQuery.data.kind !== "available"
                       ? organizationsQuery.data.kind
                       : undefined,
                   busy: createOrganization.isPending,
-                  feedback: createOrganization.data?.kind === "created"
-                    ? "Organization created"
-                    : createOrganization.data?.kind === "already-created"
-                      ? "Organization already exists"
-                      : createOrganization.data?.kind === "rejected"
-                        ? createOrganization.data.reason
-                        : createOrganization.data?.kind === "service-unavailable"
-                          ? "Service unavailable"
-                          : undefined,
-                  onCreate: (pubDress: string, role: "owner" | "maintainer") => {
+                  feedback:
+                    createOrganization.data?.kind === "created"
+                      ? "Organization created"
+                      : createOrganization.data?.kind === "already-created"
+                        ? "Organization already exists"
+                        : createOrganization.data?.kind === "rejected"
+                          ? createOrganization.data.reason
+                          : createOrganization.data?.kind ===
+                              "service-unavailable"
+                            ? "Service unavailable"
+                            : undefined,
+                  onCreate: (
+                    pubDress: string,
+                    role: "owner" | "maintainer",
+                  ) => {
                     createOrganization.mutate({ pubDress, role });
                   },
                 },
