@@ -986,7 +986,9 @@ export function AuthenticatedMapHomeView({
   const renderedDetailScreenKey = useRef<string | undefined>(undefined);
   const location = useDeviceLocation(geolocation);
   const [organizationDraft, setOrganizationDraft] = useState("");
-  const [organizationRole, setOrganizationRole] = useState<"owner" | "maintainer">("owner");
+  const [organizationRole, setOrganizationRole] = useState<
+    "owner" | "maintainer"
+  >("owner");
   const [detailState, setDetailState] = useState<
     IdentityDetailState | undefined
   >(undefined);
@@ -3680,7 +3682,8 @@ export function AuthenticatedMapHomeView({
                             </p>
                           ) : organizations.error !== undefined ? (
                             <p className="profile-edit__error" role="alert">
-                              Unable to load organizations: {organizations.error}
+                              Unable to load organizations:{" "}
+                              {organizations.error}
                             </p>
                           ) : organizations.items.length === 0 ? (
                             <p className="profile-edit__note">
@@ -3701,11 +3704,17 @@ export function AuthenticatedMapHomeView({
                               event.preventDefault();
                               const address = organizationDraft.trim();
                               if (address !== "" && !organizations.busy) {
-                                organizations.onCreate(address, organizationRole);
+                                organizations.onCreate(
+                                  address,
+                                  organizationRole,
+                                );
                               }
                             }}
                           >
-                            <label className="interface-settings__eyebrow" htmlFor="business-pub-dress">
+                            <label
+                              className="interface-settings__eyebrow"
+                              htmlFor="business-pub-dress"
+                            >
                               Create a Business Bond
                             </label>
                             <input
@@ -3716,10 +3725,15 @@ export function AuthenticatedMapHomeView({
                               placeholder="0xda-company"
                               autoComplete="off"
                               maxLength={40}
-                              onChange={(event) => setOrganizationDraft(event.target.value)}
+                              onChange={(event) =>
+                                setOrganizationDraft(event.target.value)
+                              }
                               disabled={organizations.busy}
                             />
-                            <label className="interface-settings__eyebrow" htmlFor="business-creator-role">
+                            <label
+                              className="interface-settings__eyebrow"
+                              htmlFor="business-creator-role"
+                            >
                               Your role
                             </label>
                             <select
@@ -3727,7 +3741,11 @@ export function AuthenticatedMapHomeView({
                               value={organizationRole}
                               disabled={organizations.busy}
                               onChange={(event) =>
-                                setOrganizationRole(event.target.value === "maintainer" ? "maintainer" : "owner")
+                                setOrganizationRole(
+                                  event.target.value === "maintainer"
+                                    ? "maintainer"
+                                    : "owner",
+                                )
                               }
                             >
                               <option value="owner">Owner</option>
@@ -3736,9 +3754,14 @@ export function AuthenticatedMapHomeView({
                             <button
                               className="profile-edit__save"
                               type="submit"
-                              disabled={organizations.busy || organizationDraft.trim() === ""}
+                              disabled={
+                                organizations.busy ||
+                                organizationDraft.trim() === ""
+                              }
                             >
-                              {organizations.busy ? "Creating…" : "Create organization"}
+                              {organizations.busy
+                                ? "Creating…"
+                                : "Create organization"}
                             </button>
                           </form>
                           {organizations.feedback === undefined ? null : (
