@@ -17,12 +17,22 @@ function setup(response: () => Promise<Response>) {
 
 describe("Organizations Identity transport", () => {
   it("reads only the server's authenticated membership projection", async () => {
-    const { adapter, fetch } = setup(async () => new Response(JSON.stringify({
-      organizations: [{ pub_dress: "0xda-market", role: "owner", created_at: 100 }],
-    }), { status: 200 }));
+    const { adapter, fetch } = setup(
+      async () =>
+        new Response(
+          JSON.stringify({
+            organizations: [
+              { pub_dress: "0xda-market", role: "owner", created_at: 100 },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     await expect(adapter.readOrganizations()).resolves.toEqual({
       kind: "available",
-      organizations: [{ pubDress: "0xda-market", role: "owner", createdAt: 100 }],
+      organizations: [
+        { pubDress: "0xda-market", role: "owner", createdAt: 100 },
+      ],
     });
     expect(fetch).toHaveBeenCalledWith("/api/v1/identity/organizations", {
       method: "GET",
@@ -33,9 +43,21 @@ describe("Organizations Identity transport", () => {
   });
 
   it("refuses malformed and unauthorized responses without trusting local roles", async () => {
-    const invalid = setup(async () => new Response(JSON.stringify({
-      organizations: [{ pub_dress: "0xda-market", role: "super_admin", created_at: 100 }],
-    }), { status: 200 }));
+    const invalid = setup(
+      async () =>
+        new Response(
+          JSON.stringify({
+            organizations: [
+              {
+                pub_dress: "0xda-market",
+                role: "super_admin",
+                created_at: 100,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
     await expect(invalid.adapter.readOrganizations()).resolves.toEqual({
       kind: "service-unavailable",
     });
@@ -46,10 +68,20 @@ describe("Organizations Identity transport", () => {
   });
 
   it("creates using the same origin, signed host and CSRF, never a creator field", async () => {
-    const { adapter, fetch } = setup(async () => new Response(JSON.stringify({
-      pub_dress: "0xda-market", role: "owner", outcome: "created",
-    }), { status: 201 }));
-    await expect(adapter.createOrganization("0xda-market", "owner")).resolves.toEqual({
+    const { adapter, fetch } = setup(
+      async () =>
+        new Response(
+          JSON.stringify({
+            pub_dress: "0xda-market",
+            role: "owner",
+            outcome: "created",
+          }),
+          { status: 201 },
+        ),
+    );
+    await expect(
+      adapter.createOrganization("0xda-market", "owner"),
+    ).resolves.toEqual({
       kind: "created",
     });
     expect(fetch).toHaveBeenCalledWith("/api/v1/identity/organizations", {
