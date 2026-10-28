@@ -257,7 +257,10 @@ export interface OrganizationMembership {
   readonly createdAt: number;
 }
 export type OrganizationsReadResult =
-  | { readonly kind: "available"; readonly organizations: readonly OrganizationMembership[] }
+  | {
+      readonly kind: "available";
+      readonly organizations: readonly OrganizationMembership[];
+    }
   | { readonly kind: "authentication-required" | "service-unavailable" };
 export type OrganizationCreateResult =
   | { readonly kind: "created" | "already-created" }
@@ -306,11 +309,20 @@ class IdentityHttpAdapter
       }
       const organizations: OrganizationMembership[] = [];
       for (const row of body.organizations) {
-        if (!isRecord(row)
-            || typeof row.pub_dress !== "string"
-            || typeof row.role !== "string"
-            || typeof row.created_at !== "number"
-            || !["member", "special_member", "maintainer", "administrator", "co_owner", "owner"].includes(row.role)) {
+        if (
+          !isRecord(row) ||
+          typeof row.pub_dress !== "string" ||
+          typeof row.role !== "string" ||
+          typeof row.created_at !== "number" ||
+          ![
+            "member",
+            "special_member",
+            "maintainer",
+            "administrator",
+            "co_owner",
+            "owner",
+          ].includes(row.role)
+        ) {
           return { kind: "service-unavailable" };
         }
         organizations.push({
@@ -340,12 +352,16 @@ class IdentityHttpAdapter
           "content-type": "application/json",
           "x-0x1-csrf": "1",
         },
-        body: JSON.stringify({ pub_dress: pubDress, creator_role: creatorRole }),
+        body: JSON.stringify({
+          pub_dress: pubDress,
+          creator_role: creatorRole,
+        }),
       });
       const body: unknown = await response.json().catch(() => undefined);
       if (response.ok && isRecord(body)) {
         if (body.outcome === "created") return { kind: "created" };
-        if (body.outcome === "already_created") return { kind: "already-created" };
+        if (body.outcome === "already_created")
+          return { kind: "already-created" };
       }
       if ([400, 401, 403, 409, 422, 429].includes(response.status)) {
         return { kind: "rejected", reason: parseErrorCode(body) ?? "rejected" };
