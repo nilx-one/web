@@ -3700,6 +3700,7 @@ export function AuthenticatedMapHomeView({
                             </ul>
                           )}
                           <form
+                            className="bond-organizations__form"
                             onSubmit={(event) => {
                               event.preventDefault();
                               const address = organizationDraft.trim();
