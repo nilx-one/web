@@ -50,7 +50,14 @@ pub async fn run(
                 }
             }
         }
-        ["business", "membership", "bootstrap", member, business, role] => {
+        [
+            "business",
+            "membership",
+            "bootstrap",
+            member,
+            business,
+            role,
+        ] => {
             let member = parse_pub_dress(member)?;
             let business = parse_pub_dress(business)?;
             let role = match *role {
@@ -64,19 +71,24 @@ pub async fn run(
                 .map_err(|error| error.to_string())?;
             match result {
                 BusinessMembershipBootstrapOutcome::Created => Ok(format!(
-                    "{member}: {} of {business} (created)", role.as_str()
+                    "{member}: {} of {business} (created)",
+                    role.as_str()
                 )),
-                BusinessMembershipBootstrapOutcome::AlreadyPresent => Ok(format!(
-                    "{member}: already {} of {business}", role.as_str()
+                BusinessMembershipBootstrapOutcome::AlreadyPresent => {
+                    Ok(format!("{member}: already {} of {business}", role.as_str()))
+                }
+                BusinessMembershipBootstrapOutcome::MemberNotHuman => {
+                    Err(format!("{member}: not an existing human member"))
+                }
+                BusinessMembershipBootstrapOutcome::BusinessNotFound => {
+                    Err(format!("{business}: not an existing Business Bond"))
+                }
+                BusinessMembershipBootstrapOutcome::SameBond => {
+                    Err("a Business Bond cannot be its own member".to_owned())
+                }
+                BusinessMembershipBootstrapOutcome::RoleConflict => Err(format!(
+                    "{member}: an existing membership of {business} has another role; no changes made"
                 )),
-                BusinessMembershipBootstrapOutcome::MemberNotHuman =>
-                    Err(format!("{member}: not an existing human member")),
-                BusinessMembershipBootstrapOutcome::BusinessNotFound =>
-                    Err(format!("{business}: not an existing Business Bond")),
-                BusinessMembershipBootstrapOutcome::SameBond =>
-                    Err("a Business Bond cannot be its own member".to_owned()),
-                BusinessMembershipBootstrapOutcome::RoleConflict =>
-                    Err(format!("{member}: an existing membership of {business} has another role; no changes made")),
             }
         }
         ["business", "grant", pub_dress] => {
