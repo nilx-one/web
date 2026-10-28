@@ -251,6 +251,26 @@ function isBrowserProvider(value: unknown): value is BrowserIdentityProvider {
   return value === "telegram" || value === "discord" || value === "github";
 }
 
+export interface OrganizationMembership {
+  readonly pubDress: string;
+  readonly role: string;
+  readonly createdAt: number;
+}
+export type OrganizationsReadResult =
+  | { readonly kind: "available"; readonly organizations: readonly OrganizationMembership[] }
+  | { readonly kind: "authentication-required" | "service-unavailable" };
+export type OrganizationCreateResult =
+  | { readonly kind: "created" | "already-created" }
+  | { readonly kind: "rejected"; readonly reason: string }
+  | { readonly kind: "service-unavailable" };
+export interface OrganizationsAccessPort {
+  readOrganizations(): Promise<OrganizationsReadResult>;
+  createOrganization(
+    pubDress: string,
+    creatorRole: "owner" | "maintainer",
+  ): Promise<OrganizationCreateResult>;
+}
+
 class IdentityHttpAdapter
   implements
     IdentityAccessPort,
@@ -260,12 +280,80 @@ class IdentityHttpAdapter
     OrbSpillAccessPort,
     NearbySpeechAccessPort,
     BusinessStationAccessPort,
-    XpingEngineAccessPort
+    XpingEngineAccessPort,
+    OrganizationsAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
 
   public constructor(private readonly options: IdentityHttpAdapterOptions) {
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  public async readOrganizations(): Promise<OrganizationsReadResult> {
+    try {
+      const authorization = this.authorization();
+      const response = await this.fetch("/api/v1/identity/organizations", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: authorization === undefined ? {} : { authorization },
+      });
+      if (response.status === 401) return { kind: "authentication-required" };
+      if (!response.ok) return { kind: "service-unavailable" };
+      const body: unknown = await response.json();
+      if (!isRecord(body) || !Array.isArray(body.organizations)) {
+        return { kind: "service-unavailable" };
+      }
+      const organizations: OrganizationMembership[] = [];
+      for (const row of body.organizations) {
+        if (!isRecord(row)
+            || typeof row.pub_dress !== "string"
+            || typeof row.role !== "string"
+            || typeof row.created_at !== "number"
+            || !["member", "special_member", "maintainer", "administrator", "co_owner", "owner"].includes(row.role)) {
+          return { kind: "service-unavailable" };
+        }
+        organizations.push({
+          pubDress: row.pub_dress,
+          role: row.role,
+          createdAt: row.created_at,
+        });
+      }
+      return { kind: "available", organizations };
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+  }
+
+  public async createOrganization(
+    pubDress: string,
+    creatorRole: "owner" | "maintainer",
+  ): Promise<OrganizationCreateResult> {
+    try {
+      const authorization = this.authorization();
+      const response = await this.fetch("/api/v1/identity/organizations", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify({ pub_dress: pubDress, creator_role: creatorRole }),
+      });
+      const body: unknown = await response.json().catch(() => undefined);
+      if (response.ok && isRecord(body)) {
+        if (body.outcome === "created") return { kind: "created" };
+        if (body.outcome === "already_created") return { kind: "already-created" };
+      }
+      if ([400, 401, 403, 409, 422, 429].includes(response.status)) {
+        return { kind: "rejected", reason: parseErrorCode(body) ?? "rejected" };
+      }
+      return { kind: "service-unavailable" };
+    } catch {
+      return { kind: "service-unavailable" };
+    }
   }
 
   public async listAdminRoleRequests(): Promise<AdminRoleInboxResult> {
@@ -1734,7 +1822,8 @@ export function createIdentityHttpAdapter(
   CellSpillAccessPort &
   NearbySpeechAccessPort &
   BusinessStationAccessPort &
-  XpingEngineAccessPort {
+  XpingEngineAccessPort &
+  OrganizationsAccessPort {
   return new IdentityHttpAdapter(options);
 }
 
