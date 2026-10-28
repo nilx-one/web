@@ -121,7 +121,7 @@ fn router_with_clock(
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/identity/market-visit", post(create_market_visit))
-        .route("/api/v1/identity/organizations", post(create_business_organization))
+        .route("/api/v1/identity/organizations", get(read_my_organizations).post(create_business_organization))
         .route("/api/v1/auth/discord/config", get(discord_config))
         .route("/api/v1/auth/discord/token", post(exchange_discord_code))
         .route("/api/v1/auth/native/context", get(read_native_context))
