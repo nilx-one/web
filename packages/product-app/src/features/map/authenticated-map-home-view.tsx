@@ -346,9 +346,9 @@ export interface AuthenticatedMapHomeViewProps {
       readonly role: string;
       readonly createdAt: number;
     }[];
-    readonly error?: string;
+    readonly error?: string | undefined;
     readonly busy: boolean;
-    readonly feedback?: string;
+    readonly feedback?: string | undefined;
     onCreate(pubDress: string, role: "owner" | "maintainer"): void;
   };
   readonly hostLabel: string;
