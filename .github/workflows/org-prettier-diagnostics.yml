@@ -1,0 +1,28 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+name: Temporary organizations formatting diagnostics
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/org-prettier-diagnostics.yml"
+      - "packages/identity-http/src/index.ts"
+      - "packages/identity-http/src/organizations.test.ts"
+      - "packages/product-app/src/index.tsx"
+      - "packages/product-app/src/features/map/authenticated-map-home-view.tsx"
+jobs:
+  formatting-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Output exact Prettier diff for changed organization files
+        run: |
+          pnpm exec prettier --write packages/identity-http/src/index.ts packages/identity-http/src/organizations.test.ts packages/product-app/src/index.tsx packages/product-app/src/features/map/authenticated-map-home-view.tsx
+          git diff -- packages/identity-http/src/index.ts packages/identity-http/src/organizations.test.ts packages/product-app/src/index.tsx packages/product-app/src/features/map/authenticated-map-home-view.tsx
