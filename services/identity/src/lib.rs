@@ -10,6 +10,7 @@ pub mod api {
     include!("api_xping.rs");
     include!("api_market.rs");
     include!("api_business_memberships.rs");
+    include!("api_business_creation.rs");
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;
@@ -39,6 +40,7 @@ pub mod repository {
     include!("repository_business_stations.rs");
     include!("repository_business_memberships.rs");
     include!("repository_business_membership_bootstrap.rs");
+    include!("repository_business_creation.rs");
     include!("repository_xping.rs");
 }
 pub mod speech;
