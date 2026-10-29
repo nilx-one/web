@@ -14,7 +14,7 @@ import {
 import { useLocalization } from "@nilx-one/product-app/localization";
 import { mapDistanceMeters } from "@nilx-one/map-contract";
 import { createBusinessNavigation } from "../business-navigation";
-import { createNilxOneMarketCatalog } from "./catalog";
+import { createNilxOneMarketCatalog } from "@nilx-one/market-host";
 
 // Kyiv currently has only author-seeded, unverified points. Other city choices
 // are discovery placeholders, never fabricated Market inventory.

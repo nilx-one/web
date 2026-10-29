@@ -7,13 +7,21 @@ import {
   normalizeLocale,
 } from "@0xda-market/webapp-core";
 import { catalogTransport } from "./transport";
-import { beginMarketVisit } from "./visit";
+import { createMarketVisit } from "./visit";
+
+export interface MarketHostOptions {
+  /** The host's own Bond credential for the Identity handoff, if any. */
+  readonly authorization?: () => string | undefined;
+}
 
 /**
  * The 0x1 host profile uses the shared Market engine, not its full-page DOM UI.
  * Restrict by the backend's category identity, never infer from a product name.
  */
-export function createNilxOneMarketCatalog(request: typeof fetch = fetch) {
+export function createNilxOneMarketCatalog(
+  request: typeof fetch = fetch,
+  options: MarketHostOptions = {},
+) {
   const transport = catalogTransport(request);
   const cache = new Map<
     string,
@@ -25,7 +33,7 @@ export function createNilxOneMarketCatalog(request: typeof fetch = fetch) {
     }
   >();
   return {
-    beginVisit: beginMarketVisit,
+    beginVisit: createMarketVisit(options.authorization),
     async load(locale: string) {
       const key = normalizeLocale(locale);
       const cached = cache.get(key);
