@@ -21,6 +21,7 @@ pub mod discord_oauth;
 pub mod finds;
 pub mod github_evidence;
 pub mod location_control;
+pub mod market_issuer;
 pub mod partner_lookup;
 pub mod provider_link;
 pub mod provider_secret;
@@ -37,6 +38,7 @@ pub mod repository {
     include!("repository_pub_info.rs");
     include!("repository_awards.rs");
     include!("repository_subscriptions.rs");
+    include!("repository_market_visits.rs");
     include!("repository_business_stations.rs");
     include!("repository_business_memberships.rs");
     include!("repository_business_membership_bootstrap.rs");
