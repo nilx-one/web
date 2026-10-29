@@ -282,3 +282,19 @@ The normative identity contract remains in [`nilx-one/0x1`](https://github.com/n
 
 `deploy/wipe-users.sh` deletes every identity from the SQLite file; all identity-owned tables
 cascade. Stop the container first. Dry run unless `WIPE_CONFIRM=wipe-all-identities`; a backup copy is made beside the database. Irreversible.
+
+### Checkout completion projections
+
+`GET /api/v1/identity/market-return?visit_id=…&order_id=…` is an authenticated,
+read-only completion check. It requires the caller's visit and committed debit
+receipt, then reads the order through the private issuer API. Only a matching
+fulfilled order returns `confirmed: true`; redirects, browser storage, another
+Bond's receipt, pending/cancelled orders and network failures do not confirm a
+purchase. It works after visit expiry and owner rename. `MARKET_ISSUER_WORKER=1`
+and the existing issuer configuration must be present for this read.
+
+`GET /api/v1/identity/subscription` returns the authenticated Bond's Core clock
+snapshot with a 30-second refresh deadline and `Cache-Control: no-store`.
+Neither endpoint grants a subscription or credits/debits seeds. The handoff
+response now includes its opaque `visit_id` and owner for the tab's return-trip
+association; these fields are not authentication credentials.

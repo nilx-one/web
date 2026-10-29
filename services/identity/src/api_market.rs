@@ -134,13 +134,114 @@ async fn create_market_visit(
         return unavailable();
     }
     with_session_cookie(no_store_json(StatusCode::CREATED, serde_json::json!({
-        "code": code, "action": "https://0xda-market.nilx.one/nilx-browser/exchange"
+        "code": code, "visit_id": handoff.get("visit_id"), "owner": owner.as_str(), "action": "https://0xda-market.nilx.one/nilx-browser/exchange"
     })), cookie)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MarketReturnQuery { visit_id: String, order_id: String }
+
+/// A navigation hint is never payment proof. Check both the committed Identity
+/// receipt and the authenticated Market fulfilment, tied to this owner's visit.
+async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
+    Query(query): Query<MarketReturnQuery>) -> Response {
+    use crate::market_issuer::{HttpMarketIssuer, MarketIssuerConfig};
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, _, _, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    let missing = || api_error(StatusCode::NOT_FOUND, "purchase_not_confirmed", "Purchase is not confirmed.");
+    if query.visit_id.len() != 43 || query.order_id.len() > 128 { return missing(); }
+    let visit = match state.repository.find_market_visit(&query.visit_id).await {
+        Ok(Some(visit)) if visit.owner == owner => visit,
+        Ok(_) => return missing(), Err(_) => return unavailable(),
+    };
+    let receipt = match state.repository.find_special_seeds_receipt(&query.order_id).await {
+        Ok(Some(receipt)) if receipt.owner_pub_dress == owner.as_str() => receipt,
+        Ok(_) => return missing(), Err(_) => return unavailable(),
+    };
+    if state.limiter.consume(format!("market-return:{}", owner.as_str()), now, 30, 60).is_err() {
+        return api_error(StatusCode::TOO_MANY_REQUESTS, "market_return_limit", "Please retry later.");
+    }
+    let Some(Ok(config)) = MarketIssuerConfig::from_environment() else { return unavailable(); };
+    let market = match HttpMarketIssuer::new(config) { Ok(client) => client, Err(_) => return unavailable() };
+    let order = match market.read_order(&query.order_id).await {
+        Ok(order) => order, Err(_) => return unavailable(),
+    };
+    if !market_return_matches(&query, &visit, &receipt, &order) { return missing(); }
+    with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({
+        "confirmed": true, "visit_id": query.visit_id, "order_id": query.order_id,
+        "owner": owner.as_str()
+    })), cookie)
+}
+
+fn market_return_matches(query: &MarketReturnQuery, visit: &crate::repository::MarketVisit,
+    receipt: &crate::repository::SpecialSeedsReceipt, order: &crate::market_issuer::IssuerOrder) -> bool {
+    let a = &order.attributes;
+    order.id == query.order_id && a.status == "fulfilled" && a.issuer == "0x1"
+        && a.denomination == "seeds" && a.link_provider == "nilx_visit"
+        && a.link_provider_user_id == query.visit_id && a.recipient_subject == visit.recipient_pub_dress
+        && receipt.owner_pub_dress == visit.owner.as_str() && receipt.sku == a.sku
+        && receipt.price_id == a.price_id && receipt.amount_minor == a.amount_minor
+        && a.term.as_ref().is_some_and(|term| term.policy == "calendar_months_utc"
+            && matches!(term.months, 1 | 3 | 6 | 12)
+            && a.sku == format!("0x1_special_{}m", term.months)
+            && crate::market_issuer::parse_rfc3339_ms(&a.created_at)
+                .and_then(|at| crate::market_issuer::term_duration_ms(at, term.months)) == Some(receipt.duration_ms))
+}
+
+async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) -> Response {
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, _, _, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    let now_ms = now.saturating_mul(1000);
+    let clock = match state.repository.read_subscription_clock(&owner, now_ms).await {
+        Ok(clock) => clock, Err(_) => return unavailable(),
+    };
+    match clock.snapshot(now_ms, now_ms.saturating_add(30_000)) {
+        Ok(snapshot) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!(snapshot)), cookie),
+        Err(_) => unavailable(),
+    }
 }
 
 #[cfg(test)]
 mod market_visit_tests {
-    use super::valid_market_return_path;
+    use super::*;
+
+    #[test]
+    fn completion_requires_matching_owner_visit_receipt_and_fulfilment() {
+        use crate::repository::{MarketVisit, SpecialSeedsReceipt};
+        use crate::market_issuer::{IssuerOrder, IssuerOrderAttributes, IssuerOrderTerm};
+        let query = MarketReturnQuery {visit_id: "v".repeat(43), order_id: "order-1234".into()};
+        let visit = MarketVisit {owner: "0x0sky".parse().unwrap(), recipient_pub_dress: "0x0old".into(),
+            session_token_hash: vec![1;32], spend_until_ms: 1};
+        let receipt = SpecialSeedsReceipt {owner_pub_dress: "0x0sky".into(), sku: "0x1_special_1m".into(),
+            price_id: 7, amount_minor: 640, duration_ms: 31 * 86_400_000};
+        let order = IssuerOrder {id: query.order_id.clone(), attributes: IssuerOrderAttributes {
+            sku: receipt.sku.clone(), denomination: "seeds".into(), issuer: "0x1".into(),
+            amount_minor: 640, price_id: 7, recipient_subject: "0x0old".into(), link_provider: "nilx_visit".into(),
+            link_provider_user_id: query.visit_id.clone(), status: "fulfilled".into(), created_at: "2026-10-29T12:00:00Z".into(),
+            term: Some(IssuerOrderTerm {months: 1, policy: "calendar_months_utc".into()}),
+        }};
+        // Completed purchases survive rename and visit/session expiry.
+        assert!(market_return_matches(&query, &visit, &receipt, &order));
+        let mutations: [fn(&mut IssuerOrder); 10] = [
+            |o| o.attributes.status = "processing".into(), |o| o.attributes.status = "cancelled".into(),
+            |o| o.id = "other-order".into(), |o| o.attributes.link_provider_user_id = "w".repeat(43),
+            |o| o.attributes.recipient_subject = "0x0other".into(), |o| o.attributes.amount_minor = 1,
+            |o| o.attributes.price_id = 8, |o| o.attributes.term = None,
+            |o| o.attributes.term.as_mut().unwrap().months = 3, |o| o.attributes.created_at = "2026-11-29T12:00:00Z".into(),
+        ];
+        for mutate in mutations { let mut bad = order.clone(); mutate(&mut bad);
+            assert!(!market_return_matches(&query, &visit, &receipt, &bad)); }
+        let mut other = receipt.clone(); other.owner_pub_dress = "0x0other".into();
+        assert!(!market_return_matches(&query, &visit, &other, &order));
+    }
+
 
     #[test]
     fn return_path_is_a_host_page_never_a_url() {

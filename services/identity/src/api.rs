@@ -121,6 +121,8 @@ fn router_with_clock(
     Router::new()
         .route("/health", get(health))
         .route("/api/v1/identity/market-visit", post(create_market_visit))
+        .route("/api/v1/identity/market-return", get(read_market_return))
+        .route("/api/v1/identity/subscription", get(read_subscription))
         .route("/api/v1/identity/organizations", get(read_my_organizations).post(create_business_organization))
         .route("/api/v1/auth/discord/config", get(discord_config))
         .route("/api/v1/auth/discord/token", post(exchange_discord_code))
@@ -2252,6 +2254,17 @@ mod tests {
             Arc::new(StaticClock),
         )
         .merge(avaia)
+    }
+
+    #[tokio::test]
+    async fn checkout_projections_require_authentication_and_have_no_mutation_route() {
+        let app = app().await;
+        for path in ["/api/v1/identity/subscription", "/api/v1/identity/market-return?visit_id=x&order_id=y"] {
+            let response = app.clone().oneshot(Request::get(path).body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            let response = app.clone().oneshot(Request::post(path).body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        }
     }
 
     async fn create_avaia(app: &axum::Router, cookies: &str, pub_dress: &str) {

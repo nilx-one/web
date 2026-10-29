@@ -607,8 +607,18 @@ impl HttpMarketIssuer {
             .map_err(|_| MarketIssuerError::Malformed)
     }
 
+    /// A read-only order lookup for authenticated checkout completion.
+    pub async fn read_order(&self, id: &str) -> Result<IssuerOrder, MarketIssuerError> {
+        let path = Self::order_path(id, "")?;
+        let url = self.url(path.trim_end_matches('/'))?;
+        let resource: Resource = self.send(self.client.get(url)).await?;
+        Ok(resource.data)
+    }
+
     fn order_path(id: &str, action: &str) -> Result<String, MarketIssuerError> {
         if id.is_empty()
+            || id.len() > 128
+            || matches!(id, "." | "..")
             || !id
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b':'))
