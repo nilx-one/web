@@ -149,3 +149,64 @@ it("pins the selected visit without claiming arrival", async () => {
   expect(screen.getByText(/not server-verified/)).toBeInTheDocument();
   expect(screen.queryByText("You are here")).toBeNull();
 });
+
+it("retains Identity balance and visited point from the current server handoff", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          point: "batkivshchyna",
+          seeds: "9360",
+          seeds_authority: "identity_snapshot",
+          avaia: { longitude: 30.5, latitude: 50.4 },
+        }),
+      ),
+    ),
+  );
+  render(<MarketLanding />);
+  expect(await screen.findByText(/9360 seeds/)).toHaveTextContent(
+    "balance at handoff; checked again before purchase",
+  );
+  expect(screen.getByText(/Selected visit point/)).toBeInTheDocument();
+  expect(screen.getAllByRole("listitem")[0]).toHaveTextContent(
+    "Motherland Monument",
+  );
+  expect(screen.queryByText(/device display only/)).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "0xda-market Motherland Monument" }),
+  );
+  expect(
+    screen.getByText("Market point: 0xda-market-batkivshchyna"),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/9360 seeds/)).toBeInTheDocument();
+});
+
+it.each([
+  { seeds_authority: "browser_claim" },
+  { seeds: "-640" },
+  { seeds: "640.5" },
+  { avaia: { longitude: 181, latitude: 50.4 } },
+])(
+  "rejects malformed visit context %j without blocking browsing",
+  async (invalid) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            point: "batkivshchyna",
+            seeds: "640",
+            seeds_authority: "identity_snapshot",
+            avaia: { longitude: 30.5, latitude: 50.4 },
+            ...invalid,
+          }),
+        ),
+      ),
+    );
+    render(<MarketLanding />);
+    await screen.findByRole("button", { name: "0xda-market Golden Gate" });
+    expect(screen.queryByText(/Selected visit point/)).toBeNull();
+    expect(screen.queryByText(/balance at handoff/)).toBeNull();
+  },
+);
