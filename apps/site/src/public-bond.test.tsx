@@ -178,6 +178,47 @@ describe("public Bond host routing", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("hands a person's Bond to the world and a business to its own page", async () => {
+    const respond = (body: object) =>
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ) as unknown as typeof fetch;
+    const renderPerson = vi.fn(() => <p>person world</p>);
+    const renderBusiness = vi.fn(() => <p>business world</p>);
+
+    const { unmount } = render(
+      <PublicBondPage
+        fetchImpl={respond({
+          pub_dress: "0x0sky",
+          pub_dress_url: "https://0x0sky.nilx.one/",
+        })}
+        renderPerson={renderPerson}
+        renderBusiness={renderBusiness}
+      />,
+    );
+    expect(await screen.findByText("person world")).toBeVisible();
+    expect(renderBusiness).not.toHaveBeenCalled();
+    unmount();
+
+    render(
+      <PublicBondPage
+        fetchImpl={respond({
+          bond_type: "business",
+          pub_dress: "0xda-market",
+          pub_dress_url: "https://0xda-market.nilx.one/",
+        })}
+        renderPerson={renderPerson}
+        renderBusiness={renderBusiness}
+      />,
+    );
+    expect(await screen.findByText("business world")).toBeVisible();
+    expect(renderPerson).toHaveBeenCalledOnce();
+  });
+
   it("does not invent a Bond for an unallocated label", async () => {
     const fetchImpl = vi.fn(
       async () => new Response(null, { status: 404 }),

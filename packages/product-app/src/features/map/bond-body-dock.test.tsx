@@ -13,6 +13,7 @@ import {
   canonicalBondPublicUrl,
   type MapBondReference,
 } from "./authenticated-map-home-view";
+import { readPublicBondMapState } from "../identity/public-bond-handoff";
 
 afterEach(cleanup);
 
@@ -64,7 +65,7 @@ describe("Bond model activation", () => {
   });
 
   it("links its own main screen to its public address", () => {
-    const { container } = renderWorld({ section: "identity" });
+    const { container, renderer } = renderWorld({ section: "identity" });
 
     expect(container.querySelector(".bond-dock")).toHaveAttribute(
       "data-screen",
@@ -74,8 +75,17 @@ describe("Bond model activation", () => {
     const publicUrl = screen.getByRole("link", {
       name: /0x0sky\.nilx\.one/,
     });
-    expect(publicUrl).toHaveAttribute("href", "https://0x0sky.nilx.one/");
-    expect(publicUrl).toHaveAttribute("rel", "noopener noreferrer");
+    // The public page is the same world: it opens in place and is handed the
+    // camera and appearance it should open on, in the fragment only.
+    const href = new URL(publicUrl.getAttribute("href") ?? "");
+    expect(href.origin + href.pathname + href.search).toBe(
+      "https://0x0sky.nilx.one/",
+    );
+    expect(readPublicBondMapState(href.hash)).toEqual({
+      camera: renderer.getCamera(),
+      appearance: expect.stringMatching(/^(light|dark)$/),
+    });
+    expect(publicUrl).not.toHaveAttribute("target");
   });
 
   it("selects a distinct Bond from an application-owned drawn body handle", () => {
@@ -95,9 +105,13 @@ describe("Bond model activation", () => {
       "bond:external-bond:17",
     );
     expect(screen.getByRole("heading", { name: "0x0тест" })).toBeVisible();
-    expect(screen.getByRole("link", { name: /nilx\.one/ })).toHaveAttribute(
-      "href",
-      new URL(unicodeUrl).href,
+    const href = new URL(
+      screen.getByRole("link", { name: /nilx\.one/ }).getAttribute("href") ??
+        "",
+    );
+    expect(href.origin + href.pathname).toBe(new URL(unicodeUrl).href);
+    expect(readPublicBondMapState(href.hash).camera).toEqual(
+      renderer.getCamera(),
     );
   });
 
