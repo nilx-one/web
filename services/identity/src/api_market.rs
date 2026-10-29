@@ -185,11 +185,12 @@ fn market_return_matches(query: &MarketReturnQuery, visit: &crate::repository::M
         && a.link_provider_user_id == query.visit_id && a.recipient_subject == visit.recipient_pub_dress
         && receipt.owner_pub_dress == visit.owner.as_str() && receipt.sku == a.sku
         && receipt.price_id == a.price_id && receipt.amount_minor == a.amount_minor
-        && a.term.as_ref().is_some_and(|term| term.policy == "calendar_months_utc"
+        // The SKU fixes the term. The receipt's duration is what Core's
+        // calendar months came to on the clock at the grant, so it is not
+        // recomputed from the order: a stacked purchase starts later.
+        && a.term.as_ref().is_some_and(|term| term.policy == crate::market_issuer::TERM_POLICY
             && matches!(term.months, 1 | 3 | 6 | 12)
-            && a.sku == format!("0x1_special_{}m", term.months)
-            && crate::market_issuer::parse_rfc3339_ms(&a.created_at)
-                .and_then(|at| crate::market_issuer::term_duration_ms(at, term.months)) == Some(receipt.duration_ms))
+            && a.sku == format!("0x1_special_{}m", term.months))
 }
 
 async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) -> Response {
@@ -234,7 +235,7 @@ mod market_visit_tests {
             |o| o.id = "other-order".into(), |o| o.attributes.link_provider_user_id = "w".repeat(43),
             |o| o.attributes.recipient_subject = "0x0other".into(), |o| o.attributes.amount_minor = 1,
             |o| o.attributes.price_id = 8, |o| o.attributes.term = None,
-            |o| o.attributes.term.as_mut().unwrap().months = 3, |o| o.attributes.created_at = "2026-11-29T12:00:00Z".into(),
+            |o| o.attributes.term.as_mut().unwrap().months = 3, |o| o.attributes.sku = "0x1_special_3m".into(),
         ];
         for mutate in mutations { let mut bad = order.clone(); mutate(&mut bad);
             assert!(!market_return_matches(&query, &visit, &receipt, &bad)); }

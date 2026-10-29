@@ -20,15 +20,17 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use tracing::{error, info, warn};
 
+use nilxone_contracts::{SpecialSeedsOrder, special_seeds_term_months};
+
 use crate::{
     IdentityRepository,
     repository::{IssuerSpecialOrderSnapshot, SpecialSeedsOutcome},
 };
 
 pub const ISSUER: &str = "0x1";
-const DENOMINATION: &str = "seeds";
 const VISIT_PROVIDER: &str = "nilx_visit";
-/// Market's only subscription term policy; see `term_duration_ms`.
+/// Market's only subscription term policy. Core's `grant_special_months`
+/// applies it; this service never computes a calendar month itself.
 pub const TERM_POLICY: &str = "calendar_months_utc";
 const PAGE_LIMIT: u32 = 50;
 /// A tick reads at most this many pages per status, so one huge backlog
@@ -198,14 +200,9 @@ impl<M: MarketIssuerApi> MarketIssuerWorker<M> {
             Some(months) => months,
             None => return self.reject(order, rejection::INVALID_TERMS).await,
         };
-        let Ok(duration_ms) = parse_rfc3339_ms(&attributes.created_at)
-            .ok_or(())
-            .and_then(|anchor| term_duration_ms(anchor, months).ok_or(()))
-        else {
-            return self.reject(order, rejection::INVALID_TERMS).await;
-        };
-
         // A receipt means the debit and grant are committed: only confirm it.
+        // The SKU fixes the term; the receipt's duration is what that term came
+        // to on the clock at the time, so it is never recomputed here.
         if let Some(receipt) = self
             .repository
             .find_special_seeds_receipt(&order.id)
@@ -213,8 +210,7 @@ impl<M: MarketIssuerApi> MarketIssuerWorker<M> {
         {
             let same = receipt.sku == attributes.sku
                 && receipt.price_id == attributes.price_id
-                && receipt.amount_minor == attributes.amount_minor
-                && receipt.duration_ms == duration_ms;
+                && receipt.amount_minor == attributes.amount_minor;
             if !same {
                 error!(order = %order.id, "committed receipt disagrees with the market order");
                 return Ok(Settlement::Held);
@@ -249,7 +245,7 @@ impl<M: MarketIssuerApi> MarketIssuerWorker<M> {
             sku: attributes.sku.clone(),
             price_id: attributes.price_id,
             amount_minor: attributes.amount_minor,
-            duration_ms,
+            term_months: months,
         };
         match self
             .repository
@@ -309,162 +305,23 @@ pub fn issuer_reference(order_id: &str) -> String {
     format!("identity:{order_id}")
 }
 
-/// Months of a well-formed Special order, or `None` for anything else.
+/// Months of a well-formed Special order, or `None` for anything else. Core
+/// decides the SKU's term and the order's structure; the worker adds what only
+/// Market's wire carries: the visit binding and the frozen term policy.
 fn valid_terms(attributes: &IssuerOrderAttributes) -> Option<u32> {
-    let months = match attributes.sku.as_str() {
-        "0x1_special_1m" => 1,
-        "0x1_special_3m" => 3,
-        "0x1_special_6m" => 6,
-        "0x1_special_12m" => 12,
-        _ => return None,
-    };
+    let months = special_seeds_term_months(&SpecialSeedsOrder {
+        sku: &attributes.sku,
+        issuer: &attributes.issuer,
+        denomination: &attributes.denomination,
+        status: &attributes.status,
+        price_id: attributes.price_id,
+        amount_minor: attributes.amount_minor,
+    })?;
     let term = attributes.term.as_ref()?;
-    let ok = attributes.issuer == ISSUER
-        && attributes.denomination == DENOMINATION
-        && attributes.link_provider == VISIT_PROVIDER
+    let ok = attributes.link_provider == VISIT_PROVIDER
         && term.policy == TERM_POLICY
-        && term.months == months
-        && attributes.amount_minor > 0
-        && attributes.price_id > 0;
+        && term.months == months;
     ok.then_some(months)
-}
-
-/// `calendar_months_utc`: N months from `anchor_ms` end on the same day of the
-/// month and time of day, in UTC, N calendar months later. A day the target
-/// month lacks becomes that month's last day, at the same time.
-///
-/// The anchor is the order's creation, when the buyer confirmed it, so a
-/// retried settlement computes exactly the same term as the first attempt.
-pub fn term_duration_ms(anchor_ms: u64, months: u32) -> Option<u64> {
-    const DAY_MS: u64 = 86_400_000;
-    if months == 0 {
-        return None;
-    }
-    let days = i64::try_from(anchor_ms / DAY_MS).ok()?;
-    let time_of_day = anchor_ms % DAY_MS;
-    let (year, month, day) = civil_from_days(days);
-    let total = i64::from(month) - 1 + i64::from(months);
-    let target_year = year.checked_add(total.div_euclid(12))?;
-    let target_month = u32::try_from(total.rem_euclid(12)).ok()? + 1;
-    let target_day = day.min(days_in_month(target_year, target_month));
-    let end_days = u64::try_from(days_from_civil(target_year, target_month, target_day)).ok()?;
-    let end_ms = end_days.checked_mul(DAY_MS)?.checked_add(time_of_day)?;
-    end_ms
-        .checked_sub(anchor_ms)
-        .filter(|duration| *duration > 0)
-}
-
-fn days_in_month(year: i64, month: u32) -> u32 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        _ if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
-        _ => 28,
-    }
-}
-
-// Howard Hinnant's proleptic Gregorian conversions, days since 1970-01-01.
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let month = i64::from(month);
-    let day_of_year =
-        (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + i64::from(day) - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
-fn civil_from_days(days: i64) -> (i64, u32, u32) {
-    let shifted = days + 719_468;
-    let era = shifted.div_euclid(146_097);
-    let day_of_era = shifted - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_index = (5 * day_of_year + 2) / 153;
-    let day = u32::try_from(day_of_year - (153 * month_index + 2) / 5 + 1).unwrap_or(1);
-    let month = u32::try_from(if month_index < 10 {
-        month_index + 3
-    } else {
-        month_index - 9
-    })
-    .unwrap_or(1);
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-    (year, month, day)
-}
-
-/// Milliseconds since the epoch of an RFC 3339 timestamp, as Market writes
-/// them (`2026-10-29T14:05:00.123456Z` or with a `+00:00` offset).
-pub fn parse_rfc3339_ms(value: &str) -> Option<u64> {
-    let bytes = value.as_bytes();
-    let digits = |range: std::ops::Range<usize>| -> Option<u32> {
-        let slice = value.get(range)?;
-        slice
-            .bytes()
-            .all(|c| c.is_ascii_digit())
-            .then(|| slice.parse().ok())?
-    };
-    if bytes.len() < 20
-        || bytes[4] != b'-'
-        || bytes[7] != b'-'
-        || !matches!(bytes[10], b'T' | b't')
-        || bytes[13] != b':'
-        || bytes[16] != b':'
-    {
-        return None;
-    }
-    let (year, month, day) = (i64::from(digits(0..4)?), digits(5..7)?, digits(8..10)?);
-    let (hour, minute, second) = (digits(11..13)?, digits(14..16)?, digits(17..19)?);
-    if !(1..=12).contains(&month)
-        || day == 0
-        || day > days_in_month(year, month)
-        || hour > 23
-        || minute > 59
-        || second > 59
-    {
-        return None;
-    }
-    let mut index = 19;
-    let mut millis = 0_u32;
-    if bytes.get(index) == Some(&b'.') {
-        index += 1;
-        let start = index;
-        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
-            index += 1;
-        }
-        let fraction = value.get(start..index)?;
-        if fraction.is_empty() {
-            return None;
-        }
-        let padded = format!("{:0<3}", &fraction[..fraction.len().min(3)]);
-        millis = padded.parse().ok()?;
-    }
-    let offset_seconds: i64 = match value.get(index..)? {
-        "Z" | "z" => 0,
-        zone if zone.len() == 6
-            && matches!(zone.as_bytes()[0], b'+' | b'-')
-            && zone.as_bytes()[3] == b':' =>
-        {
-            let hours = i64::from(digits(index + 1..index + 3)?);
-            let minutes = i64::from(digits(index + 4..index + 6)?);
-            if hours > 23 || minutes > 59 {
-                return None;
-            }
-            let sign = if zone.as_bytes()[0] == b'-' { -1 } else { 1 };
-            sign * (hours * 3600 + minutes * 60)
-        }
-        _ => return None,
-    };
-    let seconds = days_from_civil(year, month, day) * 86_400
-        + i64::from(hour) * 3600
-        + i64::from(minute) * 60
-        + i64::from(second)
-        - offset_seconds;
-    u64::try_from(seconds)
-        .ok()?
-        .checked_mul(1000)?
-        .checked_add(u64::from(millis))
 }
 
 /// Configuration read once at start-up.
@@ -721,72 +578,6 @@ mod tests {
     const CREATED_MS: u64 = 1_793_282_700_123;
     const NOW_MS: u64 = CREATED_MS + 60_000;
     const VISIT: &str = "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv";
-
-    fn ms(text: &str) -> u64 {
-        parse_rfc3339_ms(text).expect(text)
-    }
-
-    #[test]
-    fn a_month_ends_on_the_same_day_and_hour_of_the_next_month() {
-        let anchor = ms("2026-10-29T14:05:00.123Z");
-        assert_eq!(anchor, CREATED_MS);
-        assert_eq!(
-            term_duration_ms(anchor, 1),
-            Some(ms("2026-11-29T14:05:00.123Z") - anchor)
-        );
-        assert_eq!(term_duration_ms(anchor, 1), Some(31 * DAY));
-        assert_eq!(
-            term_duration_ms(anchor, 3),
-            Some(ms("2027-01-29T14:05:00.123Z") - anchor)
-        );
-        assert_eq!(
-            term_duration_ms(anchor, 12),
-            Some(ms("2027-10-29T14:05:00.123Z") - anchor)
-        );
-    }
-
-    #[test]
-    fn a_missing_day_becomes_the_last_day_of_the_target_month() {
-        let january = ms("2026-01-31T23:59:59Z");
-        assert_eq!(
-            term_duration_ms(january, 1),
-            Some(ms("2026-02-28T23:59:59Z") - january)
-        );
-        let leap = ms("2028-01-31T08:00:00Z");
-        assert_eq!(
-            term_duration_ms(leap, 1),
-            Some(ms("2028-02-29T08:00:00Z") - leap)
-        );
-        let leap_day = ms("2028-02-29T08:00:00Z");
-        assert_eq!(
-            term_duration_ms(leap_day, 12),
-            Some(ms("2029-02-28T08:00:00Z") - leap_day)
-        );
-        let august = ms("2026-08-31T00:00:00Z");
-        assert_eq!(
-            term_duration_ms(august, 6),
-            Some(ms("2027-02-28T00:00:00Z") - august)
-        );
-        assert_eq!(term_duration_ms(august, 0), None);
-    }
-
-    #[test]
-    fn rfc3339_offsets_and_fractions_are_exact() {
-        assert_eq!(ms("2026-10-29T14:05:00.123456Z"), CREATED_MS);
-        assert_eq!(ms("2026-10-29T14:05:00.123+00:00"), CREATED_MS);
-        assert_eq!(ms("2026-10-29T16:05:00.123+02:00"), CREATED_MS);
-        assert_eq!(ms("2026-10-29T14:05:00Z"), CREATED_MS - 123);
-        for invalid in [
-            "2026-10-29 14:05:00Z",
-            "2026-02-30T00:00:00Z",
-            "2026-10-29T14:05:00",
-            "2026-10-29T14:05:00.Z",
-            "2026-10-29T24:00:00Z",
-            "2026-10-29T14:05:00+2:00",
-        ] {
-            assert_eq!(parse_rfc3339_ms(invalid), None, "{invalid}");
-        }
-    }
 
     #[test]
     fn credential_matches_the_market_derivation() {

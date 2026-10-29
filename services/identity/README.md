@@ -205,10 +205,13 @@ wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
 - A committed receipt is always confirmed again, never rejected, so a lost
   confirmation or a crash cannot charge twice or lose a paid order. A receipt
   that disagrees with its order stays `processing` for an operator.
-- A term of N months follows Market's `calendar_months_utc`: from the order's
-  creation, the same day of the month and time of day, in UTC, N calendar months
-  later; a missing day becomes the month's last day. Where the time starts
-  when Special remains, or Exclusive is active, is the Core clock's rule.
+- A term of N months follows Market's `calendar_months_utc` through Core's
+  `special_seeds_term_months` and `SubscriptionClock::grant_special_months`:
+  the same day of the month and time of day, in UTC, N calendar months later,
+  and a missing day becomes the month's last day. The term starts at the
+  grant, or where existing Special ends (after queued Exclusive), so a second
+  purchase extends the first. The receipt keeps the duration granted. A replay
+  compares SKU, price and amount and never recomputes it.
 
 The worker is off by default and has no HTTP route. Enabling it, crediting
 wallets and activating the Market catalog are separate, authorized steps.
