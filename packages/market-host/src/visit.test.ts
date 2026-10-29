@@ -3,7 +3,9 @@
 
 import { afterEach, expect, it, vi } from "vitest";
 import type { CourierPlan } from "@nilx-one/application";
-import { beginMarketVisit } from "./visit";
+import { createMarketVisit } from "./visit";
+
+const beginMarketVisit = createMarketVisit();
 
 const plan: CourierPlan = {
   origin: { longitude_e7: "305000000", latitude_e7: "504000000" },
@@ -74,4 +76,26 @@ it("must not submit a stale handoff after the selected arrival is cancelled", as
   finish(response());
   await expect(pending).rejects.toThrow("Market visit cancelled");
   expect(submit).not.toHaveBeenCalled();
+});
+
+it("proves the Bond with the host credential when the host has no session cookie", async () => {
+  const request = vi.fn().mockResolvedValue(response());
+  vi.stubGlobal("fetch", request);
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  await createMarketVisit(() => "tma signed-init-data")(visit);
+  expect(request.mock.calls[0]?.[1]?.headers).toEqual({
+    "Content-Type": "application/json",
+    "x-0x1-csrf": "1",
+    authorization: "tma signed-init-data",
+  });
+});
+
+it("sends no empty credential when the host has none", async () => {
+  const request = vi.fn().mockResolvedValue(response());
+  vi.stubGlobal("fetch", request);
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  await createMarketVisit(() => undefined)(visit);
+  expect(request.mock.calls[0]?.[1]?.headers).not.toHaveProperty(
+    "authorization",
+  );
 });

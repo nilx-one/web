@@ -1,0 +1,12 @@
+{
+  "name": "@nilx-one/market-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@0xda-market/webapp-core": "github:0xda-market/webapp-core#8e5ea0e1083323b33e30156a5b8a8334e4d78ce8",
+    "@nilx-one/application": "workspace:*",
+    "@nilx-one/product-app": "workspace:*"
+  }
+}

@@ -35,7 +35,7 @@ vi.mock("@nilx-one/map-contract", () => ({
 vi.mock("../business-navigation", () => ({
   createBusinessNavigation: () => ({}),
 }));
-vi.mock("./catalog", () => ({
+vi.mock("@nilx-one/market-host", () => ({
   createNilxOneMarketCatalog: () => ({
     load: vi.fn().mockResolvedValue([]),
   }),

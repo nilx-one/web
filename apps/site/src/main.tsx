@@ -47,7 +47,7 @@ import {
   type LocalModelHost,
 } from "@nilx-one/product-app";
 import "@nilx-one/ui/styles.css";
-import { createNilxOneMarketCatalog } from "./market/catalog";
+import { createNilxOneMarketCatalog } from "@nilx-one/market-host";
 import { MarketLanding } from "./market/landing";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";

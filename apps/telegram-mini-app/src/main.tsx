@@ -38,6 +38,7 @@ import {
   locationControlFingerprint,
   readTelegramLocationControl,
 } from "./location-control";
+import { createTelegramMarketCatalog, telegramAuthorization } from "./market";
 
 const LOCATION_PERSIST_INTERVAL_MS = 15_000;
 
@@ -110,13 +111,7 @@ async function bootstrap(): Promise<void> {
     loadBindings: loadGeneratedCoreWasmBindings,
   });
   const identity = createIdentityHttpAdapter({
-    getAuthorization: () => {
-      const authentication = host.getSnapshot().authentication;
-      return authentication.kind === "telegram-init-data" &&
-        authentication.initData.length > 0
-        ? `tma ${authentication.initData}`
-        : undefined;
-    },
+    getAuthorization: () => telegramAuthorization(host),
   });
   const localPresence = createLocalPresenceJournal().catch(() => null);
   const fog = createFogField(localPresence);
@@ -210,6 +205,7 @@ async function bootstrap(): Promise<void> {
   createRoot(container).render(
     <StrictMode>
       <ProductApp
+        marketCatalog={createTelegramMarketCatalog(host)}
         core={core}
         host={host}
         identity={identity}

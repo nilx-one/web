@@ -134,9 +134,6 @@ importers:
 
   apps/site:
     dependencies:
-      '@0xda-market/webapp-core':
-        specifier: github:0xda-market/webapp-core#8e5ea0e1083323b33e30156a5b8a8334e4d78ce8
-        version: https://codeload.github.com/0xda-market/webapp-core/tar.gz/8e5ea0e1083323b33e30156a5b8a8334e4d78ce8
       '@aiaiaiai/4x-errors-browser':
         specifier: 0.2.0
         version: 0.2.0
@@ -164,6 +161,9 @@ importers:
       '@nilx-one/map-shade':
         specifier: workspace:*
         version: link:../../packages/map-shade
+      '@nilx-one/market-host':
+        specifier: workspace:*
+        version: link:../../packages/market-host
       '@nilx-one/narration-webllm':
         specifier: workspace:*
         version: link:../../packages/narration-webllm
@@ -212,6 +212,9 @@ importers:
       '@nilx-one/map-shade':
         specifier: workspace:*
         version: link:../../packages/map-shade
+      '@nilx-one/market-host':
+        specifier: workspace:*
+        version: link:../../packages/market-host
       '@nilx-one/presence-idb':
         specifier: workspace:*
         version: link:../../packages/presence-idb
@@ -325,6 +328,18 @@ importers:
       maplibre-gl:
         specifier: ^6.6.0
         version: 6.6.0
+
+  packages/market-host:
+    dependencies:
+      '@0xda-market/webapp-core':
+        specifier: github:0xda-market/webapp-core#8e5ea0e1083323b33e30156a5b8a8334e4d78ce8
+        version: https://codeload.github.com/0xda-market/webapp-core/tar.gz/8e5ea0e1083323b33e30156a5b8a8334e4d78ce8
+      '@nilx-one/application':
+        specifier: workspace:*
+        version: link:../application
+      '@nilx-one/product-app':
+        specifier: workspace:*
+        version: link:../product-app
 
   packages/narration-contract: {}
 

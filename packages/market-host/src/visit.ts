@@ -2,9 +2,21 @@
 // SPDX-License-Identifier: MPL-2.0
 import type { EmbeddedMarketCatalogPort } from "@nilx-one/product-app/business";
 
-export const beginMarketVisit: NonNullable<
-  EmbeddedMarketCatalogPort["beginVisit"]
-> = async (input) => {
+/**
+ * A host without the site's native session cookie proves its Bond with its
+ * own credential, for example Telegram `tma` initData. Absent, the request
+ * relies on the same-origin cookie only.
+ */
+export function createMarketVisit(
+  authorization?: () => string | undefined,
+): NonNullable<EmbeddedMarketCatalogPort["beginVisit"]> {
+  return (input) => beginMarketVisit(input, authorization?.());
+}
+
+async function beginMarketVisit(
+  input: Parameters<NonNullable<EmbeddedMarketCatalogPort["beginVisit"]>>[0],
+  authorization: string | undefined,
+): Promise<void> {
   // The optional return-trip hint is not required to authenticate at Market.
   // Blocked storage must not prevent an otherwise valid server handoff.
   try {
@@ -25,7 +37,11 @@ export const beginMarketVisit: NonNullable<
       method: "POST",
       credentials: "same-origin",
       redirect: "error",
-      headers: { "Content-Type": "application/json", "x-0x1-csrf": "1" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-0x1-csrf": "1",
+        ...(authorization ? { authorization } : {}),
+      },
       signal: controller.signal,
       body: JSON.stringify({
         point: input.point,
@@ -54,4 +70,4 @@ export const beginMarketVisit: NonNullable<
     clearTimeout(timeout);
     input.signal?.removeEventListener("abort", onCancel);
   }
-};
+}
