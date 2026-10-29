@@ -13,6 +13,7 @@ import type {
   CommittedAwardAccessPort,
   CoreRuntimePort,
   NearbySpeechAccessPort,
+  PubDressRenameResult,
 } from "@nilx-one/application";
 import {
   createBondLocationGeolocation,
@@ -156,6 +157,8 @@ function avaiaStandsAt(point: { longitude: number; latitude: number }): void {
 }
 
 interface ViewOverrides {
+  /** Enter the Personal Bond's editing mode from its header after render. */
+  editing?: boolean;
   findItems?: Partial<CoreRuntimePort>;
   committedAwards?: CommittedAwardAccessPort;
   nearbySpeech?: NearbySpeechAccessPort;
@@ -188,6 +191,7 @@ interface ViewOverrides {
   onNavigate?: (route: ShellRoute) => void;
   onSlugChange?: (slug: string) => void;
   onSlugSubmit?: () => void;
+  onSlugReset?: () => void;
 }
 
 function renderView(overrides: ViewOverrides = {}) {
@@ -248,9 +252,12 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onSlugSubmit === undefined
       ? {}
       : { onSlugSubmit: overrides.onSlugSubmit }),
+    ...(overrides.onSlugReset === undefined
+      ? {}
+      : { onSlugReset: overrides.onSlugReset }),
   };
 
-  return render(
+  const rendered = render(
     <AuthenticatedMapHomeView
       hostLabel="browser host"
       pubDress="0x0sky"
@@ -267,6 +274,10 @@ function renderView(overrides: ViewOverrides = {}) {
       {...optionalProps}
     />,
   );
+  if (overrides.editing === true) {
+    fireEvent.click(screen.getByRole("button", { name: "Edit this Bond" }));
+  }
+  return rendered;
 }
 
 function soundDouble() {
@@ -631,10 +642,12 @@ describe("AuthenticatedMapHomeView", () => {
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
   });
 
-  it("opens the Bond's Dock without forcing the camera to refocus", async () => {
+  it("opens its own main screen without forcing the camera to refocus", async () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
-    const { container } = renderView({
+    const onNavigate = vi.fn();
+    renderView({
       mapRenderer,
+      onNavigate,
       geolocation: createGeolocationDouble({ position: observation() }),
     });
     await screen.findByRole("button", { name: "Map centred on this device" });
@@ -643,23 +656,21 @@ describe("AuthenticatedMapHomeView", () => {
 
     act(() => mapRenderer.activateBody("bond"));
 
-    expect(container.querySelector(".bond-dock")).toHaveAttribute(
-      "data-screen",
-      "bond:bond",
-    );
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
     expect(setCamera.mock.calls.length).toBe(firstFix);
     expect(mapRenderer.unmount).not.toHaveBeenCalled();
   });
 
-  it("navigates to the world when a Bond is reached from another section", () => {
+  it("opens its own main screen when its body is reached from another section", () => {
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
     const onNavigate = vi.fn();
     renderView({ mapRenderer, onNavigate, section: "settings" });
 
     act(() => mapRenderer.activateBody("bond"));
 
-    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
   });
+
   it("opens the Bond edit surface from the Dock header", () => {
     const onNavigate = vi.fn();
 
@@ -812,23 +823,20 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
   });
 
-  it("presents the whole Bond profile on one identity surface", () => {
-    renderView({
+  it("reads the Bond on its main screen, and changes it only in editing", () => {
+    const { container } = renderView({
       section: "identity",
       slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
     });
 
     expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
-    // Reading and changing the profile are the same screen.
+    // Reading changes nothing: there is no field until editing is entered.
+    expect(screen.queryByLabelText("pub_dress")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Add a provider" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("pub_dress")).toHaveValue("sky");
-    expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
-    expect(screen.getByText("Providers")).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Add a provider" }),
-    ).toBeVisible();
+    expect(screen.getByText("Bond")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open x0skai" })).toBeVisible();
     // Nothing a person cannot change is presented as something to edit.
     for (const absent of [
       "Age",
@@ -839,6 +847,180 @@ describe("AuthenticatedMapHomeView", () => {
     ]) {
       expect(screen.queryByText(absent)).not.toBeInTheDocument();
     }
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit this Bond" }));
+
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "identity:edit",
+    );
+    expect(
+      container.querySelector(".bond-dock__detail-header"),
+    ).toHaveTextContent("Editing");
+    expect(screen.getByLabelText("pub_dress")).toHaveValue("sky");
+    expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
+    expect(screen.getByText("Providers")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Add a provider" }),
+    ).toBeVisible();
+    // Nothing typed, nothing to save.
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("opens the owned Avaia from the Bond's main screen", () => {
+    const { container } = renderView({ section: "identity" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open x0skai" }));
+
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "avaia",
+    );
+  });
+
+  it("lights Save only for a change, saves from the header and returns to reading", () => {
+    const submitted = vi.fn();
+    function Profile() {
+      const [pubDress, setPubDress] = useState("0x0sky");
+      const [draft, setDraft] = useState<string | undefined>(undefined);
+      const [result, setResult] = useState<PubDressRenameResult | undefined>(
+        undefined,
+      );
+      return (
+        <AuthenticatedMapHomeView
+          hostLabel="browser host"
+          pubDress={pubDress}
+          avaiaPubDress="x0skai"
+          renderer={renderer()}
+          geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
+          runtime={{ tone: "ready", label: "Shared Core ready", detail: "" }}
+          safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          section="identity"
+          slugEdit={createProfileSlugViewState(pubDress, draft, false, result)}
+          onSlugChange={setDraft}
+          onSlugReset={() => setDraft(undefined)}
+          onSlugSubmit={() => {
+            submitted(draft);
+            const renamed = `0x0${draft ?? ""}`;
+            setPubDress(renamed);
+            setDraft(undefined);
+            setResult({ kind: "renamed", identity: { pubDress: renamed } });
+          }}
+        />
+      );
+    }
+    const { container } = render(<Profile />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit this Bond" }));
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("pub_dress"), {
+      target: { value: "rain" },
+    });
+    expect(save).toBeEnabled();
+    // Typed back to what is stored, there is nothing left to save.
+    fireEvent.change(screen.getByLabelText("pub_dress"), {
+      target: { value: "sky" },
+    });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("pub_dress"), {
+      target: { value: "rain" },
+    });
+    fireEvent.click(save);
+
+    expect(submitted).toHaveBeenCalledExactlyOnceWith("rain");
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "identity",
+    );
+    expect(screen.getByRole("heading", { name: "0x0rain" })).toBeVisible();
+    expect(screen.queryByLabelText("pub_dress")).not.toBeInTheDocument();
+  });
+
+  it("asks once before the way back out of editing discards a change", () => {
+    const onSlugReset = vi.fn();
+    const onNavigate = vi.fn();
+    const { container } = renderView({
+      section: "identity",
+      editing: true,
+      onNavigate,
+      onSlugReset,
+      slugEdit: createProfileSlugViewState("0x0sky", "rain", false),
+    });
+    // Entering editing starts from what is stored.
+    expect(onSlugReset).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Your changes to this Bond are not saved.",
+    );
+    const keepEditing = screen.getByRole("button", { name: "Keep editing" });
+    expect(keepEditing).toHaveFocus();
+    fireEvent.click(keepEditing);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByLabelText("pub_dress")).toHaveValue("rain");
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+
+    expect(onSlugReset).toHaveBeenCalledTimes(2);
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "identity",
+    );
+  });
+
+  it("reads first again when the identity surface is left mid-edit and revisited", () => {
+    let go: (section: ShellSection) => void = () => undefined;
+    function Surface() {
+      const [section, setSection] = useState<ShellSection>("identity");
+      go = setSection;
+      return (
+        <AuthenticatedMapHomeView
+          hostLabel="browser host"
+          pubDress="0x0sky"
+          renderer={renderer()}
+          geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
+          runtime={{ tone: "ready", label: "Shared Core ready", detail: "" }}
+          safeArea={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          section={section}
+          slugEdit={createProfileSlugViewState("0x0sky", undefined, false)}
+        />
+      );
+    }
+    const { container } = render(<Surface />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit this Bond" }));
+    expect(screen.getByLabelText("pub_dress")).toBeVisible();
+
+    act(() => go("settings"));
+    act(() => go("identity"));
+
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "identity",
+    );
+    expect(screen.queryByLabelText("pub_dress")).not.toBeInTheDocument();
+  });
+
+  it("leaves untouched editing at once, and the main screen for the world", () => {
+    const onNavigate = vi.fn();
+    const { container } = renderView({
+      section: "identity",
+      editing: true,
+      onNavigate,
+      slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "identity",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/");
   });
 
   it("keeps a Dock screen's own name in the fixed header instead of duplicating it in the body", () => {
@@ -964,7 +1146,7 @@ describe("AuthenticatedMapHomeView", () => {
   });
 
   it("opens the Providers screen from add, with a connect route each", () => {
-    renderView({ section: "identity" });
+    renderView({ section: "identity", editing: true });
 
     fireEvent.click(screen.getByRole("button", { name: "Add a provider" }));
 
@@ -986,6 +1168,7 @@ describe("AuthenticatedMapHomeView", () => {
     const mapRenderer = renderer();
     renderView({
       section: "identity",
+      editing: true,
       mapRenderer,
       geolocation: createGeolocationDouble({ position: observation() }),
       avatarChoice: createAvatarChoiceViewState(undefined, undefined),
@@ -1021,6 +1204,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("reports a newer stored study without substituting another body", () => {
     renderView({
       section: "identity",
+      editing: true,
       avatarChoice: createAvatarChoiceViewState(
         "future-study" as AvatarModel,
         undefined,
@@ -1040,6 +1224,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("names the chosen study on the field, and opens the editor on it", () => {
     renderView({
       section: "identity",
+      editing: true,
       avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
     });
 
@@ -1059,6 +1244,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("keeps model choices scrollable while Save and Cancel stay in the footer", () => {
     const { container } = renderView({
       section: "identity",
+      editing: true,
       avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
     });
     fireEvent.click(
@@ -1087,6 +1273,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("leaves an untouched editor at once, and asks once before the way back discards a change", () => {
     renderView({
       section: "identity",
+      editing: true,
       avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
     });
     const openEditor = () =>
@@ -1137,6 +1324,7 @@ describe("AuthenticatedMapHomeView", () => {
     );
     renderView({
       section: "identity",
+      editing: true,
       avatarChoice: createAvatarChoiceViewState("sky-study", undefined),
       onAvatarChoice,
     });
@@ -1392,6 +1580,7 @@ describe("AuthenticatedMapHomeView", () => {
     const onSlugChange = vi.fn();
     renderView({
       section: "identity",
+      editing: true,
       slugEdit: createProfileSlugViewState("0x0sky", undefined, false),
       onSlugChange,
     });
@@ -1411,6 +1600,7 @@ describe("AuthenticatedMapHomeView", () => {
     const onSlugSubmit = vi.fn();
     const { rerender } = renderView({
       section: "identity",
+      editing: true,
       slugEdit: createProfileSlugViewState("0x0sky", "rain", false),
       onSlugSubmit,
     });
@@ -1451,6 +1641,7 @@ describe("AuthenticatedMapHomeView", () => {
     const onDisconnectProvider = vi.fn();
     renderView({
       section: "identity",
+      editing: true,
       connectedProviders: [{ provider: "telegram", handle: "zerosky" }],
       onDisconnectProvider,
     });
@@ -1480,6 +1671,7 @@ describe("AuthenticatedMapHomeView", () => {
   it("says a disconnect never reaches the external account", () => {
     renderView({
       section: "identity",
+      editing: true,
       connectedProviders: [{ provider: "telegram" }],
     });
 
