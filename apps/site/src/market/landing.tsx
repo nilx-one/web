@@ -29,7 +29,7 @@ const cities = [
 interface Visit {
   point: string;
   seeds: string;
-  seeds_authority: "client_display";
+  seeds_authority: "client_display" | "identity_snapshot";
   avaia: { longitude: number; latitude: number };
 }
 
@@ -83,10 +83,14 @@ export function MarketLanding() {
         if (
           typeof context.point !== "string" ||
           typeof context.seeds !== "string" ||
-          context.seeds_authority !== "client_display" ||
+          !/^(?:0|[1-9][0-9]{0,19})$/.test(context.seeds) ||
+          (context.seeds_authority !== "client_display" &&
+            context.seeds_authority !== "identity_snapshot") ||
           !context.avaia ||
           !Number.isFinite(context.avaia.longitude) ||
-          !Number.isFinite(context.avaia.latitude)
+          !Number.isFinite(context.avaia.latitude) ||
+          Math.abs(context.avaia.longitude) > 180 ||
+          Math.abs(context.avaia.latitude) > 90
         ) {
           return;
         }
@@ -187,9 +191,13 @@ export function MarketLanding() {
           {visit && (
             <p>
               {visit.seeds} seeds ·{" "}
-              {uk
-                ? "дані пристрою, не підтверджений баланс"
-                : "device display only, not a verified balance"}
+              {visit.seeds_authority === "identity_snapshot"
+                ? uk
+                  ? "баланс на момент переходу; перед покупкою буде перевірено знову"
+                  : "balance at handoff; checked again before purchase"
+                : uk
+                  ? "дані пристрою, не підтверджений баланс"
+                  : "device display only, not a verified balance"}
             </p>
           )}
           {selected ? (
