@@ -1187,3 +1187,56 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .avaia-notebook__list small {
   color: rgba(29, 40, 44, 0.6);
 }
+
+/* Save in the editing header: the way back's circle, lit only once there is
+   a change the service could accept. */
+.bond-dock__confirm {
+  color: #00bfd4;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.bond-dock__confirm:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The owned Avaia on a Bond's main screen opens its own screen. */
+.bond-profile__avaia {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  column-gap: 0.5rem;
+  align-items: center;
+  justify-items: end;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-align: right;
+}
+
+button.bond-profile__avaia {
+  cursor: pointer;
+}
+
+.bond-profile__avaia strong {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+
+.bond-profile__avaia small {
+  grid-column: 1;
+  opacity: 0.72;
+}
+
+.bond-profile__avaia > span {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+button.bond-profile__avaia:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
