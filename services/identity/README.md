@@ -179,6 +179,40 @@ binding.
 Optional runtime setting: `PARTNER_LOOKUP_TOKEN` (at least 32 bytes; without it
 the route is not mounted).
 
+## Market Special orders (0x1 issuer)
+
+0xda-market sells Special in seeds; this service is the issuer that owns the
+wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
+
+- `POST /api/v1/identity/market-visit` (active Bond, CSRF required) takes
+  `{ "point", "avaia", "return_path"? }`. `return_path` is a host page such as
+  `/telegram/` (default `/`). The service creates an opaque 43-character
+  `visit_id`, binds it to the Bond and the session that asked, and hands Market
+  `visit_id`, the public `recipient` handle and `return_path` with the seeds
+  snapshot. The binding allows a new debit for one hour; Market never sees the
+  private subject or a session hash. A session that could not be minted
+  browses without a purchase binding.
+- With `MARKET_ISSUER_WORKER=1`, a background worker polls Market's issuer API
+  (`MARKET_ISSUER_URL`, default `https://0xda-market.nilx.one/issuer`). It
+  authenticates with lowercase hex HMAC-SHA256 of `nilx-market-issuer-v1` keyed
+  by `NILX_BROWSER_HANDOFF_TOKEN`, as Market derives it. It recovers
+  `processing` orders first, then claims `pending` ones, and settles each
+  Special order in one SQLite transaction keyed by the order id: seeds debit,
+  Special grant on the Core subscription clock, receipt. Then it fulfils with
+  `identity:<order id>` and the order's `term_months`, or rejects with
+  `insufficient_seeds`, `session_changed`, `visit_expired`, `visit_unknown`,
+  `recipient_mismatch` or `invalid_terms`.
+- A committed receipt is always confirmed again, never rejected, so a lost
+  confirmation or a crash cannot charge twice or lose a paid order. A receipt
+  that disagrees with its order stays `processing` for an operator.
+- A term of N months follows Market's `calendar_months_utc`: from the order's
+  creation, the same day of the month and time of day, in UTC, N calendar months
+  later; a missing day becomes the month's last day. Where the time starts
+  when Special remains, or Exclusive is active, is the Core clock's rule.
+
+The worker is off by default and has no HTTP route. Enabling it, crediting
+wallets and activating the Market catalog are separate, authorized steps.
+
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`,

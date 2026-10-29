@@ -471,6 +471,23 @@ async fn main() {
         telegram_state.repository.clone(),
         Arc::clone(&surfaces),
     ));
+    // The 0x1 issuer for Market's Special orders paid in seeds. Off unless
+    // MARKET_ISSUER_WORKER=1; a misconfigured worker stops start-up loudly.
+    if let Some(config) = identity_bot::market_issuer::MarketIssuerConfig::from_environment() {
+        let config = config.expect("MARKET_ISSUER_WORKER must satisfy the market issuer contract");
+        let interval = config.poll_interval;
+        info!(market = %config.base_url, "starting market issuer worker");
+        let market = identity_bot::market_issuer::HttpMarketIssuer::new(config)
+            .expect("market issuer HTTP client must build");
+        let worker = identity_bot::market_issuer::MarketIssuerWorker::new(
+            telegram_state.repository.clone(),
+            market,
+            Arc::new(identity_bot::market_issuer::system_now_ms),
+        );
+        tokio::spawn(identity_bot::market_issuer::run_market_issuer_worker(
+            worker, interval,
+        ));
+    }
     info!(%http_bind, "starting Stage 1 identity service");
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))
