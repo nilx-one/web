@@ -52,6 +52,8 @@ export type PublicBondState =
 
 interface PublicBondPageProps {
   renderBusiness?: (bond: PublicBondProjection) => ReactNode;
+  /** A person's Bond in the world; absent, the standalone card. */
+  renderPerson?: (bond: PublicBondProjection) => ReactNode;
   fetchImpl?: typeof globalThis.fetch;
 }
 
@@ -303,6 +305,7 @@ function PublicBondMessage({ state }: { state: "not-found" | "unavailable" }) {
 export function PublicBondPage({
   fetchImpl,
   renderBusiness,
+  renderPerson,
 }: PublicBondPageProps) {
   const { t } = useLocalization();
   const [state, setState] = useState<PublicBondState>({ kind: "loading" });
@@ -320,6 +323,8 @@ export function PublicBondPage({
   if (state.kind === "ready") {
     if (state.bond.bondType === "business" && renderBusiness !== undefined)
       return renderBusiness(state.bond);
+    if (state.bond.bondType !== "business" && renderPerson !== undefined)
+      return renderPerson(state.bond);
     return <PublicBondCard bond={state.bond} />;
   }
   if (state.kind === "not-found" || state.kind === "unavailable") {

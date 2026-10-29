@@ -8,7 +8,8 @@
     "./appearance": "./src/shell/appearance.ts",
     "./localization": "./src/shell/localization.ts",
     "./progression": "./src/features/progression/progression.ts",
-    "./business": "./src/features/business/index.ts"
+    "./business": "./src/features/business/index.ts",
+    "./public-bond": "./src/features/public-bond/index.ts"
   },
   "dependencies": {
     "@aiaiaiai/auth-view": "workspace:*",

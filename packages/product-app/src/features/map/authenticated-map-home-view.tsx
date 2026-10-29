@@ -99,7 +99,6 @@ import {
   translateIf,
   useLocalization,
   type ProductLocale,
-  type Translate,
 } from "../../shell/localization";
 import type { LocalModelDependency } from "../../shell/local-model-host";
 import { LocalModelSettings } from "../../shell/local-model-settings";
@@ -136,7 +135,11 @@ import {
   type ProviderRowViewState,
 } from "../identity/bond-providers-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
-import { BondProfileSummary } from "../identity/bond-profile-summary";
+import {
+  BondProfileSummary,
+  levelSummary,
+} from "../identity/bond-profile-summary";
+import { withPublicBondMapState } from "../identity/public-bond-handoff";
 import { UnsavedPrompt } from "../identity/unsaved-prompt";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
@@ -643,13 +646,6 @@ function StatusGlyph({ fill }: { readonly fill: number }) {
       />
     </svg>
   );
-}
-
-function levelSummary(t: Translate, standing: LevelStanding): string {
-  return t("progression.summaryNext")
-    .replace("{level}", String(standing.level))
-    .replace("{xp}", String(standing.xp))
-    .replace("{next}", String(standing.nextLevelXp));
 }
 
 function formatDistance(locale: ProductLocale, meters: number): string {
@@ -1248,6 +1244,19 @@ export function AuthenticatedMapHomeView({
   );
   const focusState: FocusState = focusStateFor(location.state);
   const resolvedAppearance = appearance.resolved;
+  /**
+   * A Bond's public address, carrying the camera and appearance of this world
+   * so the page it opens shows the same place in the same light.
+   */
+  const publicBondHref = (url: string | undefined): string | undefined => {
+    const canonical = canonicalBondPublicUrl(url);
+    return canonical === undefined
+      ? undefined
+      : withPublicBondMapState(canonical, {
+          camera,
+          appearance: resolvedAppearance,
+        });
+  };
   // Zoom alone drives the body's apparent size, so the avatar is not redrawn
   // for a pan that leaves the scale untouched.
   const cameraZoom = camera.zoom;
@@ -3635,9 +3644,8 @@ export function AuthenticatedMapHomeView({
                     {selectedBondUrl === undefined ? null : (
                       <a
                         className="bond-dock__public-url"
-                        href={selectedBondUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={publicBondHref(selectedBondUrl)}
+                        rel="noopener"
                       >
                         {selectedBond.pubDressUrl
                           ?.replace(/^https:\/\//, "")
@@ -3772,6 +3780,7 @@ export function AuthenticatedMapHomeView({
                     <BondProfileSummary
                       pubDress={pubDress}
                       publicUrl={canonicalBondPublicUrl(pubDressUrl)}
+                      publicHref={publicBondHref(pubDressUrl)}
                       bond={levelSummary(t, standing.bond)}
                       avaia={{
                         pubDress: avaiaLabel,

@@ -3,8 +3,17 @@
 
 import type { ReactNode } from "react";
 
-import { useLocalization } from "../../shell/localization";
+import { useLocalization, type Translate } from "../../shell/localization";
+import type { LevelStanding } from "../progression/progression";
 import { SubscriptionIdentity } from "../subscription/subscription-status";
+
+/** A standing as every Bond screen words it: level, experience, next level. */
+export function levelSummary(t: Translate, standing: LevelStanding): string {
+  return t("progression.summaryNext")
+    .replace("{level}", String(standing.level))
+    .replace("{xp}", String(standing.xp))
+    .replace("{next}", String(standing.nextLevelXp));
+}
 
 /** The Avaia a Bond owns, as its main screen names it. */
 export interface BondProfileAvaia {
@@ -18,6 +27,11 @@ export interface BondProfileSummaryProps {
   readonly pubDress: string;
   /** The allocated public address, already checked by the caller. */
   readonly publicUrl?: string | undefined;
+  /**
+   * Where following that address goes, when it carries more than the
+   * address itself, such as the world's camera. Absent, the address.
+   */
+  readonly publicHref?: string | undefined;
   /** The Bond's own standing, already worded. */
   readonly bond: string;
   readonly avaia?: BondProfileAvaia | undefined;
@@ -34,6 +48,7 @@ export interface BondProfileSummaryProps {
 export function BondProfileSummary({
   pubDress,
   publicUrl,
+  publicHref,
   bond,
   avaia,
   model,
@@ -44,11 +59,12 @@ export function BondProfileSummary({
     <div className="bond-profile bond-profile--summary">
       <SubscriptionIdentity address={pubDress} badge />
       {publicUrl === undefined ? null : (
+        // The public page is the same world under another address, and its
+        // way back returns here, so it opens in place rather than beside.
         <a
           className="bond-dock__public-url"
-          href={publicUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={publicHref ?? publicUrl}
+          rel="noopener"
         >
           {publicUrl.replace(/^https:\/\//, "").replace(/\/?$/, "/")}
           <span aria-hidden="true"> ↗</span>

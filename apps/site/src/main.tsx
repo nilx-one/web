@@ -60,6 +60,7 @@ import {
   reportWorldWipe,
 } from "./error-reporting";
 import { PublicBusinessPage } from "./public-business";
+import { PublicPersonPage } from "./public-person";
 import { createBusinessNavigation } from "./business-navigation";
 import { PublicBondPage, isPublicBondHostname } from "./public-bond";
 import { wipeLocalWorldOnce } from "./world-wipe";
@@ -143,11 +144,13 @@ if (window.location.hostname === "0xda-market.nilx.one") {
   // A Bond subdomain is a public identity surface, not an authenticated world
   // host. It resolves only the stored label allocation and never starts the
   // private session or Avaia runtime. A Business Bond's page shows the public
-  // map, and reads geolocation only when the visitor opts in.
+  // map, and reads geolocation only when the visitor opts in. A person's Bond
+  // page is the same world under the Bond's main screen, never a session.
   root.render(
     <StrictMode>
       <PublicBondPage
         renderBusiness={(bond) => <PublicBusinessPage bond={bond} />}
+        renderPerson={(bond) => <PublicPersonPage bond={bond} />}
       />
     </StrictMode>,
   );
