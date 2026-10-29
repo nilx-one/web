@@ -18,7 +18,7 @@ getrandom = "0.3"
 h3o = "0.11"
 hmac = "0.12"
 jsonwebtoken = "9"
-nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "73e913e2395ff1f8edc29f24d740bbcc3c82b64e" }
+nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "005e32e4fd8edc59d319f907fb6294cf7d580223" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

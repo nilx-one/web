@@ -6,8 +6,9 @@
 // linked recipient and SKU. No browser/user endpoint calls this operation.
 //
 // The purchase debits authoritative seeds and grants Special in one SQLite
-// BEGIN IMMEDIATE transaction. Core SubscriptionClock handles time priority.
-use nilxone_contracts::{SubscriptionClock, SubscriptionTier};
+// BEGIN IMMEDIATE transaction. Core decides eligibility, the calendar-month
+// term and time priority (`special_seeds_term_months`, `grant_special_months`).
+use nilxone_contracts::{SpecialSeedsOrder, SubscriptionClock, special_seeds_term_months};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IssuerSpecialOrderSnapshot {
@@ -22,9 +23,9 @@ pub struct IssuerSpecialOrderSnapshot {
     pub sku: String,
     pub price_id: u64,
     pub amount_minor: u64,
-    /// Resolved by the trusted issuer adapter from an agreed term policy.
-    /// A client's notion of a month or duration is never authoritative.
-    pub duration_ms: u64,
+    /// Calendar months the verified order bought. It must equal the term Core
+    /// derives from the SKU; a client's notion of a month is never authoritative.
+    pub term_months: u32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -174,27 +175,24 @@ impl IdentityRepository {
             && order.order_id.bytes().all(|c| {
                 c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b':' | b'.')
             });
-        let valid_sku = matches!(
-            order.sku.as_str(),
-            "0x1_special_1m" | "0x1_special_3m" | "0x1_special_6m" | "0x1_special_12m"
-        );
+        let core_term = special_seeds_term_months(&SpecialSeedsOrder {
+            sku: &order.sku,
+            issuer: &order.issuer,
+            denomination: &order.denomination,
+            status: &order.status,
+            price_id: order.price_id,
+            amount_minor: order.amount_minor,
+        });
         if !valid_order_id
-            || !valid_sku
+            || core_term != Some(order.term_months)
             || order.active_session_hash.len() != 32
-            || order.issuer != "0x1"
-            || order.denomination != "seeds"
-            || order.status != "processing"
             || order.recipient_pub_dress != owner.as_str()
-            || order.price_id == 0
-            || order.amount_minor == 0
-            || order.duration_ms == 0
         {
             return Ok(SpecialSeedsOutcome::InvalidTerms);
         }
-        let (Ok(now), Ok(amount), Ok(duration), Ok(price_id)) = (
+        let (Ok(now), Ok(amount), Ok(price_id)) = (
             i64::try_from(now_ms),
             i64::try_from(order.amount_minor),
-            i64::try_from(order.duration_ms),
             i64::try_from(order.price_id),
         ) else {
             return Ok(SpecialSeedsOutcome::InvalidTerms);
@@ -203,8 +201,10 @@ impl IdentityRepository {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         // Replay is checked first, before inspecting the current wallet or
         // clock: later legitimate operations must not invalidate this receipt.
+        // The SKU fixes the term; the stored duration is what that term came
+        // to on the clock at the original grant, so a replay never recomputes it.
         let prior = sqlx::query(
-            "SELECT owner_pub_dress, sku, price_id, amount_minor, duration_ms \
+            "SELECT owner_pub_dress, sku, price_id, amount_minor \
              FROM bond_seed_subscription_debits WHERE order_id = ?",
         )
         .bind(&order.order_id)
@@ -215,8 +215,7 @@ impl IdentityRepository {
                 prior.try_get::<String, _>("owner_pub_dress")? == owner.as_str()
                 && prior.try_get::<String, _>("sku")? == order.sku
                 && prior.try_get::<i64, _>("price_id")? == price_id
-                && prior.try_get::<i64, _>("amount_minor")? == amount
-                && prior.try_get::<i64, _>("duration_ms")? == duration;
+                && prior.try_get::<i64, _>("amount_minor")? == amount;
             return Ok(if identical {
                 SpecialSeedsOutcome::AlreadyGranted
             } else {
@@ -257,8 +256,18 @@ impl IdentityRepository {
         if clock.bond_pub_dress != owner.as_str() {
             return Err(RepositoryError::CorruptSubscriptionClock);
         }
-        // A refusal (rollback/overflow/corruption) must never debit the buyer.
-        let next = clock.grant(SubscriptionTier::Special, order.duration_ms, now_ms)
+        // Core extends the projected end of existing Special (after queued
+        // Exclusive) by calendar months in UTC. A refusal (rollback, overflow,
+        // corruption) must never debit the buyer.
+        let current = clock.advance(now_ms)
+            .map_err(|_| RepositoryError::CorruptSubscriptionClock)?;
+        let next = current.grant_special_months(order.term_months, now_ms)
+            .map_err(|_| RepositoryError::CorruptSubscriptionClock)?;
+        let granted_ms = next.special_remaining_ms.get()
+            .checked_sub(current.special_remaining_ms.get())
+            .filter(|granted| *granted > 0)
+            .ok_or(RepositoryError::CorruptSubscriptionClock)?;
+        let duration = i64::try_from(granted_ms)
             .map_err(|_| RepositoryError::CorruptSubscriptionClock)?;
         let serialized = serde_json::to_string(&next)
             .map_err(|_| RepositoryError::CorruptSubscriptionClock)?;
@@ -337,6 +346,10 @@ impl IdentityRepository {
 #[cfg(test)]
 mod special_seeds_tests {
     use super::*;
+    use nilxone_contracts::SubscriptionTier;
+
+    /// 1970-01-01 plus one calendar month: January has 31 days.
+    const JANUARY_MS: u64 = 31 * 24 * 60 * 60 * 1000;
 
     async fn setup() -> (IdentityRepository, PubDress) {
         let repository = IdentityRepository::connect("sqlite::memory:")
@@ -374,7 +387,7 @@ mod special_seeds_tests {
             sku: "0x1_special_1m".to_owned(),
             price_id: 42,
             amount_minor: 640,
-            duration_ms: 30 * 24 * 60 * 60 * 1000,
+            term_months: 1,
         }
     }
 
@@ -469,8 +482,10 @@ mod special_seeds_tests {
         ).bind(owner.as_str()).fetch_one(&repository.pool).await.unwrap();
         assert_eq!(balance, 360);
         let clock = repository.read_subscription_clock(&owner, 200).await.unwrap();
-        assert_eq!(clock.special_remaining_ms.get(), verified.duration_ms);
+        assert_eq!(clock.special_remaining_ms.get(), JANUARY_MS);
         assert_eq!(clock.settled_at_ms.get(), 100);
+        let receipt = repository.find_special_seeds_receipt("order-verified-1").await.unwrap().unwrap();
+        assert_eq!(receipt.duration_ms, JANUARY_MS);
 
         let mut conflict = verified.clone();
         conflict.amount_minor += 1;
@@ -574,11 +589,53 @@ mod special_seeds_tests {
         );
         let clock = repository.read_subscription_clock(&owner, 200).await.unwrap();
         assert_eq!(clock.exclusive_remaining_ms.get(), 4900);
-        assert_eq!(clock.special_remaining_ms.get(), purchase.duration_ms);
+        // The calendar month starts where queued Exclusive ends.
+        assert_eq!(clock.special_remaining_ms.get(), JANUARY_MS);
         assert_eq!(
             clock.snapshot(200, 500).unwrap().entitlement.unwrap().tier,
             SubscriptionTier::Exclusive
         );
+    }
+
+    #[tokio::test]
+    async fn term_must_be_the_one_core_derives_from_the_sku() {
+        let (repository, owner) = setup().await;
+        fund_fixture(&repository, &owner, 5000).await;
+        let mut wrong = order("order-term-1");
+        for months in [0, 3, 12] {
+            wrong.term_months = months;
+            assert_eq!(
+                repository.settle_special_seeds(&owner, &wrong, 100).await.unwrap(),
+                SpecialSeedsOutcome::InvalidTerms
+            );
+        }
+        let mut three = order("order-term-3");
+        three.sku = "0x1_special_3m".to_owned();
+        three.term_months = 3;
+        assert_eq!(
+            repository.settle_special_seeds(&owner, &three, 100).await.unwrap(),
+            SpecialSeedsOutcome::Granted
+        );
+        // 1970-01-01 + 3 calendar months = 1970-04-01: 31 + 28 + 31 days.
+        let clock = repository.read_subscription_clock(&owner, 100).await.unwrap();
+        assert_eq!(clock.special_remaining_ms.get(), 90 * 24 * 60 * 60 * 1000);
+    }
+
+    #[tokio::test]
+    async fn a_second_purchase_extends_from_the_end_of_the_first() {
+        let (repository, owner) = setup().await;
+        fund_fixture(&repository, &owner, 5000).await;
+        for id in ["order-stack-1", "order-stack-2"] {
+            assert_eq!(
+                repository.settle_special_seeds(&owner, &order(id), 100).await.unwrap(),
+                SpecialSeedsOutcome::Granted
+            );
+        }
+        // January, then February 1970 (28 days), from the first term's end.
+        let clock = repository.read_subscription_clock(&owner, 100).await.unwrap();
+        assert_eq!(clock.special_remaining_ms.get(), JANUARY_MS + 28 * 24 * 60 * 60 * 1000);
+        let second = repository.find_special_seeds_receipt("order-stack-2").await.unwrap().unwrap();
+        assert_eq!(second.duration_ms, 28 * 24 * 60 * 60 * 1000);
     }
 
     #[tokio::test]
