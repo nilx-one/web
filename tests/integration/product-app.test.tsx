@@ -1011,6 +1011,9 @@ describe("ProductApp identity", () => {
         'a[href="/identity"]',
       ) as HTMLAnchorElement,
     );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit this Bond" }),
+    );
     const slug = await screen.findByLabelText("pub_dress");
     expect(slug).toHaveValue("sky");
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -1021,8 +1024,11 @@ describe("ProductApp identity", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(renamePubDressSlug).toHaveBeenCalledExactlyOnceWith("rain");
-    expect(await screen.findByText("Saved. This is 0x0rain.")).toBeVisible();
-    expect(await screen.findByLabelText("pub_dress")).toHaveValue("rain");
+    // A confirmed save returns to reading the Bond under its new address.
+    expect(
+      await screen.findByRole("heading", { name: "0x0rain" }),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("pub_dress")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("avaia")).not.toBeInTheDocument();
   });
 
@@ -1061,6 +1067,9 @@ describe("ProductApp identity", () => {
         return link as HTMLAnchorElement;
       });
       await user.click(header);
+      await user.click(
+        await screen.findByRole("button", { name: "Edit this Bond" }),
+      );
       const slug = await screen.findByLabelText("pub_dress");
       await user.clear(slug);
       await user.type(slug, "rain");
@@ -1208,8 +1217,11 @@ describe("ProductApp identity", () => {
       ) as HTMLAnchorElement,
     );
 
-    // The body is reached through the 3D model field, and nothing is sent
-    // until the draft is saved.
+    // The body is reached through the 3D model field while editing, and
+    // nothing is sent until the draft is saved.
+    await user.click(
+      await screen.findByRole("button", { name: "Edit this Bond" }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /Choose your 3D model/ }),
     );

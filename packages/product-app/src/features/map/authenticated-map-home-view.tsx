@@ -99,7 +99,6 @@ import {
   translateIf,
   useLocalization,
   type ProductLocale,
-  type Translate,
 } from "../../shell/localization";
 import type { LocalModelDependency } from "../../shell/local-model-host";
 import { LocalModelSettings } from "../../shell/local-model-settings";
@@ -136,6 +135,12 @@ import {
   type ProviderRowViewState,
 } from "../identity/bond-providers-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
+import {
+  BondProfileSummary,
+  levelSummary,
+} from "../identity/bond-profile-summary";
+import { withPublicBondMapState } from "../identity/public-bond-handoff";
+import { UnsavedPrompt } from "../identity/unsaved-prompt";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
 import "../identity/avatar-editor.css";
@@ -485,6 +490,8 @@ export interface AuthenticatedMapHomeViewProps {
   ) => Promise<AvatarModelResult | undefined>;
   readonly onSlugChange?: (slug: string) => void;
   readonly onSlugSubmit?: () => void;
+  /** Throws away an unsaved address draft, back to what the service holds. */
+  readonly onSlugReset?: () => void;
   readonly onLogout?: () => void;
   readonly onNavigate?: (route: ShellRoute) => void;
 }
@@ -641,13 +648,6 @@ function StatusGlyph({ fill }: { readonly fill: number }) {
   );
 }
 
-function levelSummary(t: Translate, standing: LevelStanding): string {
-  return t("progression.summaryNext")
-    .replace("{level}", String(standing.level))
-    .replace("{xp}", String(standing.xp))
-    .replace("{next}", String(standing.nextLevelXp));
-}
-
 function formatDistance(locale: ProductLocale, meters: number): string {
   const kilometres = meters >= 1_000;
   return new Intl.NumberFormat(locale, {
@@ -762,13 +762,6 @@ function AddressField({
           aria-invalid={state.error !== undefined}
           onChange={(event) => onChange?.(event.currentTarget.value)}
         />
-        <button
-          className="profile-edit__save"
-          type="submit"
-          disabled={!state.canSave}
-        >
-          {state.busy ? t("dock.saving") : t("dock.save")}
-        </button>
       </div>
       <p className="profile-edit__note" id={`${id}-note`}>
         {translateFirst(t, state.note, [
@@ -976,6 +969,7 @@ export function AuthenticatedMapHomeView({
   onAvatarChoice,
   onSlugChange,
   onSlugSubmit,
+  onSlugReset,
   organizations,
   onLogout,
   onNavigate,
@@ -997,6 +991,23 @@ export function AuthenticatedMapHomeView({
   const [selectedBondBodyId, setSelectedBondBodyId] = useState<
     string | undefined
   >(undefined);
+  // The Personal Bond screen reads first; changing it is a mode entered from
+  // there. Scoped to the section like detail, so leaving abandons it.
+  const [editingSection, setEditingSection] = useState<
+    ShellSection | undefined
+  >(undefined);
+  // The way back has already asked about an unsaved profile once.
+  const [profileLeaveAsked, setProfileLeaveAsked] = useState(false);
+  // Editing belongs to the visit it was entered on: leaving the identity
+  // surface ends it, so coming back reads first again.
+  const [editingVisit, setEditingVisit] = useState(section);
+  if (editingVisit !== section) {
+    setEditingVisit(section);
+    setEditingSection(undefined);
+    setProfileLeaveAsked(false);
+  }
+  // A save was asked for from the header, so its confirmation ends the mode.
+  const profileSaveRequested = useRef(false);
   // The Dock's fixed subtitle names the screen from the first frame. Further
   // down it follows the body: the last section title carried past the header
   // takes over, and the screen name returns above the first section.
@@ -1233,6 +1244,19 @@ export function AuthenticatedMapHomeView({
   );
   const focusState: FocusState = focusStateFor(location.state);
   const resolvedAppearance = appearance.resolved;
+  /**
+   * A Bond's public address, carrying the camera and appearance of this world
+   * so the page it opens shows the same place in the same light.
+   */
+  const publicBondHref = (url: string | undefined): string | undefined => {
+    const canonical = canonicalBondPublicUrl(url);
+    return canonical === undefined
+      ? undefined
+      : withPublicBondMapState(canonical, {
+          camera,
+          appearance: resolvedAppearance,
+        });
+  };
   // Zoom alone drives the body's apparent size, so the avatar is not redrawn
   // for a pan that leaves the scale untouched.
   const cameraZoom = camera.zoom;
@@ -1254,20 +1278,30 @@ export function AuthenticatedMapHomeView({
   const selectedBond =
     section !== "world" || selectedBondBodyId === undefined
       ? undefined
-      : selectedBondBodyId === BODY_HANDLE_IDS.bond
-        ? { pubDress, pubDressUrl }
-        : selectedBondBodyId === BODY_HANDLE_IDS.avaia
-          ? undefined
-          : bondBodies?.find((body) => body.bodyId === selectedBondBodyId);
+      : selectedBondBodyId === BODY_HANDLE_IDS.bond ||
+          selectedBondBodyId === BODY_HANDLE_IDS.avaia
+        ? undefined
+        : bondBodies?.find((body) => body.bodyId === selectedBondBodyId);
   const selectedBondUrl = canonicalBondPublicUrl(selectedBond?.pubDressUrl);
+  const editing = section === "identity" && editingSection === section;
+  // Only what a person typed is a change: a draft back at the stored address
+  // leaves nothing to save and nothing to lose.
+  const profileDirty =
+    editing &&
+    slugEdit?.kind === "editable" &&
+    slugEdit.preview !== slugEdit.address;
   const dockScreen =
     selectedBond === undefined
-      ? (activeDetail ?? (section === "world" ? "home" : section))
+      ? (activeDetail ??
+        (section === "world" ? "home" : editing ? `${section}:edit` : section))
       : `bond:${selectedBondBodyId}`;
-  // Opening a Bond's identity is one push from the persistent world.
+  // Opening a Bond's identity is one push from the persistent world, and
+  // editing it is one more from the screen that reads it.
   const dockDepth =
     selectedBond === undefined
-      ? (section === "world" ? 0 : 1) + (activeDetail === undefined ? 0 : 1)
+      ? (section === "world" ? 0 : 1) +
+        (editing ? 1 : 0) +
+        (activeDetail === undefined ? 0 : 1)
       : 1;
   const providers =
     connectedProviders === undefined
@@ -2564,6 +2598,15 @@ export function AuthenticatedMapHomeView({
     }
   }, [dimension]);
 
+  // A save asked for from the header ends the mode once the surface already
+  // shows the address the service stored, never on a request still in flight.
+  const profileSaved = slugEdit?.saved;
+  useEffect(() => {
+    if (profileSaved === undefined || !profileSaveRequested.current) return;
+    profileSaveRequested.current = false;
+    setEditingSection(undefined);
+  }, [profileSaved]);
+
   function navigate(route: ShellRoute): void {
     onNavigate?.(route);
   }
@@ -2915,8 +2958,15 @@ export function AuthenticatedMapHomeView({
         focusWorldOnWheel();
         return;
       }
+      // A person's own body opens their own main screen, the one the Dock's
+      // identity route already is, rather than a second screen about them.
+      if (id === BODY_HANDLE_IDS.bond) {
+        setSelectedBondBodyId(undefined);
+        setDetailState(undefined);
+        if (section !== "identity") navigate(IDENTITY_ROUTE);
+        return;
+      }
       if (
-        id !== BODY_HANDLE_IDS.bond &&
         !bondBodies?.some(
           (body) =>
             body.bodyId === id &&
@@ -3267,8 +3317,50 @@ export function AuthenticatedMapHomeView({
     cameraMovedByPerson.current = false;
   }
 
+  /**
+   * Editing starts from what the service holds: a draft left behind by an
+   * earlier visit is not something this person is in the middle of now.
+   */
+  function enterEditing(): void {
+    onSlugReset?.();
+    profileSaveRequested.current = false;
+    setProfileLeaveAsked(false);
+    setEditingSection(section);
+  }
+
+  function discardEditing(): void {
+    onSlugReset?.();
+    profileSaveRequested.current = false;
+    setProfileLeaveAsked(false);
+    setEditingSection(undefined);
+  }
+
+  /**
+   * The way back from editing is navigation, so like the 3D model editor it
+   * asks once before it throws away something a person actually changed.
+   */
+  function leaveEditing(): void {
+    if (profileDirty && !profileLeaveAsked && slugEdit?.busy !== true) {
+      setProfileLeaveAsked(true);
+      return;
+    }
+    discardEditing();
+  }
+
+  /** Save is offered only for a change the service could accept. */
+  function saveProfile(): void {
+    if (slugEdit?.canSave !== true) return;
+    profileSaveRequested.current = true;
+    setProfileLeaveAsked(false);
+    onSlugSubmit?.();
+  }
+
   function leaveDetail(): void {
     if (activeDetail === undefined) {
+      if (editing) {
+        leaveEditing();
+        return;
+      }
       navigate(WORLD_ROUTE);
       return;
     }
@@ -3302,6 +3394,7 @@ export function AuthenticatedMapHomeView({
       return t("dock.ownedAvaia");
     }
     if (section === "settings") return t("settings.application");
+    if (editing && activeDetail === undefined) return t("dock.editing");
     return t("dock.personalBond");
   }
 
@@ -3551,9 +3644,8 @@ export function AuthenticatedMapHomeView({
                     {selectedBondUrl === undefined ? null : (
                       <a
                         className="bond-dock__public-url"
-                        href={selectedBondUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={publicBondHref(selectedBondUrl)}
+                        rel="noopener"
                       >
                         {selectedBond.pubDressUrl
                           ?.replace(/^https:\/\//, "")
@@ -3649,21 +3741,95 @@ export function AuthenticatedMapHomeView({
                       </span>
                     </h2>
                   </div>
+                  {section !== "identity" ||
+                  activeDetail !== undefined ? null : editing ? (
+                    <button
+                      className="interface-settings__back bond-dock__confirm"
+                      type="button"
+                      aria-label={
+                        slugEdit?.busy === true
+                          ? t("dock.saving")
+                          : t("dock.save")
+                      }
+                      aria-busy={slugEdit?.busy === true}
+                      disabled={slugEdit?.canSave !== true}
+                      onClick={saveProfile}
+                    >
+                      <span aria-hidden="true">
+                        {slugEdit?.busy === true ? "…" : "✓"}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      className="bond-dock__edit"
+                      type="button"
+                      aria-label={t("dock.editProfile")}
+                      onClick={enterEditing}
+                    >
+                      {t("dock.edit")}
+                    </button>
+                  )}
                 </div>
                 <div
                   className={`bond-dock__scroll${activeDetail === "avatar" ? " bond-dock__scroll--avatar" : ""}`}
                   onScroll={handleDockScroll}
                 >
-                  {section === "identity" && activeDetail === undefined ? (
+                  {section === "identity" &&
+                  activeDetail === undefined &&
+                  !editing ? (
+                    <BondProfileSummary
+                      pubDress={pubDress}
+                      publicUrl={canonicalBondPublicUrl(pubDressUrl)}
+                      publicHref={publicBondHref(pubDressUrl)}
+                      bond={levelSummary(t, standing.bond)}
+                      avaia={{
+                        pubDress: avaiaLabel,
+                        level: levelSummary(t, standing.avaia),
+                        onOpen: () => openDetail("avaia"),
+                      }}
+                      model={
+                        avatarChoice === undefined
+                          ? undefined
+                          : translateCopy(
+                              t,
+                              createAvatarFieldViewState("bond", bondAvatar)
+                                .modelName,
+                            )
+                      }
+                      providers={
+                        providers === undefined ||
+                        providers.connected.length === 0 ? undefined : (
+                          <span className="provider-controls">
+                            {providers.connected.map((row) => (
+                              <ProviderMark key={row.provider} row={row} />
+                            ))}
+                          </span>
+                        )
+                      }
+                    />
+                  ) : null}
+                  {section === "identity" &&
+                  activeDetail === undefined &&
+                  editing ? (
                     <div className="bond-profile">
+                      {profileLeaveAsked ? (
+                        <UnsavedPrompt
+                          message={t("dock.unsavedProfile")}
+                          onStay={() => setProfileLeaveAsked(false)}
+                          onDiscard={discardEditing}
+                        />
+                      ) : null}
                       <SubscriptionIdentity address={pubDress} badge />
                       <AddressField
                         id="profile-slug"
                         label="pub_dress"
                         state={slugEdit}
                         fallback={pubDress}
-                        onChange={onSlugChange}
-                        onSubmit={onSlugSubmit}
+                        onChange={(slug) => {
+                          setProfileLeaveAsked(false);
+                          onSlugChange?.(slug);
+                        }}
+                        onSubmit={saveProfile}
                       />
                       {organizations === undefined ? null : (
                         <section

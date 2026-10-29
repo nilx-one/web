@@ -1394,6 +1394,11 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
               renameSlug.mutate(slugDraft);
             }
           }}
+          onSlugReset={() => {
+            if (renameSlug.isPending) return;
+            renameSlug.reset();
+            setSlugDraft(undefined);
+          }}
           avatarChoice={avatarChoice}
           onAvatarChoice={async (model) =>
             chooseAvatar.isPending

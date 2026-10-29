@@ -1,14 +1,8 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createMapRendererDouble,
@@ -19,15 +13,20 @@ import {
   canonicalBondPublicUrl,
   type MapBondReference,
 } from "./authenticated-map-home-view";
+import { readPublicBondMapState } from "../identity/public-bond-handoff";
 
 afterEach(cleanup);
 
 function renderWorld({
   pubDressUrl = "https://0x0sky.nilx.one/",
   bondBodies,
+  section,
+  onNavigate,
 }: {
   pubDressUrl?: string | undefined;
   bondBodies?: readonly MapBondReference[];
+  section?: "world" | "identity";
+  onNavigate?: (route: string) => void;
 } = {}) {
   const renderer = createMapRendererDouble();
   const rendered = render(
@@ -36,6 +35,8 @@ function renderWorld({
       pubDress="0x0sky"
       pubDressUrl={pubDressUrl}
       {...(bondBodies === undefined ? {} : { bondBodies })}
+      {...(section === undefined ? {} : { section })}
+      {...(onNavigate === undefined ? {} : { onNavigate })}
       renderer={renderer}
       geolocation={UNSUPPORTED_GEOLOCATION_DOUBLE}
       runtime={{
@@ -50,26 +51,41 @@ function renderWorld({
 }
 
 describe("Bond model activation", () => {
-  it("opens its own Bond dock without handing over the wheel and returns to the pair", () => {
-    const { renderer, container } = renderWorld();
+  it("opens its own main screen without handing over the wheel", () => {
+    const onNavigate = vi.fn();
+    const { renderer, container } = renderWorld({ onNavigate });
     act(() => renderer.activateBody("bond"));
+
+    expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
+    // No second screen about the same Bond is stacked on the world.
+    expect(container.querySelector(".bond-dock")).toHaveAttribute(
+      "data-screen",
+      "home",
+    );
+  });
+
+  it("links its own main screen to its public address", () => {
+    const { container, renderer } = renderWorld({ section: "identity" });
 
     expect(container.querySelector(".bond-dock")).toHaveAttribute(
       "data-screen",
-      "bond:bond",
+      "identity",
     );
     expect(screen.getByRole("heading", { name: "0x0sky" })).toBeVisible();
     const publicUrl = screen.getByRole("link", {
       name: /0x0sky\.nilx\.one/,
     });
-    expect(publicUrl).toHaveAttribute("href", "https://0x0sky.nilx.one/");
-    expect(publicUrl).toHaveAttribute("rel", "noopener noreferrer");
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(container.querySelector(".bond-dock")).toHaveAttribute(
-      "data-screen",
-      "home",
+    // The public page is the same world: it opens in place and is handed the
+    // camera and appearance it should open on, in the fragment only.
+    const href = new URL(publicUrl.getAttribute("href") ?? "");
+    expect(href.origin + href.pathname + href.search).toBe(
+      "https://0x0sky.nilx.one/",
     );
+    expect(readPublicBondMapState(href.hash)).toEqual({
+      camera: renderer.getCamera(),
+      appearance: expect.stringMatching(/^(light|dark)$/),
+    });
+    expect(publicUrl).not.toHaveAttribute("target");
   });
 
   it("selects a distinct Bond from an application-owned drawn body handle", () => {
@@ -89,9 +105,13 @@ describe("Bond model activation", () => {
       "bond:external-bond:17",
     );
     expect(screen.getByRole("heading", { name: "0x0тест" })).toBeVisible();
-    expect(screen.getByRole("link", { name: /nilx\.one/ })).toHaveAttribute(
-      "href",
-      new URL(unicodeUrl).href,
+    const href = new URL(
+      screen.getByRole("link", { name: /nilx\.one/ }).getAttribute("href") ??
+        "",
+    );
+    expect(href.origin + href.pathname).toBe(new URL(unicodeUrl).href);
+    expect(readPublicBondMapState(href.hash).camera).toEqual(
+      renderer.getCamera(),
     );
   });
 

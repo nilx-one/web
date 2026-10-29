@@ -1,0 +1,10 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.public-bond-world__status {
+  position: absolute;
+  inset: auto 1rem 50% 1rem;
+  margin: 0;
+  text-align: center;
+  color: var(--map-ink-muted, rgba(245, 243, 247, 0.7));
+}
