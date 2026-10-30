@@ -113,6 +113,9 @@ importers:
       '@nilx-one/map-shade':
         specifier: workspace:*
         version: link:../../packages/map-shade
+      '@nilx-one/market-host':
+        specifier: workspace:*
+        version: link:../../packages/market-host
       '@nilx-one/presence-idb':
         specifier: workspace:*
         version: link:../../packages/presence-idb

@@ -112,3 +112,14 @@ describe("0x1 embedded catalog", () => {
     ).rejects.toThrow("Catalog unavailable");
   });
 });
+
+describe("hosts that cannot hand over to Market", () => {
+  it("browse in the native Dock without a handoff", () => {
+    expect(
+      createNilxOneMarketCatalog(vi.fn<typeof fetch>(), { handoff: false }),
+    ).not.toHaveProperty("beginVisit");
+    expect(createNilxOneMarketCatalog(vi.fn<typeof fetch>())).toHaveProperty(
+      "beginVisit",
+    );
+  });
+});

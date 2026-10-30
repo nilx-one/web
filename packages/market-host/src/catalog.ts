@@ -12,6 +12,12 @@ import { createMarketVisit } from "./visit";
 export interface MarketHostOptions {
   /** The host's own Bond credential for the Identity handoff, if any. */
   readonly authorization?: () => string | undefined;
+  /**
+   * Whether arrival hands the Bond over to the Market page. A host that
+   * cannot leave its frame for Market's origin, such as a Discord Activity,
+   * browses the catalog in the native Dock instead. Defaults to true.
+   */
+  readonly handoff?: boolean;
 }
 
 /**
@@ -33,7 +39,9 @@ export function createNilxOneMarketCatalog(
     }
   >();
   return {
-    beginVisit: createMarketVisit(options.authorization),
+    ...(options.handoff === false
+      ? {}
+      : { beginVisit: createMarketVisit(options.authorization) }),
     async load(locale: string) {
       const key = normalizeLocale(locale);
       const cached = cache.get(key);
