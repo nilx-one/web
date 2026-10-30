@@ -7,7 +7,6 @@ FROM rust:1.98-bookworm AS build
 WORKDIR /source
 COPY services/identity/Cargo.toml ./Cargo.toml
 COPY services/identity/Cargo.lock ./Cargo.lock
-COPY services/identity/migrations ./migrations
 COPY services/identity/src ./src
 # The registry, git-checkout, and target caches are cache mounts: they speed
 # up rebuilds across CI runs but never end up in an image layer, so the

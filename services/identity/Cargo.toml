@@ -10,15 +10,13 @@ license = "MPL-2.0"
 repository = "https://github.com/nilx-one/web"
 
 [dependencies]
-argon2 = { version = "0.5", features = ["std"] }
+nilxone-identity = { git = "https://github.com/nilx-one/core", rev = "806a278db99aea8307dfaa79c058022fca297a05" }
 axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
-chacha20poly1305 = "0.10"
 getrandom = "0.3"
-h3o = "0.11"
 hmac = "0.12"
 jsonwebtoken = "9"
-nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "005e32e4fd8edc59d319f907fb6294cf7d580223" }
+nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "806a278db99aea8307dfaa79c058022fca297a05" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -30,10 +28,10 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-unicode-normalization = "0.1"
 url = "2"
 
 [dev-dependencies]
+h3o = "0.11"
 tempfile = "3"
 tokio = { version = "1", features = ["net"] }
 tower = { version = "0.5", features = ["util"] }

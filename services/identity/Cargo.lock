@@ -1045,15 +1045,14 @@ checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 name = "identity-bot"
 version = "0.1.0"
 dependencies = [
- "argon2",
  "axum",
  "base64 0.22.1",
- "chacha20poly1305",
  "getrandom 0.3.4",
  "h3o",
  "hmac",
  "jsonwebtoken",
  "nilxone-contracts",
+ "nilxone-identity",
  "reqwest",
  "serde",
  "serde_json",
@@ -1067,7 +1066,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "unicode-normalization",
  "url",
 ]
 
@@ -1385,7 +1383,7 @@ dependencies = [
 [[package]]
 name = "nilxone-contracts"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=005e32e4fd8edc59d319f907fb6294cf7d580223#005e32e4fd8edc59d319f907fb6294cf7d580223"
+source = "git+https://github.com/nilx-one/core?rev=806a278db99aea8307dfaa79c058022fca297a05#806a278db99aea8307dfaa79c058022fca297a05"
 dependencies = [
  "chrono",
  "idna",
@@ -1397,6 +1395,31 @@ dependencies = [
  "unicode-general-category",
  "unicode-joining-type",
  "unicode-normalization",
+]
+
+[[package]]
+name = "nilxone-identity"
+version = "0.1.0"
+source = "git+https://github.com/nilx-one/core?rev=806a278db99aea8307dfaa79c058022fca297a05#806a278db99aea8307dfaa79c058022fca297a05"
+dependencies = [
+ "argon2",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "getrandom 0.3.4",
+ "h3o",
+ "hmac",
+ "nilxone-contracts",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "subtle",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "unicode-normalization",
+ "url",
 ]
 
 [[package]]

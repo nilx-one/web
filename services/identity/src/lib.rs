@@ -15,36 +15,20 @@ pub mod api {
 }
 pub mod browser_web_auth;
 pub mod business_command;
-pub mod cell_orbs;
-pub mod credentials;
+pub use nilxone_identity::cell_orbs;
+pub use nilxone_identity::credentials;
 pub mod discord_oauth;
-pub mod finds;
+pub use nilxone_identity::finds;
 pub mod github_evidence;
 pub mod location_control;
-pub mod market_issuer;
+pub use nilxone_identity::market_issuer;
 pub mod partner_lookup;
-pub mod provider_link;
-pub mod provider_secret;
+pub use nilxone_identity::provider_link;
+pub use nilxone_identity::provider_secret;
 pub mod provider_self_service;
 pub mod public_api;
-pub mod rate_limit;
-pub mod repository {
-    include!("repository.rs");
-    include!("repository_admin_roles.rs");
-    include!("repository_admin_telegram.rs");
-    include!("repository_admin_telegram_confirmations.rs");
-    include!("repository_telegram_message_slots.rs");
-    include!("repository_avaia_lifecycle.rs");
-    include!("repository_pub_info.rs");
-    include!("repository_awards.rs");
-    include!("repository_subscriptions.rs");
-    include!("repository_market_visits.rs");
-    include!("repository_business_stations.rs");
-    include!("repository_business_memberships.rs");
-    include!("repository_business_membership_bootstrap.rs");
-    include!("repository_business_creation.rs");
-    include!("repository_xping.rs");
-}
+pub use nilxone_identity::rate_limit;
+pub use nilxone_identity::repository;
 pub mod speech;
 pub mod telegram_init_data;
 
