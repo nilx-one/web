@@ -76,11 +76,53 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-it("browses Market root without a session", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(new Response("", { status: 401 })),
-  );
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status });
+const golden = {
+  address: "zoloti",
+  station_pub_dress: "0xda-market-zoloti-vorota",
+  path: "/zoloti",
+};
+const motherland = {
+  address: "batkivshchyna",
+  station_pub_dress: "0xda-market-batkivshchyna",
+  path: "/batkivshchyna",
+};
+
+/** Market's same-origin API, routed by path; anything else is 401. */
+function stubMarket({
+  session,
+  registry = true,
+}: { session?: unknown; registry?: boolean } = {}) {
+  const request = vi.fn((input: RequestInfo | URL) => {
+    const path = decodeURIComponent(
+      typeof input === "string" ? input : new URL(String(input)).pathname,
+    );
+    if (registry && path === "/nilx-browser/points")
+      return Promise.resolve(json({ points: [golden, motherland] }));
+    if (registry && path.startsWith("/nilx-browser/points/")) {
+      const segment = path.slice("/nilx-browser/points/".length);
+      const point = [golden, motherland].find(
+        (entry) =>
+          entry.address === segment ||
+          (entry === golden && ["zoloti-vorota", "золоті"].includes(segment)),
+      );
+      return Promise.resolve(
+        point
+          ? json({ point: { ...point, canonical: point.address === segment } })
+          : json({ error: "point_not_found" }, 404),
+      );
+    }
+    if (session !== undefined && path === "/nilx-browser/session")
+      return Promise.resolve(json(session));
+    return Promise.resolve(new Response("", { status: 401 }));
+  });
+  vi.stubGlobal("fetch", request);
+  return request;
+}
+
+it("browses Market root without a session and links points by address", async () => {
+  stubMarket();
   render(<MarketLanding />);
   expect(
     await screen.findByRole("button", { name: "0xda-market Golden Gate" }),
@@ -92,9 +134,10 @@ it("browses Market root without a session", async () => {
   fireEvent.click(
     screen.getByRole("button", { name: "0xda-market Golden Gate" }),
   );
-  expect(window.location.pathname).toBe(
-    "/%D0%B7%D0%BE%D0%BB%D0%BE%D1%82%D1%96",
-  );
+  await waitFor(() => expect(window.location.pathname).toBe("/zoloti"));
+  expect(
+    await screen.findByText("Market point: 0xda-market-zoloti-vorota"),
+  ).toBeInTheDocument();
   window.history.pushState(null, "", "/");
   fireEvent(window, new PopStateEvent("popstate"));
   fireEvent.change(screen.getByLabelText("Browse points in city"), {
@@ -105,8 +148,31 @@ it("browses Market root without a session", async () => {
   ).toBeInTheDocument();
 });
 
-it("opens a guest point URL", async () => {
-  window.history.replaceState(null, "", "/золоті");
+it("opens a point at its Market address", async () => {
+  window.history.replaceState(null, "", "/zoloti");
+  stubMarket();
+  render(<MarketLanding />);
+  expect(
+    await screen.findByText("Market point: 0xda-market-zoloti-vorota"),
+  ).toBeInTheDocument();
+  expect(window.location.pathname).toBe("/zoloti");
+});
+
+it.each(["/zoloti-vorota", "/золоті"])(
+  "replaces the older link %s with the canonical address",
+  async (older) => {
+    window.history.replaceState(null, "", older);
+    stubMarket();
+    render(<MarketLanding />);
+    expect(
+      await screen.findByText("Market point: 0xda-market-zoloti-vorota"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe("/zoloti"));
+  },
+);
+
+it("still opens a station by its place while Market's registry is unreachable", async () => {
+  window.history.replaceState(null, "", "/zoloti-vorota");
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
   render(<MarketLanding />);
   expect(
@@ -114,34 +180,22 @@ it("opens a guest point URL", async () => {
   ).toBeInTheDocument();
 });
 
-it("keeps the readable Golden Gate URL after the Core handoff", async () => {
-  window.history.replaceState(null, "", "/zoloti-vorota");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(new Response("", { status: 401 })),
-  );
+it("reports an address Market does not know", async () => {
+  window.history.replaceState(null, "", "/nowhere");
+  stubMarket();
   render(<MarketLanding />);
-  expect(
-    await screen.findByText("Market point: 0xda-market-zoloti-vorota"),
-  ).toBeInTheDocument();
-  expect(decodeURIComponent(window.location.pathname)).toBe("/золоті");
+  expect(await screen.findByText("Point not found")).toBeInTheDocument();
 });
 
 it("pins the selected visit without claiming arrival", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          point: "batkivshchyna",
-          seeds: "400",
-          seeds_authority: "client_display",
-          avaia: { longitude: 30.5, latitude: 50.4 },
-        }),
-        { status: 200 },
-      ),
-    ),
-  );
+  stubMarket({
+    session: {
+      point: "batkivshchyna",
+      seeds: "400",
+      seeds_authority: "client_display",
+      avaia: { longitude: 30.5, latitude: 50.4 },
+    },
+  });
   render(<MarketLanding />);
   await waitFor(() =>
     expect(screen.getByText(/Selected visit point/)).toBeInTheDocument(),
@@ -151,19 +205,14 @@ it("pins the selected visit without claiming arrival", async () => {
 });
 
 it("retains Identity balance and visited point from the current server handoff", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          point: "batkivshchyna",
-          seeds: "9360",
-          seeds_authority: "identity_snapshot",
-          avaia: { longitude: 30.5, latitude: 50.4 },
-        }),
-      ),
-    ),
-  );
+  stubMarket({
+    session: {
+      point: "batkivshchyna",
+      seeds: "9360",
+      seeds_authority: "identity_snapshot",
+      avaia: { longitude: 30.5, latitude: 50.4 },
+    },
+  });
   render(<MarketLanding />);
   expect(await screen.findByText(/9360 seeds/)).toHaveTextContent(
     "balance at handoff; checked again before purchase",
@@ -177,7 +226,7 @@ it("retains Identity balance and visited point from the current server handoff",
     screen.getByRole("button", { name: "0xda-market Motherland Monument" }),
   );
   expect(
-    screen.getByText("Market point: 0xda-market-batkivshchyna"),
+    await screen.findByText("Market point: 0xda-market-batkivshchyna"),
   ).toBeInTheDocument();
   expect(screen.getByText(/9360 seeds/)).toBeInTheDocument();
 });
@@ -190,20 +239,15 @@ it.each([
 ])(
   "rejects malformed visit context %j without blocking browsing",
   async (invalid) => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            point: "batkivshchyna",
-            seeds: "640",
-            seeds_authority: "identity_snapshot",
-            avaia: { longitude: 30.5, latitude: 50.4 },
-            ...invalid,
-          }),
-        ),
-      ),
-    );
+    stubMarket({
+      session: {
+        point: "batkivshchyna",
+        seeds: "640",
+        seeds_authority: "identity_snapshot",
+        avaia: { longitude: 30.5, latitude: 50.4 },
+        ...invalid,
+      },
+    });
     render(<MarketLanding />);
     await screen.findByRole("button", { name: "0xda-market Golden Gate" });
     expect(screen.queryByText(/Selected visit point/)).toBeNull();
