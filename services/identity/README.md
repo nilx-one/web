@@ -314,3 +314,22 @@ snapshot with a 30-second refresh deadline and `Cache-Control: no-store`.
 Neither endpoint grants a subscription or credits/debits seeds. The handoff
 response now includes its opaque `visit_id` and owner for the tab's return-trip
 association; these fields are not authentication credentials.
+
+## Core ownership
+
+Shared Identity authority now comes from the pinned `nilxone-identity` package
+in `nilx-one/core`: repository and migrations, credentials, wallet/receipts,
+subscription settlement, location persistence and Market issuer worker.
+`identity-bot` re-exports those types for adapter compatibility; it contains no
+second implementation of those rules.
+
+This directory remains the composition root and client transport adapters:
+browser/Telegram/Discord authentication, routes, cookies, host presentation and
+process startup. Future native payment flows must provide verified evidence to
+the common Core authority rather than implement their own wallet/grant rules.
+Market still owns catalog, quote and order state. The database URL, volume,
+service binary, HTTP routes and disabled activation flags are unchanged.
+
+Source moves preserve migration SQL and do not migrate data. Merge the Core
+package before this consumer change; the dependency is pinned to its exact
+reviewed source commit. Deployment, funding and activation remain separate.

@@ -85,8 +85,8 @@ async fn create_market_visit(
         _ => return unavailable(),
     };
     // Derive a partner-specific identifier. Never disclose the private subject.
-    let subject = match state.repository.market_pairwise_subject(&identity.pub_dress).await {
-        Ok(value) => state.secret_digester.digest("market-pairwise-subject-v1", &value),
+    let subject = match state.repository.market_pairwise_subject(&identity.pub_dress, &state.secret_digester).await {
+        Ok(value) => value,
         Err(_) => return unavailable(),
     };
     let subject = subject.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
