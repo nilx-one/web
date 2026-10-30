@@ -74,6 +74,7 @@ it("opens the Market handoff for an arrival with the Telegram credential", async
       verification: "required",
     }),
   );
+  if (!catalog.beginVisit) throw new Error("Telegram hands over to Market");
   await catalog.beginVisit({
     point: "zoloti-vorota",
     seeds: "0",

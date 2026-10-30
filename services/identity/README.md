@@ -179,6 +179,19 @@ binding.
 Optional runtime setting: `PARTNER_LOOKUP_TOKEN` (at least 32 bytes; without it
 the route is not mounted).
 
+## Seeds wallet and starter credit
+
+Identity holds each Bond's one authoritative seeds wallet. Until verified
+gameplay credits (jobs) exist, every Bond receives Core's `STARTER_SEEDS`
+(10,000) once (owner decision, 2026-10-30): a new Bond and an existing Bond
+alike, on its first wallet use. That is `GET /api/v1/identity/seeds`, the
+Market visit's balance snapshot, an xPing repair or a Special purchase. The
+credit is written in the same transaction as the first debit, so that purchase
+already sees it. The once-only receipt in `bond_seed_credits` follows a
+rename, so the credit is never issued again, even after it is spent. A refused
+purchase or repair commits nothing, the credit included. A browser
+`inventory.state` balance is never credited.
+
 ## Market Special orders (0x1 issuer)
 
 0xda-market sells Special in seeds; this service is the issuer that owns the

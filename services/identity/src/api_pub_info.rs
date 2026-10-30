@@ -92,7 +92,8 @@ async fn read_seeds_balance(State(state): State<ApiState>, headers: HeaderMap) -
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else {
         return unavailable();
     };
-    let mut response = match state.repository.read_seeds_balance(&owner).await {
+    let now_ms = now.saturating_mul(1000);
+    let mut response = match state.repository.read_seeds_balance_with_starter(&owner, now_ms).await {
         Ok(balance) => no_store_json(StatusCode::OK, serde_json::json!({
             "balance": balance.to_string(), "denomination": "seeds",
             "symbol": "₴€£", "authority": "identity"
@@ -452,7 +453,8 @@ mod pub_info_api_tests {
         assert_eq!(result.headers()["cache-control"], "no-store");
         let cookie = session_cookie(&result);
         let body = json(result).await;
-        assert_eq!(body["balance"], "0");
+        // The first wallet read credits Core's starter seeds, once.
+        assert_eq!(body["balance"], "10000");
         assert_eq!(body["symbol"], "₴€£");
         assert_eq!(body["denomination"], "seeds");
         assert_eq!(body["authority"], "identity");
@@ -572,6 +574,8 @@ mod pub_info_api_tests {
         let fixture_pool = sqlx::SqlitePool::connect(&database_url).await.expect("fixture database");
         sqlx::query("INSERT INTO bond_seeds (owner_pub_dress, balance) VALUES (?, ?)")
             .bind("0x1sky").bind(100_i64).execute(&fixture_pool).await.expect("fixture wallet");
+        sqlx::query("INSERT INTO bond_seed_credits (owner_pub_dress, source_kind, source_id, amount_minor, committed_at_ms) VALUES (?, 'starter', 'once', 10000, 0)")
+            .bind("0x1sky").execute(&fixture_pool).await.expect("fixture starter receipt");
         fixture_pool.close().await;
         let provider_links = crate::ProviderLinkRepository::connect(&database_url)
             .await

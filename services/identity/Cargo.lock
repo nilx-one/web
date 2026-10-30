@@ -1383,7 +1383,7 @@ dependencies = [
 [[package]]
 name = "nilxone-contracts"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=806a278db99aea8307dfaa79c058022fca297a05#806a278db99aea8307dfaa79c058022fca297a05"
+source = "git+https://github.com/nilx-one/core?rev=d175dc78c98f98c4cb1f5b9679e37e69fd3315b8#d175dc78c98f98c4cb1f5b9679e37e69fd3315b8"
 dependencies = [
  "chrono",
  "idna",
@@ -1400,7 +1400,7 @@ dependencies = [
 [[package]]
 name = "nilxone-identity"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=806a278db99aea8307dfaa79c058022fca297a05#806a278db99aea8307dfaa79c058022fca297a05"
+source = "git+https://github.com/nilx-one/core?rev=d175dc78c98f98c4cb1f5b9679e37e69fd3315b8#d175dc78c98f98c4cb1f5b9679e37e69fd3315b8"
 dependencies = [
  "argon2",
  "base64 0.22.1",

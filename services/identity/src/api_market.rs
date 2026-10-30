@@ -73,7 +73,7 @@ async fn create_market_visit(
     };
     // Read exactly the same server-owned wallet the issuer debits.
     // Do not forward the browser's legacy inventory number to the Market.
-    let seeds = match state.repository.read_seeds_balance(&owner).await {
+    let seeds = match state.repository.read_seeds_balance_with_starter(&owner, now.saturating_mul(1000)).await {
         Ok(balance) => balance.to_string(),
         Err(error) => {
             tracing::error!(%error, "market-visit seeds lookup failed");

@@ -26,6 +26,7 @@ import {
 } from "@nilx-one/map-maplibre";
 import { createFogField, createShadeMapFactory } from "@nilx-one/map-shade";
 import { createLocalPresenceJournal } from "@nilx-one/presence-idb";
+import { createNilxOneMarketCatalog } from "@nilx-one/market-host";
 import { ProductApp } from "@nilx-one/product-app";
 import {
   readLocalePreference,
@@ -126,6 +127,10 @@ async function main(): Promise<void> {
   root.render(
     <StrictMode>
       <ProductApp
+        // Market's page cannot open inside the Activity's frame, and its
+        // handoff accepts only the 0x1 origin: xPing parks at the point and
+        // the native Dock shows the catalog instead of flying straight back.
+        marketCatalog={createNilxOneMarketCatalog(fetch, { handoff: false })}
         core={core}
         host={session.host}
         identity={identity}
