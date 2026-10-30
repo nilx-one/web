@@ -234,7 +234,11 @@ if (window.location.hostname === "0xda-market.nilx.one") {
   root.render(
     <StrictMode>
       <ProductApp
-        marketCatalog={createNilxOneMarketCatalog()}
+        marketCatalog={createNilxOneMarketCatalog(fetch, {
+          // A Discord hand-off acts for its Discord account, not a site cookie.
+          authorization: () =>
+            discordHandoff ? DISCORD_HANDOFF_AUTHORIZATION : undefined,
+        })}
         business={business}
         core={core}
         host={host}
