@@ -15,6 +15,13 @@ import { useLocalization } from "@nilx-one/product-app/localization";
 import { mapDistanceMeters } from "@nilx-one/map-contract";
 import { createBusinessNavigation } from "../business-navigation";
 import { createNilxOneMarketCatalog } from "@nilx-one/market-host";
+import {
+  readMarketPointAddresses,
+  resolveMarketPointPath,
+  type MarketPointAddress,
+} from "./point-addresses";
+
+const STATION_PREFIX = "0xda-market-";
 
 // Kyiv currently has only author-seeded, unverified points. Other city choices
 // are discovery placeholders, never fabricated Market inventory.
@@ -50,19 +57,23 @@ export function MarketLanding() {
   >([]);
   const [cityQuery, setCityQuery] = useState("Київ");
   const [pointQuery, setPointQuery] = useState("");
-  const [path, setPath] = useState(() =>
-    location.pathname === "/zoloti-vorota" ? "/золоті" : location.pathname,
-  );
-
-  // Canonicalize the visible URL without triggering a state update in an effect.
-  useEffect(() => {
-    if (location.pathname === "/zoloti-vorota") {
-      history.replaceState(history.state, "", "/золоті");
-    }
-  }, []);
+  const [path, setPath] = useState(() => location.pathname);
+  // Market's registry of point addresses; empty when it cannot be read.
+  const [addresses, setAddresses] = useState<readonly MarketPointAddress[]>();
+  // The station an older or unlisted path segment resolved to, if any.
+  const [lookup, setLookup] = useState<{ segment: string; station?: string }>();
 
   useEffect(() => {
     let live = true;
+    void readMarketPointAddresses().then(
+      (registry) => {
+        if (live) setAddresses(registry);
+      },
+      () => {
+        // Without the registry a path still names a station by its place.
+        if (live) setAddresses([]);
+      },
+    );
     // Guest browsing must work even without a successful 0x1 handoff.
     void seededMarketDirectory.points().then(
       (projection) => {
@@ -118,11 +129,45 @@ export function MarketLanding() {
   } catch {
     // Malformed paths never resolve to an arbitrary point.
   }
-  const selected = points.find(
-    (point) =>
-      point.pub_dress ===
-      `0xda-market-${slug === "золоті" ? "zoloti-vorota" : slug}`,
-  );
+  const listed = addresses?.find((entry) => entry.address === slug);
+  const looked = lookup?.segment === slug ? lookup : undefined;
+  const station = listed?.station ?? looked?.station ?? STATION_PREFIX + slug;
+  const selected = slug
+    ? points.find((point) => point.pub_dress === station)
+    : undefined;
+  const resolving =
+    slug !== "" && !listed && (addresses === undefined || !looked);
+  const addressOf = (pubDress: string) =>
+    addresses?.find((entry) => entry.station === pubDress)?.address ??
+    pubDress.slice(STATION_PREFIX.length);
+
+  // An older link (e.g. /zoloti-vorota or /золоті) or an unlisted segment is
+  // asked of Market once; a non-canonical one is replaced by its address.
+  useEffect(() => {
+    if (!slug || addresses === undefined || listed || looked) return;
+    let live = true;
+    void resolveMarketPointPath(slug).then(
+      (resolution) => {
+        if (!live) return;
+        setLookup(
+          resolution
+            ? { segment: slug, station: resolution.station }
+            : { segment: slug },
+        );
+        if (resolution && !resolution.canonical) {
+          const next = `/${resolution.address}`;
+          history.replaceState(history.state, "", next);
+          setPath(next);
+        }
+      },
+      () => {
+        if (live) setLookup({ segment: slug });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [slug, addresses, listed, looked]);
 
   useEffect(() => {
     const renderer = dependencies.renderer;
@@ -210,6 +255,8 @@ export function MarketLanding() {
               }}
               onClose={() => navigate()}
             />
+          ) : slug && (resolving || points.length === 0) ? (
+            <p role="status">{uk ? "Шукаємо точку…" : "Finding the point…"}</p>
           ) : slug ? (
             <>
               <p>{uk ? "Точку не знайдено" : "Point not found"}</p>
@@ -263,13 +310,7 @@ export function MarketLanding() {
                     <li key={point.id.number}>
                       <button
                         type="button"
-                        onClick={() =>
-                          navigate(
-                            point.pub_dress === "0xda-market-zoloti-vorota"
-                              ? "золоті"
-                              : point.pub_dress.slice("0xda-market-".length),
-                          )
-                        }
+                        onClick={() => navigate(addressOf(point.pub_dress))}
                       >
                         {marketPointTitle(point, resolved)}
                       </button>
