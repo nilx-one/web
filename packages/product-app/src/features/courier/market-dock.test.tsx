@@ -157,7 +157,7 @@ it("replays a failed attempt with its key but starts a declined one afresh", asy
   fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   await waitFor(() => expect(onPurchased).toHaveBeenCalledOnce());
   const keys = checkout.order.mock.calls.map(
-    ([input]: [{ idempotencyKey: string }]) => input.idempotencyKey,
+    (call) => (call[0] as { idempotencyKey: string }).idempotencyKey,
   );
   expect(keys[1]).toBe(keys[0]);
   expect(keys[2]).not.toBe(keys[1]);
