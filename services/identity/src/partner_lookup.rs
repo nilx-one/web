@@ -57,7 +57,7 @@ impl PartnerLookupConfig {
         })
     }
 
-    fn accepts(&self, presented: &str) -> bool {
+    pub(crate) fn accepts(&self, presented: &str) -> bool {
         let presented: [u8; 32] = Sha256::digest(presented.as_bytes()).into();
         bool::from(presented.ct_eq(&self.token_digest))
     }

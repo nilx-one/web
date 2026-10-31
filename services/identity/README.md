@@ -179,6 +179,26 @@ binding.
 Optional runtime setting: `PARTNER_LOOKUP_TOKEN` (at least 32 bytes; without it
 the route is not mounted).
 
+### Partner account summary
+
+The same partner token also reads what a partner channel needs to offer
+Special for seeds to the person behind one of its accounts (for example
+0xda-market's Telegram bot). It is read-only and grants or debits nothing; the
+issuer worker checks the same rules again under the wallet lock.
+
+- `POST /api/v1/partner/provider-account` with the same body as the lookup.
+- `200 {"state": "linked", "pub_dress", "seeds", "special": {"held", "ends_at_ms"?}, "special_purchase_open"}`:
+  `seeds` is the authoritative Identity wallet (the first read issues the
+  starter credit, like any wallet use). `special.held` is true while the Bond
+  holds Special, running or paused behind Exclusive; Core's
+  `special_purchase_open` is then false, and the partner must not offer a
+  purchase.
+- `200 {"state": "sign_in_required", "provider", "link_refusal"?}`: not bound.
+  `link_refusal: "provider_type_already_linked"` means the person's last attempt
+  in the past day to connect this account was refused because their Bond
+  already holds another account of that provider. No Bond is named.
+- `401`, `422` and `503` as for the lookup. A `503` is never `sign_in_required`.
+
 ## Seeds wallet and starter credit
 
 Identity holds each Bond's one authoritative seeds wallet. Until verified

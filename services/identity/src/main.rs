@@ -21,8 +21,8 @@ use identity_bot::{
     IdentityRepository, NativeAuthConfig, OAuthClientCredentials, PartnerLookupConfig,
     PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
     TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, business_command,
-    github_evidence, location_control_router, partner_lookup_router, provider_self_service_router,
-    public_api,
+    github_evidence, location_control_router, partner_account_router, partner_lookup_router,
+    provider_self_service_router, public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -446,7 +446,16 @@ async fn main() {
         None => api,
     };
     let api = match partner_lookup_config {
-        Some(config) => api.merge(partner_lookup_router(config, provider_links.clone())),
+        Some(config) => api
+            .merge(partner_lookup_router(
+                config.clone(),
+                provider_links.clone(),
+            ))
+            .merge(partner_account_router(
+                config,
+                repository.clone(),
+                provider_links.clone(),
+            )),
         None => api,
     };
     let listener = tokio::net::TcpListener::bind(http_bind)

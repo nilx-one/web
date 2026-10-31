@@ -23,6 +23,7 @@ pub mod github_evidence;
 pub mod location_control;
 pub use nilxone_identity::market_issuer;
 pub use nilxone_identity::market_visit;
+pub mod partner_account;
 pub mod partner_lookup;
 pub use nilxone_identity::provider_link;
 pub use nilxone_identity::provider_secret;
@@ -49,6 +50,7 @@ pub use nilxone_contracts::{
     GeoCoordinateError, PubDress, PubDressError, PubDressLabel, PubDressLabelError, StationCaption,
     StationPubDress, StationPubDressError,
 };
+pub use partner_account::partner_account_router;
 pub use partner_lookup::{PartnerLookupConfig, PartnerLookupConfigError, partner_lookup_router};
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconnectOutcome};
 pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
