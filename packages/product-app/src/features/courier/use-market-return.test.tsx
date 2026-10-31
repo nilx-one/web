@@ -5,7 +5,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import type { CourierPlan } from "@nilx-one/application";
 import type { EmbeddedMarketCatalogPort } from "./market-dock";
-import { useMarketReturn, useReturnFlight } from "./use-market-return";
+import {
+  MARKET_RECHECK_MS,
+  useMarketReturn,
+  useReturnFlight,
+} from "./use-market-return";
 
 const trip: CourierPlan = {
   origin: { longitude_e7: "305000000", latitude_e7: "504000000" },
@@ -29,12 +33,17 @@ function handoff(
     confirmReturn,
   };
   return renderHook(
-    ({ suspended }: { suspended: boolean }) => {
+    ({ suspended, flying }: { suspended: boolean; flying?: boolean }) => {
       const market = useMarketReturn(catalog);
-      useReturnFlight(market.result, !suspended, returnHome);
+      useReturnFlight(market.result, !suspended, flying ?? false, returnHome);
       return market;
     },
-    { initialProps: { suspended: true } },
+    {
+      initialProps: { suspended: true } as {
+        suspended: boolean;
+        flying?: boolean;
+      },
+    },
   );
 }
 
@@ -97,4 +106,71 @@ it.each([
   hook.rerender({ suspended: true });
   hook.rerender({ suspended: false });
   expect(returnHome).not.toHaveBeenCalled();
+});
+
+it("waits for another flight to end, then flies home once", async () => {
+  const returnHome = vi.fn();
+  const hook = handoff(
+    vi.fn().mockResolvedValue({ confirmed: true, trip }),
+    returnHome,
+  );
+  await waitFor(() => expect(hook.result.current.result).toBeDefined());
+  hook.rerender({ suspended: false, flying: true });
+  expect(returnHome).not.toHaveBeenCalled();
+  hook.rerender({ suspended: false, flying: false });
+  expect(returnHome).toHaveBeenCalledOnce();
+  hook.rerender({ suspended: false, flying: true });
+  hook.rerender({ suspended: false, flying: false });
+  expect(returnHome).toHaveBeenCalledOnce();
+});
+
+it("asks again on a bounded schedule and flies once Identity confirms", async () => {
+  vi.useFakeTimers();
+  try {
+    const confirmReturn = vi
+      .fn()
+      .mockResolvedValueOnce({ confirmed: false, retry: true })
+      .mockResolvedValueOnce({ confirmed: false, retry: true })
+      .mockResolvedValueOnce({ confirmed: true, trip });
+    const returnHome = vi.fn();
+    const hook = handoff(confirmReturn, returnHome);
+    hook.rerender({ suspended: false });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hook.result.current.notice).toEqual({
+      confirmed: false,
+      retry: true,
+    });
+    expect(returnHome).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MARKET_RECHECK_MS[0]!);
+    });
+    expect(confirmReturn).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(MARKET_RECHECK_MS[1]!);
+    });
+    expect(confirmReturn).toHaveBeenCalledTimes(3);
+    expect(returnHome).toHaveBeenCalledOnce();
+    expect(hook.result.current.notice).toEqual({ confirmed: true, trip });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops asking within the page after the last scheduled recheck", async () => {
+  vi.useFakeTimers();
+  try {
+    const confirmReturn = vi
+      .fn()
+      .mockResolvedValue({ confirmed: false, retry: true });
+    handoff(confirmReturn, vi.fn());
+    for (const delay of [...MARKET_RECHECK_MS, 3_600_000])
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(delay);
+      });
+    expect(confirmReturn).toHaveBeenCalledTimes(MARKET_RECHECK_MS.length + 1);
+  } finally {
+    vi.useRealTimers();
+  }
 });

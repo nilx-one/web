@@ -34,6 +34,8 @@ export interface EmbeddedMarketCatalogPort {
         confirmed: boolean;
         /** The xPing route this tab flew out on, to fly back along. */
         trip?: CourierPlan;
+        /** Unconfirmed, but the order may be asked about again later. */
+        retry?: boolean;
       }
     | undefined
   >;

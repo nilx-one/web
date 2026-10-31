@@ -121,13 +121,16 @@ it.each([
       .fn<typeof fetch>()
       .mockImplementation(async () => answer());
     const confirm = createMarketReturn(undefined, request);
-    await expect(confirm()).resolves.toEqual({ confirmed: false });
+    await expect(confirm()).resolves.toEqual({
+      confirmed: false,
+      retry: true,
+    });
     expect(stored()).toEqual({
       version: 1,
       plan,
-      pending: { visitId, orderId: "o1", attempts: 1 },
+      pending: { visitId, orderId: "o1", since: expect.any(Number) },
     });
-    // The next page load of this tab asks again, without the query.
+    // A later check of this tab asks again, without the query.
     request.mockResolvedValueOnce(confirmed());
     await expect(confirm()).resolves.toEqual({ confirmed: true, trip: plan });
     expect(request).toHaveBeenLastCalledWith(
@@ -138,18 +141,38 @@ it.each([
   },
 );
 
-it("stops asking after a few unconfirmed tries but keeps the route", async () => {
+it("recovers a paid order after any number of failed checks within a day", async () => {
   storeTrip({ version: 1, plan });
   returnTo(`?market_visit=${visitId}&market_order=o1`);
   const request = vi
     .fn<typeof fetch>()
     .mockImplementation(async () => new Response("{}", { status: 503 }));
   const confirm = createMarketReturn(undefined, request);
-  for (let i = 0; i < 3; i++)
-    await expect(confirm()).resolves.toEqual({ confirmed: false });
-  expect(stored()).toEqual({ version: 1, plan });
+  for (let i = 0; i < 10; i++)
+    await expect(confirm()).resolves.toEqual({
+      confirmed: false,
+      retry: true,
+    });
+  request.mockResolvedValueOnce(confirmed());
+  await expect(confirm()).resolves.toEqual({ confirmed: true, trip: plan });
+});
+
+it("lets an unconfirmed order go after a day but keeps the route", async () => {
+  const start = Date.now();
+  const now = vi.spyOn(Date, "now").mockReturnValue(start);
+  storeTrip({ version: 1, plan });
+  returnTo(`?market_visit=${visitId}&market_order=o1`);
+  const request = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async () => new Response("{}", { status: 503 }));
+  const confirm = createMarketReturn(undefined, request);
+  await confirm();
+  now.mockReturnValue(start + 24 * 60 * 60_000);
+  // The stale order is no longer asked about, and confirms nothing.
   await expect(confirm()).resolves.toBe(undefined);
-  expect(request).toHaveBeenCalledTimes(3);
+  expect(stored()).toEqual({ version: 1, plan });
+  expect(request).toHaveBeenCalledTimes(1);
+  now.mockRestore();
 });
 
 it("never asks about a forged return and leaves the route alone", async () => {

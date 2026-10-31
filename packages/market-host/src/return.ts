@@ -6,9 +6,10 @@ import type { EmbeddedMarketCatalogPort } from "@nilx-one/product-app/business";
 const VISIT = "market_visit";
 const ORDER = "market_order";
 const TRIP = "nilx-one.market.trip";
-// An unconfirmed return is asked again on this tab's next page loads, a few
-// times, because Identity may only have been briefly unreachable.
-const RETRIES = 3;
+// An unconfirmed return stays identifiable and is asked about again, because
+// Identity may only have been unreachable; for a day, then the order is let go.
+// The route itself stays until the tab is closed or a confirmation uses it.
+const PENDING_MS = 24 * 60 * 60_000;
 
 /** Where Market sends the tab back to after a fulfilled order. */
 export function marketReturnUrl(input: {
@@ -29,7 +30,8 @@ export function marketReturnUrl(input: {
 interface Pending {
   readonly visitId: string;
   readonly orderId: string;
-  readonly attempts: number;
+  /** When the tab came back from Market with this order. */
+  readonly since: number;
 }
 
 interface TripRecord {
@@ -42,7 +44,8 @@ interface TripRecord {
  * The 0x1 side of the return flight. The query names an order; only Identity's
  * completion check, tied to this Bond's visit and receipt, confirms it. The
  * tab's route home is handed back only with a confirmed purchase; until then
- * it stays, with the order to ask about again.
+ * it stays, with the order, and `retry` says the order can be asked about
+ * again. The client never confirms a purchase itself.
  */
 export function createMarketReturn(
   authorization?: () => string | undefined,
@@ -70,7 +73,7 @@ export function createMarketReturn(
         !validReturn(visitId, orderId)
       )
         return { confirmed: false };
-      ask = { visitId, orderId, attempts: 0 };
+      ask = { visitId, orderId, since: Date.now() };
     } else if (record?.pending) {
       ask = record.pending;
     } else {
@@ -82,15 +85,13 @@ export function createMarketReturn(
       removeTrip();
       return record ? { confirmed, trip: record.plan } : { confirmed };
     }
+    const open = Date.now() - ask.since < PENDING_MS;
     if (record) {
-      const attempts = ask.attempts + 1;
       writeTrip(
-        attempts < RETRIES
-          ? { ...record, pending: { ...ask, attempts } }
-          : { version: 1, plan: record.plan },
+        open ? { ...record, pending: ask } : { version: 1, plan: record.plan },
       );
     }
-    return { confirmed };
+    return record && open ? { confirmed, retry: true } : { confirmed };
   };
 }
 
@@ -165,18 +166,15 @@ function station(value: unknown): boolean {
 }
 
 function isPending(value: unknown): value is Pending {
-  const { visitId, orderId, attempts } = (value ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const { visitId, orderId, since } = (value ?? {}) as Record<string, unknown>;
   return (
     typeof visitId === "string" &&
     typeof orderId === "string" &&
     validReturn(visitId, orderId) &&
-    typeof attempts === "number" &&
-    Number.isSafeInteger(attempts) &&
-    attempts >= 0 &&
-    attempts < RETRIES
+    typeof since === "number" &&
+    Number.isSafeInteger(since) &&
+    since <= Date.now() &&
+    Date.now() - since < PENDING_MS
   );
 }
 
@@ -206,9 +204,11 @@ function readTrip(): TripRecord | undefined {
       removeTrip();
       return undefined;
     }
-    return isPending(record.pending)
-      ? { version: 1, plan, pending: record.pending }
-      : { version: 1, plan };
+    if (isPending(record.pending))
+      return { version: 1, plan, pending: record.pending };
+    // A stale or broken order is let go; the route stays.
+    if (record.pending !== undefined) writeTrip({ version: 1, plan });
+    return { version: 1, plan };
   } catch {
     removeTrip();
     return undefined;

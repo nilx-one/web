@@ -2018,7 +2018,12 @@ export function AuthenticatedMapHomeView({
     suspended: courierSuspended,
   });
   // Back from Market with a confirmed purchase, xPing flies home.
-  useReturnFlight(marketReturn.result, !courierSuspended, courier.returnHome);
+  useReturnFlight(
+    marketReturn.result,
+    !courierSuspended,
+    courier.flyover.active,
+    courier.returnHome,
+  );
 
   useSystemInformerBlock(
     !startup.ready ||
