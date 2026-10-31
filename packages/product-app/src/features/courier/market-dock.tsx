@@ -41,11 +41,7 @@ export interface EmbeddedMarketOffer {
 export interface EmbeddedMarketOrder {
   readonly id: string;
   readonly status:
-    | "pending"
-    | "processing"
-    | "fulfilled"
-    | "rejected"
-    | "cancelled";
+    "pending" | "processing" | "fulfilled" | "rejected" | "cancelled";
   readonly rejectionCode?: string;
   readonly visitId?: string;
 }

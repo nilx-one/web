@@ -1401,14 +1401,12 @@ export function AuthenticatedMapHomeView({
   const readinessShown = useReadinessFrameVisible(readiness.tone);
   const readinessToasts = readiness.issues
     .filter((issue) => !dismissedReadiness.has(issue.id))
-    .map(
-      (issue): StatusToastItem => ({
-        id: issue.id,
-        kind: "error",
-        title: t(issue.title),
-        description: t(issue.detail),
-      }),
-    );
+    .map((issue): StatusToastItem => ({
+      id: issue.id,
+      kind: "error",
+      title: t(issue.title),
+      description: t(issue.detail),
+    }));
   const manualBondFailedShown = useTransientFlag(
     manualBondFailed,
     ERROR_TOAST_MS,
@@ -1451,8 +1449,7 @@ export function AuthenticatedMapHomeView({
   // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
   // means no voice either: a card does not talk on behalf of nobody.
   const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
-    | AvatarModelId
-    | undefined;
+    AvatarModelId | undefined;
   // A declared point stands the Bond somewhere; only a real observation says
   // this device is anywhere.
   const declaredPosition = observedPosition?.declared === true;
@@ -2477,8 +2474,7 @@ export function AuthenticatedMapHomeView({
   // Only the first fix decides where the camera goes, so the wheel and the
   // walk are read as they stand at that instant rather than followed.
   const wheelAvaiaPoint = ():
-    | (MapPointSelection & { bearingDeg: number })
-    | undefined => {
+    (MapPointSelection & { bearingDeg: number }) | undefined => {
     if (wheel !== "avaia") return undefined;
     const stance = avaiaWalk.stance(globalThis.performance.now());
     return stance === undefined
