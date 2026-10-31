@@ -76,3 +76,8 @@
   font-size: 11px;
   margin-top: 16px;
 }
+.market-dock__buy {
+  margin-top: 12px;
+  min-height: 44px;
+  width: 100%;
+}

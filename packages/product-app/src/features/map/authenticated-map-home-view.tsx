@@ -1033,6 +1033,10 @@ export function AuthenticatedMapHomeView({
   const [sceneToasts, setSceneToasts] = useState<readonly StatusToastItem[]>(
     [],
   );
+  // Said once, on the page Market returned this tab to after a purchase.
+  const [marketReturnToast, setMarketReturnToast] = useState<
+    StatusToastItem | undefined
+  >(undefined);
   const sceneSequence = useRef(0);
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
@@ -1397,12 +1401,14 @@ export function AuthenticatedMapHomeView({
   const readinessShown = useReadinessFrameVisible(readiness.tone);
   const readinessToasts = readiness.issues
     .filter((issue) => !dismissedReadiness.has(issue.id))
-    .map((issue): StatusToastItem => ({
-      id: issue.id,
-      kind: "error",
-      title: t(issue.title),
-      description: t(issue.detail),
-    }));
+    .map(
+      (issue): StatusToastItem => ({
+        id: issue.id,
+        kind: "error",
+        title: t(issue.title),
+        description: t(issue.detail),
+      }),
+    );
   const manualBondFailedShown = useTransientFlag(
     manualBondFailed,
     ERROR_TOAST_MS,
@@ -1413,6 +1419,7 @@ export function AuthenticatedMapHomeView({
       : [statusToast]),
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+    ...(marketReturnToast === undefined ? [] : [marketReturnToast]),
     ...(findToast === undefined ? [] : [findToast]),
     ...(manualBondFailedShown
       ? [
@@ -1444,7 +1451,8 @@ export function AuthenticatedMapHomeView({
   // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
   // means no voice either: a card does not talk on behalf of nobody.
   const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
-    AvatarModelId | undefined;
+    | AvatarModelId
+    | undefined;
   // A declared point stands the Bond somewhere; only a real observation says
   // this device is anywhere.
   const declaredPosition = observedPosition?.declared === true;
@@ -1850,6 +1858,35 @@ export function AuthenticatedMapHomeView({
       updateProgression(pubDress, markSettingsHintSeen);
     }
   }, [downloadPending, pubDress, section]);
+  // Only Identity's completion check may say a Special purchase went through.
+  useEffect(() => {
+    const confirmReturn = marketCatalog?.confirmReturn;
+    if (!confirmReturn) return;
+    let live = true;
+    void confirmReturn().then((result) => {
+      if (!live || result === undefined) return;
+      setMarketReturnToast(
+        result.confirmed
+          ? {
+              id: "market-return:confirmed",
+              kind: "active",
+              title: t("market.returnConfirmed"),
+              description: t("market.returnConfirmedDetail"),
+            }
+          : {
+              id: "market-return:unconfirmed",
+              kind: "warning",
+              title: t("market.returnUnconfirmed"),
+              description: t("market.returnUnconfirmedDetail"),
+            },
+      );
+    });
+    return () => {
+      live = false;
+    };
+    // The return is read once per page; a locale change must not ask again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketCatalog]);
   // "Saved" is a passing confirmation; what it paid is the dialog's to say.
   useEffect(() => {
     if (avaiaSavedToast === undefined) return;
@@ -2440,7 +2477,8 @@ export function AuthenticatedMapHomeView({
   // Only the first fix decides where the camera goes, so the wheel and the
   // walk are read as they stand at that instant rather than followed.
   const wheelAvaiaPoint = ():
-    (MapPointSelection & { bearingDeg: number }) | undefined => {
+    | (MapPointSelection & { bearingDeg: number })
+    | undefined => {
     if (wheel !== "avaia") return undefined;
     const stance = avaiaWalk.stance(globalThis.performance.now());
     return stance === undefined
@@ -3577,6 +3615,10 @@ export function AuthenticatedMapHomeView({
             }
             if (avaiaSavedToast?.id === id) {
               setAvaiaSavedToast(undefined);
+              return;
+            }
+            if (marketReturnToast?.id === id) {
+              setMarketReturnToast(undefined);
               return;
             }
             if (findToast?.id === id) {

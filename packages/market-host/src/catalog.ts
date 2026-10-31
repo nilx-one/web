@@ -7,6 +7,7 @@ import {
   normalizeLocale,
 } from "@0xda-market/webapp-core";
 import { catalogTransport } from "./transport";
+import { createMarketReturn } from "./return";
 import { createMarketVisit } from "./visit";
 
 export interface MarketHostOptions {
@@ -41,7 +42,10 @@ export function createNilxOneMarketCatalog(
   return {
     ...(options.handoff === false
       ? {}
-      : { beginVisit: createMarketVisit(options.authorization) }),
+      : {
+          beginVisit: createMarketVisit(options.authorization),
+          confirmReturn: createMarketReturn(options.authorization, request),
+        }),
     async load(locale: string) {
       const key = normalizeLocale(locale);
       const cached = cache.get(key);

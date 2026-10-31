@@ -328,6 +328,11 @@ const EN_MESSAGES = {
   "dock.loadingProviders": "Loading provider connections…",
   "dock.connect": "Connect",
   "dock.avaiaSaved": "Avaia saved",
+  "market.returnConfirmed": "Special is yours",
+  "market.returnConfirmedDetail": "0x1 confirmed the purchase at 0xda-market.",
+  "market.returnUnconfirmed": "Purchase not confirmed yet",
+  "market.returnUnconfirmedDetail":
+    "No seeds are spent without a confirmed order. Check your subscription in a minute.",
   "dock.saveChoiceFailed": "Couldn’t save this choice. Try again.",
   ...IDENTITY_EN,
   ...WORLD_EN,
@@ -691,6 +696,11 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.loadingProviders": "Завантаження підключень провайдерів…",
   "dock.connect": "Підключити",
   "dock.avaiaSaved": "Avaia збережено",
+  "market.returnConfirmed": "Special ваш",
+  "market.returnConfirmedDetail": "0x1 підтвердив покупку в 0xda-market.",
+  "market.returnUnconfirmed": "Покупку ще не підтверджено",
+  "market.returnUnconfirmedDetail":
+    "Без підтвердженого замовлення seeds не списуються. Перевірте підписку за хвилину.",
   "dock.saveChoiceFailed": "Не вдалося зберегти цей вибір. Спробуйте ще раз.",
   ...IDENTITY_UK,
   ...WORLD_UK,

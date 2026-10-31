@@ -324,6 +324,11 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.loadingProviders": "Загрузка подключений провайдеров…",
   "dock.connect": "Подключить",
   "dock.avaiaSaved": "Avaia сохранена",
+  "market.returnConfirmed": "Special ваш",
+  "market.returnConfirmedDetail": "0x1 подтвердил покупку в 0xda-market.",
+  "market.returnUnconfirmed": "Покупка ещё не подтверждена",
+  "market.returnUnconfirmedDetail":
+    "Без подтверждённого заказа seeds не списываются. Проверьте подписку через минуту.",
   "dock.saveChoiceFailed":
     "Не удалось сохранить этот выбор. Попробуйте ещё раз.",
 
