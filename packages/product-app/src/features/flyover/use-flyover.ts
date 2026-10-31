@@ -152,6 +152,11 @@ export interface FlyoverRequest {
   readonly onLootCollected?: (item: FlightLootSpawn) => void;
   /** Park at the destination and hand presentation to the Dock until leave(). */
   readonly onDock?: () => void;
+  /**
+   * Begin at the station and fly only the way back to `from`: the return
+   * from a Market visit that left the page while xPing was parked there.
+   */
+  readonly homeward?: boolean;
 }
 
 export interface Flyover {
@@ -345,6 +350,11 @@ export function useFlyover(
 
     const fly = (route: readonly LonLat[]) => {
       renderer.setRoute?.({ points: route });
+      if (reduced && request.homeward) {
+        // Nothing to watch: xPing is simply home again.
+        setRequest(undefined);
+        return;
+      }
       if (reduced) {
         if (openRef.current)
           renderer.setCamera(routeOverview(route), { motion: "immediate" });
@@ -394,7 +404,11 @@ export function useFlyover(
       let hovering = false;
       if (openRef.current)
         renderer.setCamera(
-          chaseCamera(request.from, state.bearingDeg, state.height),
+          chaseCamera(
+            request.homeward ? request.to : request.from,
+            state.bearingDeg,
+            state.height,
+          ),
           { motion: "eased", durationMs: FLYOVER_TAKEOFF_MS },
         );
 
@@ -670,6 +684,10 @@ export function useFlyover(
         }
         frame = globalThis.requestAnimationFrame(draw);
       };
+      if (request.homeward) {
+        flyBack();
+        return;
+      }
       frame = globalThis.requestAnimationFrame(draw);
     };
 

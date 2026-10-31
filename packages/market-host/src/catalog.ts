@@ -7,7 +7,7 @@ import {
   normalizeLocale,
 } from "@0xda-market/webapp-core";
 import { catalogTransport } from "./transport";
-import { createMarketReturn } from "./return";
+import { createMarketReturn, type MarketReturnCore } from "./return";
 import { createMarketVisit } from "./visit";
 
 export interface MarketHostOptions {
@@ -19,6 +19,11 @@ export interface MarketHostOptions {
    * browses the catalog in the native Dock instead. Defaults to true.
    */
   readonly handoff?: boolean;
+  /**
+   * Core's Market return contract. Without it a return is still confirmed by
+   * Identity, but no route is flown home and no unconfirmed order is kept.
+   */
+  readonly core?: MarketReturnCore;
 }
 
 /**
@@ -44,7 +49,11 @@ export function createNilxOneMarketCatalog(
       ? {}
       : {
           beginVisit: createMarketVisit(options.authorization),
-          confirmReturn: createMarketReturn(options.authorization, request),
+          confirmReturn: createMarketReturn(
+            options.authorization,
+            request,
+            options.core,
+          ),
         }),
     async load(locale: string) {
       const key = normalizeLocale(locale);

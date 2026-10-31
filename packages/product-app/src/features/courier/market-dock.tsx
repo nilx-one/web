@@ -29,7 +29,19 @@ export interface EmbeddedMarketCatalogPort {
    * The 0x1 side of a return from Market: whether Identity confirms the order
    * named by this page's address. Undefined when the page is not a return.
    */
-  confirmReturn?(): Promise<{ confirmed: boolean } | undefined>;
+  confirmReturn?(): Promise<
+    | {
+        confirmed: boolean;
+        /** The xPing route this tab flew out on, to fly back along. */
+        trip?: CourierPlan;
+        /**
+         * Unconfirmed, but the order may be asked about again: after each of
+         * these delays while the page is open (Core's policy).
+         */
+        recheckMs?: readonly number[];
+      }
+    | undefined
+  >;
 }
 
 export interface EmbeddedMarketOffer {

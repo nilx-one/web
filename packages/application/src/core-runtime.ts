@@ -155,6 +155,12 @@ export type CoreInventoryAnswer =
  * production adapter supplied by `@nilx-one/core-wasm` implements them; product
  * code must fail closed when they are absent rather than reimplement UTS-46.
  */
+/** How long, and how often within a page, an unconfirmed order is asked about. */
+export interface CoreMarketReturnPolicy {
+  readonly pendingMs: number;
+  readonly recheckMs: readonly number[];
+}
+
 export interface CoreRuntimePort {
   /** Delegates rarity to Core, never client-generated presentation. */
   landmarkMapView?(request: CoreLandmarkMapRequest): Promise<string>;
@@ -168,6 +174,13 @@ export interface CoreRuntimePort {
     origin: CourierCoordinate,
     projection: BusinessPointProjection,
   ): Promise<BusinessPoint>;
+  /**
+   * Core `market_return_trip`: whether a kept xPing route may be flown home
+   * after a Market visit (`docs/xping-flyover.md` in core).
+   */
+  marketReturnTrip?(trip: unknown): Promise<boolean>;
+  /** Core `market_return_policy`: how long and how often to ask again. */
+  marketReturnPolicy?(): Promise<CoreMarketReturnPolicy>;
   probe(): Promise<CoreRuntimeStatus>;
   derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(

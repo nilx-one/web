@@ -205,7 +205,7 @@ async function bootstrap(): Promise<void> {
   createRoot(container).render(
     <StrictMode>
       <ProductApp
-        marketCatalog={createTelegramMarketCatalog(host)}
+        marketCatalog={createTelegramMarketCatalog(host, fetch, core)}
         core={core}
         host={host}
         identity={identity}

@@ -313,6 +313,43 @@ describe("useFlyover", () => {
     expect(vi.mocked(renderer.setRoute).mock.lastCall?.[0]).toEqual(road);
   });
 
+  it("flies only the way home from the station on a homeward flight", async () => {
+    const { renderer, drone, hook } = setup();
+    await act(async () => {
+      hook.result.current.start({ from: FROM, to: TO, homeward: true });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(500));
+    expect(hook.result.current.progress?.returning).toBe(true);
+    expect(hook.result.current.progress?.arrivedAt).toBeUndefined();
+    // It sets off from the station, not from the Bond.
+    expect(Math.abs(lastDrone(drone)!.lngLat[0] - TO.longitude)).toBeLessThan(
+      Math.abs(lastDrone(drone)!.lngLat[0] - FROM.longitude),
+    );
+    act(() => vi.advanceTimersByTime(12_000));
+    expect(lastDrone(drone)!.lngLat[0]).toBeCloseTo(FROM.longitude, 5);
+    act(() => vi.advanceTimersByTime(FLYOVER_ARRIVAL_MS));
+    expect(hook.result.current.active).toBe(false);
+    expect(renderer.setRoute).toHaveBeenLastCalledWith(null);
+  });
+
+  it("skips a homeward flight under reduced motion", async () => {
+    reduceMotion(true);
+    const { drone, hook } = setup();
+    await act(async () => {
+      hook.result.current.start({ from: FROM, to: TO, homeward: true });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hook.result.current.active).toBe(false);
+    expect(drone.upsert).not.toHaveBeenCalled();
+  });
+
   it("can be cancelled at any moment", async () => {
     const { renderer, drone, hook } = setup();
     await begin(hook);

@@ -235,6 +235,7 @@ if (window.location.hostname === "0xda-market.nilx.one") {
     <StrictMode>
       <ProductApp
         marketCatalog={createNilxOneMarketCatalog(fetch, {
+          core,
           // A Discord hand-off acts for its Discord account, not a site cookie.
           authorization: () =>
             discordHandoff ? DISCORD_HANDOFF_AUTHORIZATION : undefined,
