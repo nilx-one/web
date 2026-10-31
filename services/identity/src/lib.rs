@@ -22,6 +22,7 @@ pub use nilxone_identity::finds;
 pub mod github_evidence;
 pub mod location_control;
 pub use nilxone_identity::market_issuer;
+pub use nilxone_identity::market_visit;
 pub mod partner_lookup;
 pub use nilxone_identity::provider_link;
 pub use nilxone_identity::provider_secret;
