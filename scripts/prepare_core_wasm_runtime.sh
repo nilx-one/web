@@ -5,8 +5,8 @@
 set -Eeuo pipefail
 
 core_dir="$(cd "${1:?path to checked-out nilx-one/core is required}" && pwd)"
-expected_core_revision="2185f8cc8ec3147e16af94926975ad8a2e549e34"
-expected_wasm_sha256="44caf05befbc79e6a1f5a093466a1004340ca97663a2f0744f2412c4a87bc393"
+expected_core_revision="4225b7d96cdd914f7d559053a02af000247fe7ed"
+expected_wasm_sha256="95efdc028bbd74d7cbbe33b7e6f103e11d2e151bb161eb41972d6d3cc0aa7466"
 runtime_version="0.1.0"
 runtime_build="$PWD/.core-wasm-runtime"
 
