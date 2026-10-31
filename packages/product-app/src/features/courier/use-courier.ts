@@ -159,6 +159,17 @@ export function useCourier(input: {
       }
     }
   }, [active, start, close, offer]);
+  // Back from Market, xPing flies home from the station it was parked at.
+  const returnHome = useCallback(
+    (trip: CourierPlan) => {
+      start({
+        from: latest.current.origin ?? courierPoint(trip.origin),
+        to: courierPoint(trip.destination.coordinate),
+        homeward: true,
+      });
+    },
+    [start],
+  );
   // The offer is a decision, not a flight. Preserve the current world shot
   // until an explicit Accept starts useFlyover, which owns camera restoration.
   const { renderer, suspended } = input;
@@ -222,6 +233,7 @@ export function useCourier(input: {
     open,
     close,
     accept,
+    returnHome,
     setFollowing,
   };
 }

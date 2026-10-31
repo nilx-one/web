@@ -30,6 +30,7 @@ import {
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
+  type CourierPlan,
   type XpingEngineAccessPort,
   type CoreRuntimePort,
   type BusinessStationAccessPort,
@@ -1037,6 +1038,8 @@ export function AuthenticatedMapHomeView({
   const [marketReturnToast, setMarketReturnToast] = useState<
     StatusToastItem | undefined
   >(undefined);
+  // The route this tab flew out to Market on, flown home once xPing can fly.
+  const homewardTrip = useRef<CourierPlan | undefined>(undefined);
   const sceneSequence = useRef(0);
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
@@ -1862,6 +1865,7 @@ export function AuthenticatedMapHomeView({
     let live = true;
     void confirmReturn().then((result) => {
       if (!live || result === undefined) return;
+      homewardTrip.current = result.trip;
       setMarketReturnToast(
         result.confirmed
           ? {
@@ -2029,7 +2033,18 @@ export function AuthenticatedMapHomeView({
       achievementDialog !== undefined ||
       systemInformer.activeId !== undefined ||
       !startup.ready,
-  });
+  }); // Back from Market: xPing flies home along the route it left on. A start
+  // made before the flyover is ready is ignored, so this waits for one.
+  useEffect(() => {
+    const trip = homewardTrip.current;
+    if (trip === undefined) return;
+    if (courier.flyover.active) {
+      homewardTrip.current = undefined;
+      return;
+    }
+    courier.returnHome(trip);
+  }, [courier, marketReturnToast]);
+
   useSystemInformerBlock(
     !startup.ready ||
       guideActive ||

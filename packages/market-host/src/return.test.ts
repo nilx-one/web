@@ -6,7 +6,22 @@ import { createMarketReturn, marketReturnUrl } from "./return";
 
 const visitId = "v".repeat(43);
 
-afterEach(() => history.replaceState(null, "", "/"));
+afterEach(() => {
+  history.replaceState(null, "", "/");
+  sessionStorage.clear();
+});
+
+const plan = {
+  origin: { longitude_e7: "305000000", latitude_e7: "504000000" },
+  destination: {
+    id: { owner_pub_dress: "0xda-market", number: 0 },
+    pub_dress: "0xda-market-zoloti-vorota",
+    description: "Golden Gate",
+    isVerified: false,
+    coordinate: { longitude_e7: "305131000", latitude_e7: "504489000" },
+  },
+  started_at_ms: "1000",
+};
 
 it("builds the return address on a 0x1 host page only", () => {
   expect(
@@ -70,4 +85,37 @@ it("does not confirm a refused, mismatched or malformed return", async () => {
     await expect(confirm()).resolves.toEqual({ confirmed: false });
   }
   expect(request).toHaveBeenCalledTimes(2);
+});
+
+it("hands back the stored route once so xPing can fly home", async () => {
+  sessionStorage.setItem(
+    "nilx-one.market.trip",
+    JSON.stringify({ version: 1, plan }),
+  );
+  history.replaceState(null, "", `/?market_visit=${visitId}&market_order=o1`);
+  const request = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response("{}", { status: 404 }));
+  await expect(createMarketReturn(undefined, request)()).resolves.toEqual({
+    confirmed: false,
+    trip: plan,
+  });
+  expect(sessionStorage.getItem("nilx-one.market.trip")).toBeNull();
+});
+
+it("drops a malformed route and leaves a plain visit's route alone", async () => {
+  sessionStorage.setItem(
+    "nilx-one.market.trip",
+    JSON.stringify({ version: 1, plan: { origin: {} } }),
+  );
+  const request = vi.fn<typeof fetch>();
+  await expect(createMarketReturn(undefined, request)()).resolves.toBe(
+    undefined,
+  );
+  expect(sessionStorage.getItem("nilx-one.market.trip")).not.toBeNull();
+  history.replaceState(null, "", `/?market_visit=short&market_order=o1`);
+  await expect(createMarketReturn(undefined, request)()).resolves.toEqual({
+    confirmed: false,
+  });
+  expect(sessionStorage.getItem("nilx-one.market.trip")).toBeNull();
 });

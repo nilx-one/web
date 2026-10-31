@@ -1,5 +1,6 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
+import type { CourierPlan } from "@nilx-one/application";
 import type { EmbeddedMarketCatalogPort } from "@nilx-one/product-app/business";
 
 const VISIT = "market_visit";
@@ -42,13 +43,15 @@ export function createMarketReturn(
       "",
       url.pathname + url.search + url.hash,
     );
+    const trip = takeTrip();
+    const flight = trip === undefined ? {} : { trip };
     if (
       visitId === null ||
       orderId === null ||
       !/^[\w-]{43}$/.test(visitId) ||
       !/^[A-Za-z0-9._:-]{1,128}$/.test(orderId)
     ) {
-      return { confirmed: false };
+      return { confirmed: false, ...flight };
     }
     const token = authorization?.();
     try {
@@ -65,16 +68,59 @@ export function createMarketReturn(
           },
         },
       );
-      if (!response.ok) return { confirmed: false };
+      if (!response.ok) return { confirmed: false, ...flight };
       const body = (await response.json()) as {
         confirmed?: unknown;
         order_id?: unknown;
       };
       return {
         confirmed: body.confirmed === true && body.order_id === orderId,
+        ...flight,
       };
     } catch {
-      return { confirmed: false };
+      return { confirmed: false, ...flight };
     }
   };
+}
+
+const TRIP = "nilx-one.market.trip";
+const E7 = /^-?[0-9]{1,10}$/;
+
+/** The tab's one pending return route; read once, whatever it holds. */
+function takeTrip(): CourierPlan | undefined {
+  let raw: string | null;
+  try {
+    raw = sessionStorage.getItem(TRIP);
+    sessionStorage.removeItem(TRIP);
+  } catch {
+    return undefined;
+  }
+  if (raw === null) return undefined;
+  try {
+    const { version, plan } = JSON.parse(raw) as {
+      version?: unknown;
+      plan?: CourierPlan;
+    };
+    const point = (value: unknown) => {
+      const { longitude_e7, latitude_e7 } = (value ?? {}) as Record<
+        string,
+        unknown
+      >;
+      return (
+        typeof longitude_e7 === "string" &&
+        E7.test(longitude_e7) &&
+        typeof latitude_e7 === "string" &&
+        E7.test(latitude_e7)
+      );
+    };
+    return version === 1 &&
+      plan !== undefined &&
+      point(plan.origin) &&
+      point(plan.destination?.coordinate) &&
+      typeof plan.destination.pub_dress === "string"
+      ? plan
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
