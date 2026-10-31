@@ -1033,6 +1033,10 @@ export function AuthenticatedMapHomeView({
   const [sceneToasts, setSceneToasts] = useState<readonly StatusToastItem[]>(
     [],
   );
+  // Said once, on the page Market returned this tab to after a purchase.
+  const [marketReturnToast, setMarketReturnToast] = useState<
+    StatusToastItem | undefined
+  >(undefined);
   const sceneSequence = useRef(0);
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
@@ -1413,6 +1417,7 @@ export function AuthenticatedMapHomeView({
       : [statusToast]),
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
+    ...(marketReturnToast === undefined ? [] : [marketReturnToast]),
     ...(findToast === undefined ? [] : [findToast]),
     ...(manualBondFailedShown
       ? [
@@ -1850,6 +1855,35 @@ export function AuthenticatedMapHomeView({
       updateProgression(pubDress, markSettingsHintSeen);
     }
   }, [downloadPending, pubDress, section]);
+  // Only Identity's completion check may say a Special purchase went through.
+  useEffect(() => {
+    const confirmReturn = marketCatalog?.confirmReturn;
+    if (!confirmReturn) return;
+    let live = true;
+    void confirmReturn().then((result) => {
+      if (!live || result === undefined) return;
+      setMarketReturnToast(
+        result.confirmed
+          ? {
+              id: "market-return:confirmed",
+              kind: "active",
+              title: t("market.returnConfirmed"),
+              description: t("market.returnConfirmedDetail"),
+            }
+          : {
+              id: "market-return:unconfirmed",
+              kind: "warning",
+              title: t("market.returnUnconfirmed"),
+              description: t("market.returnUnconfirmedDetail"),
+            },
+      );
+    });
+    return () => {
+      live = false;
+    };
+    // The return is read once per page; a locale change must not ask again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketCatalog]);
   // "Saved" is a passing confirmation; what it paid is the dialog's to say.
   useEffect(() => {
     if (avaiaSavedToast === undefined) return;
@@ -3577,6 +3611,10 @@ export function AuthenticatedMapHomeView({
             }
             if (avaiaSavedToast?.id === id) {
               setAvaiaSavedToast(undefined);
+              return;
+            }
+            if (marketReturnToast?.id === id) {
+              setMarketReturnToast(undefined);
               return;
             }
             if (findToast?.id === id) {

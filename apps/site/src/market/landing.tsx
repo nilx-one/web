@@ -10,11 +10,16 @@ import {
   seededMarketDirectory,
   marketPointTitle,
   marketMapPoints,
+  type EmbeddedMarketOrder,
 } from "@nilx-one/product-app/business";
 import { useLocalization } from "@nilx-one/product-app/localization";
 import { mapDistanceMeters } from "@nilx-one/map-contract";
 import { createBusinessNavigation } from "../business-navigation";
-import { createNilxOneMarketCatalog } from "@nilx-one/market-host";
+import {
+  createMarketCheckout,
+  createNilxOneMarketCatalog,
+  marketReturnUrl,
+} from "@nilx-one/market-host";
 import {
   readMarketPointAddresses,
   resolveMarketPointPath,
@@ -38,6 +43,9 @@ interface Visit {
   seeds: string;
   seeds_authority: "client_display" | "identity_snapshot";
   avaia: { longitude: number; latitude: number };
+  /** Present only for a visit Identity can settle a purchase for. */
+  visit_id?: string;
+  return_path?: string;
 }
 
 export function MarketLanding() {
@@ -49,6 +57,7 @@ export function MarketLanding() {
     navigation: createBusinessNavigation("0xda-market"),
     geolocation: createBrowserGeolocation(),
     catalog: createNilxOneMarketCatalog(),
+    checkout: createMarketCheckout(),
   }));
   const [visit, setVisit] = useState<Visit>();
   const [directoryFailed, setDirectoryFailed] = useState(false);
@@ -105,7 +114,15 @@ export function MarketLanding() {
         ) {
           return;
         }
-        if (live) setVisit(context as Visit);
+        // A purchase needs the whole Identity binding, never part of it.
+        const { visit_id, return_path, ...view } = context as Visit;
+        const purchase =
+          typeof visit_id === "string" &&
+          /^[\w-]{43}$/.test(visit_id) &&
+          typeof return_path === "string"
+            ? { visit_id, return_path }
+            : {};
+        if (live) setVisit({ ...view, ...purchase });
       })
       .catch(() => {
         // Missing/expired sessions never block the public directory.
@@ -222,6 +239,7 @@ export function MarketLanding() {
       : [];
 
   const pinnedLabel = uk ? "Точка переходу" : "Selected visit point";
+  const purchaseVisit = visit?.visit_id;
 
   const content = (
     <section className="market-dock">
@@ -253,6 +271,19 @@ export function MarketLanding() {
                 origin: selected.coordinate,
                 started_at_ms: "0",
               }}
+              {...(purchaseVisit === undefined
+                ? {}
+                : {
+                    checkout: dependencies.checkout,
+                    onPurchased: (order: EmbeddedMarketOrder) =>
+                      location.assign(
+                        marketReturnUrl({
+                          returnPath: visit?.return_path ?? "/",
+                          visitId: order.visitId ?? purchaseVisit,
+                          orderId: order.id,
+                        }),
+                      ),
+                  })}
               onClose={() => navigate()}
             />
           ) : slug && (resolving || points.length === 0) ? (

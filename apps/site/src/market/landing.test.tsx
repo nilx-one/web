@@ -39,6 +39,12 @@ vi.mock("@nilx-one/market-host", () => ({
   createNilxOneMarketCatalog: () => ({
     load: vi.fn().mockResolvedValue([]),
   }),
+  createMarketCheckout: () => ({
+    offers: vi.fn().mockResolvedValue([]),
+    order: vi.fn(),
+    read: vi.fn(),
+  }),
+  marketReturnUrl: vi.fn(),
 }));
 vi.mock("@nilx-one/product-app/business", () => ({
   BusinessWorld: ({ content }: { content: ReactNode }) => <div>{content}</div>,
