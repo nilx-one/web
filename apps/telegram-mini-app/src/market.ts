@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { HostPort } from "@nilx-one/host-contract";
-import { createNilxOneMarketCatalog } from "@nilx-one/market-host";
+import {
+  createNilxOneMarketCatalog,
+  type MarketReturnCore,
+} from "@nilx-one/market-host";
 
 /**
  * The host's signed initData is its Bond credential. Without initData there
@@ -26,8 +29,10 @@ export function telegramAuthorization(
 export function createTelegramMarketCatalog(
   host: Pick<HostPort, "getSnapshot">,
   request: typeof fetch = fetch,
+  core?: MarketReturnCore,
 ) {
   return createNilxOneMarketCatalog(request, {
     authorization: () => telegramAuthorization(host),
+    ...(core === undefined ? {} : { core }),
   });
 }

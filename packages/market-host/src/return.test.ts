@@ -94,20 +94,35 @@ const stored = () => JSON.parse(sessionStorage.getItem(TRIP) ?? "null");
 const returnTo = (query: string) => history.replaceState(null, "", `/${query}`);
 const confirmed = () =>
   new Response(JSON.stringify({ confirmed: true, order_id: "o1" }));
+const unavailable = () => new Response("{}", { status: 503 });
+const DAY = 24 * 60 * 60_000;
+const RECHECK = [30_000, 120_000, 600_000];
+
+/** Core's answers; the route and policy rules themselves are tested in Core. */
+function core(flyable = true) {
+  return {
+    marketReturnTrip: vi.fn(async () => flyable),
+    marketReturnPolicy: vi.fn(async () => ({
+      pendingMs: DAY,
+      recheckMs: RECHECK,
+    })),
+  };
+}
 
 it("hands back the route home only with a confirmed purchase, once", async () => {
   storeTrip({ version: 1, plan });
   returnTo(`?market_visit=${visitId}&market_order=o1`);
   const request = vi.fn<typeof fetch>().mockResolvedValue(confirmed());
-  await expect(createMarketReturn(undefined, request)()).resolves.toEqual({
-    confirmed: true,
-    trip: plan,
-  });
+  const rules = core();
+  await expect(
+    createMarketReturn(undefined, request, rules)(),
+  ).resolves.toEqual({ confirmed: true, trip: plan });
+  expect(rules.marketReturnTrip).toHaveBeenCalledWith(plan);
   expect(sessionStorage.getItem(TRIP)).toBeNull();
 });
 
 it.each([
-  ["Identity is unavailable", () => new Response("{}", { status: 503 })],
+  ["Identity is unavailable", unavailable],
   [
     "the order does not match",
     () => new Response(JSON.stringify({ confirmed: true, order_id: "o2" })),
@@ -120,10 +135,10 @@ it.each([
     const request = vi
       .fn<typeof fetch>()
       .mockImplementation(async () => answer());
-    const confirm = createMarketReturn(undefined, request);
+    const confirm = createMarketReturn(undefined, request, core());
     await expect(confirm()).resolves.toEqual({
       confirmed: false,
-      retry: true,
+      recheckMs: RECHECK,
     });
     expect(stored()).toEqual({
       version: 1,
@@ -141,33 +156,33 @@ it.each([
   },
 );
 
-it("recovers a paid order after any number of failed checks within a day", async () => {
+it("recovers a paid order after any number of failed checks within Core's window", async () => {
   storeTrip({ version: 1, plan });
   returnTo(`?market_visit=${visitId}&market_order=o1`);
   const request = vi
     .fn<typeof fetch>()
-    .mockImplementation(async () => new Response("{}", { status: 503 }));
-  const confirm = createMarketReturn(undefined, request);
+    .mockImplementation(async () => unavailable());
+  const confirm = createMarketReturn(undefined, request, core());
   for (let i = 0; i < 10; i++)
     await expect(confirm()).resolves.toEqual({
       confirmed: false,
-      retry: true,
+      recheckMs: RECHECK,
     });
   request.mockResolvedValueOnce(confirmed());
   await expect(confirm()).resolves.toEqual({ confirmed: true, trip: plan });
 });
 
-it("lets an unconfirmed order go after a day but keeps the route", async () => {
+it("lets an unconfirmed order go after Core's window but keeps the route", async () => {
   const start = Date.now();
   const now = vi.spyOn(Date, "now").mockReturnValue(start);
   storeTrip({ version: 1, plan });
   returnTo(`?market_visit=${visitId}&market_order=o1`);
   const request = vi
     .fn<typeof fetch>()
-    .mockImplementation(async () => new Response("{}", { status: 503 }));
-  const confirm = createMarketReturn(undefined, request);
+    .mockImplementation(async () => unavailable());
+  const confirm = createMarketReturn(undefined, request, core());
   await confirm();
-  now.mockReturnValue(start + 24 * 60 * 60_000);
+  now.mockReturnValue(start + DAY);
   // The stale order is no longer asked about, and confirms nothing.
   await expect(confirm()).resolves.toBe(undefined);
   expect(stored()).toEqual({ version: 1, plan });
@@ -179,54 +194,43 @@ it("never asks about a forged return and leaves the route alone", async () => {
   storeTrip({ version: 1, plan });
   returnTo("?market_visit=short&market_order=o1");
   const request = vi.fn<typeof fetch>();
-  await expect(createMarketReturn(undefined, request)()).resolves.toEqual({
-    confirmed: false,
-  });
+  await expect(
+    createMarketReturn(undefined, request, core())(),
+  ).resolves.toEqual({ confirmed: false });
   expect(request).not.toHaveBeenCalled();
   expect(stored()).toEqual({ version: 1, plan });
 });
 
-it.each([
-  [
-    "an out-of-range longitude",
-    {
-      ...plan,
-      origin: { longitude_e7: "9999999999", latitude_e7: "504000000" },
-    },
-  ],
-  [
-    "an out-of-range latitude",
-    {
-      ...plan,
-      destination: {
-        ...plan.destination,
-        coordinate: { longitude_e7: "305131000", latitude_e7: "-900000001" },
-      },
-    },
-  ],
-  [
-    "a station of another owner",
-    {
-      ...plan,
-      destination: {
-        ...plan.destination,
-        id: { owner_pub_dress: "0x0sky", number: 0 },
-      },
-    },
-  ],
-  [
-    "a station address outside Market",
-    {
-      ...plan,
-      destination: { ...plan.destination, pub_dress: "javascript:alert(1)" },
-    },
-  ],
-])("drops a stored route with %s", async (_case, broken) => {
-  storeTrip({ version: 1, plan: broken });
+it("drops a route Core says may not be flown", async () => {
+  storeTrip({ version: 1, plan });
   returnTo(`?market_visit=${visitId}&market_order=o1`);
   const request = vi.fn<typeof fetch>().mockResolvedValue(confirmed());
+  await expect(
+    createMarketReturn(undefined, request, core(false))(),
+  ).resolves.toEqual({ confirmed: true });
+  expect(sessionStorage.getItem(TRIP)).toBeNull();
+});
+
+it("without Core confirms but neither flies nor keeps an unconfirmed order", async () => {
+  storeTrip({ version: 1, plan });
+  returnTo(`?market_visit=${visitId}&market_order=o1`);
+  const request = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async () => unavailable());
   await expect(createMarketReturn(undefined, request)()).resolves.toEqual({
-    confirmed: true,
+    confirmed: false,
   });
+  expect(stored()).toEqual({ version: 1, plan });
+  returnTo(`?market_visit=${visitId}&market_order=o1`);
+  request.mockResolvedValueOnce(confirmed());
+  const broken = {
+    marketReturnTrip: vi.fn(async () => {
+      throw new Error("runtime lost");
+    }),
+  };
+  await expect(
+    createMarketReturn(undefined, request, broken)(),
+  ).resolves.toEqual({ confirmed: true });
+  // A confirmed order needs nothing more of the tab: the route is cleared.
   expect(sessionStorage.getItem(TRIP)).toBeNull();
 });

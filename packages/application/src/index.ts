@@ -196,6 +196,7 @@ export {
   type CoreHolder,
   type CoreInventoryAnswer,
   type CoreLandmarkMapRequest,
+  type CoreMarketReturnPolicy,
   type CoreXpingRepairAnswer,
   type CoreInventoryCommand,
   type CoreRecipe,

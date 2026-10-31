@@ -4,4 +4,8 @@
 export { createNilxOneMarketCatalog, type MarketHostOptions } from "./catalog";
 export { createMarketVisit } from "./visit";
 export { createMarketCheckout } from "./checkout";
-export { createMarketReturn, marketReturnUrl } from "./return";
+export {
+  createMarketReturn,
+  marketReturnUrl,
+  type MarketReturnCore,
+} from "./return";

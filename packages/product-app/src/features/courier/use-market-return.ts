@@ -9,12 +9,6 @@ export type MarketReturnResult = NonNullable<
 >;
 
 /**
- * While this page is open, an order Identity could not confirm yet is asked
- * about again on this schedule; later page loads of the tab ask again too.
- */
-export const MARKET_RECHECK_MS: readonly number[] = [30_000, 120_000, 600_000];
-
-/**
  * What Identity says about the order this page was returned to Market with.
  * Undefined while asking, or when the page is no return.
  */
@@ -27,13 +21,18 @@ export function useMarketReturn(
     if (!confirmReturn) return;
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Core's schedule from the first answer bounds the rechecks of this page;
+    // later page loads of the tab ask again too.
+    let schedule: readonly number[] | undefined;
     const ask = (round: number) => {
       void confirmReturn().then(
         (answer) => {
           if (!live || answer === undefined) return;
           setResult(answer);
-          const delay = MARKET_RECHECK_MS[round];
-          if (!answer.confirmed && answer.retry && delay !== undefined)
+          schedule ??= answer.recheckMs;
+          const delay =
+            answer.recheckMs === undefined ? undefined : schedule?.[round];
+          if (!answer.confirmed && delay !== undefined)
             timer = setTimeout(() => ask(round + 1), delay);
         },
         () => {

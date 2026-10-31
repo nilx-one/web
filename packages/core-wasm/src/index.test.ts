@@ -740,6 +740,50 @@ describe("CoreWasmClient", () => {
     expect(older.courierDestination).toBeUndefined();
   });
 
+  it("asks Core whether a kept Market route may be flown, and its policy", async () => {
+    const seen: string[] = [];
+    let trip = '{"ok":true}';
+    let policy = '{"pending_ms":86400000,"recheck_ms":[30000,120000,600000]}';
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({
+          market_return_trip: (value) => {
+            seen.push(value);
+            return trip;
+          },
+          market_return_policy: () => policy,
+        }),
+    });
+    const plan = { origin: { longitude_e7: "1", latitude_e7: "2" } };
+    expect(bindings.marketReturnTrip?.(plan)).toBe(true);
+    expect(JSON.parse(seen[0]!)).toEqual(plan);
+    trip = '{"ok":false,"error":"not_market_station"}';
+    expect(bindings.marketReturnTrip?.(plan)).toBe(false);
+    trip = '{"ok":false,"error":"invalid"}';
+    expect(bindings.marketReturnTrip?.(plan)).toBe(false);
+    for (const bad of ['{"ok":false,"error":"other"}', '{"ok":"yes"}']) {
+      trip = bad;
+      expect(() => bindings.marketReturnTrip?.(plan)).toThrow();
+    }
+    expect(bindings.marketReturnPolicy?.()).toEqual({
+      pendingMs: 86_400_000,
+      recheckMs: [30_000, 120_000, 600_000],
+    });
+    for (const bad of [
+      '{"pending_ms":0,"recheck_ms":[]}',
+      '{"pending_ms":1,"recheck_ms":[-1]}',
+      '{"recheck_ms":[1]}',
+    ]) {
+      policy = bad;
+      expect(() => bindings.marketReturnPolicy?.()).toThrow();
+    }
+    const older = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime({}),
+    });
+    expect(older.marketReturnTrip).toBeUndefined();
+    expect(older.marketReturnPolicy).toBeUndefined();
+  });
+
   it("pays for an xPing repair with Core's answer and refuses a malformed one", async () => {
     let answer =
       '{"ok":true,"inventory":{"seeds":"9950"},"engine":{"energy_permille":1000,"at_ms":"5"},"outcome":{"seeds_spent":"50","seeds_gained":"0","experience":0}}';

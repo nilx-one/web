@@ -36,6 +36,7 @@ import type {
   CoreRuntimePort,
   CoreRuntimeStatus,
   CoreLandmarkMapRequest,
+  CoreMarketReturnPolicy,
   OrbCoordinate,
   OrbWorldInput,
   OrbWorldOrb,
@@ -63,6 +64,28 @@ const PUB_DRESS_LABEL_ERROR_CODES = new Set<CorePubDressLabelErrorCode>([
   "too_long",
   "suffix_too_long",
 ]);
+
+function decodeMarketReturnTrip(value: string): boolean {
+  const answer = JSON.parse(value) as { ok?: unknown; error?: unknown };
+  if (answer.ok === true) return true;
+  if (
+    answer.ok === false &&
+    (answer.error === "invalid" || answer.error === "not_market_station")
+  )
+    return false;
+  throw new Error("0x1 Core returned an invalid market return answer");
+}
+
+function decodeMarketReturnPolicy(value: string): CoreMarketReturnPolicy {
+  const { pending_ms: pendingMs, recheck_ms: recheckMs } = JSON.parse(
+    value,
+  ) as { pending_ms?: unknown; recheck_ms?: unknown };
+  const delay = (ms: unknown): ms is number =>
+    typeof ms === "number" && Number.isSafeInteger(ms) && ms > 0;
+  if (!delay(pendingMs) || !Array.isArray(recheckMs) || !recheckMs.every(delay))
+    throw new Error("0x1 Core returned an invalid market return policy");
+  return { pendingMs, recheckMs };
+}
 
 function decodePubDressLabelWire(value: string): CorePubDressLabelResult {
   if (value.startsWith("label:")) {
@@ -779,6 +802,8 @@ export interface CoreWasmBindings {
     origin: CourierCoordinate,
     projection: BusinessPointProjection,
   ): BusinessPoint;
+  marketReturnTrip?(trip: unknown): boolean;
+  marketReturnPolicy?(): CoreMarketReturnPolicy;
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
@@ -826,6 +851,9 @@ export interface GeneratedCoreWasmModule {
   subscription_status?(snapshot: string, owner: string, now_ms: string): string;
   /** Absent from a runtime built before Core's courier destination. */
   courier_destination?(request: string): string;
+  /** Absent from a runtime built before Core's Market return trip. */
+  market_return_trip?(trip: string): string;
+  market_return_policy?(): string;
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -1059,6 +1087,20 @@ export async function loadGeneratedCoreWasmBindings(
               projection,
             ),
         }),
+    ...(runtime.market_return_trip === undefined
+      ? {}
+      : {
+          marketReturnTrip: (trip: unknown) =>
+            decodeMarketReturnTrip(
+              runtime.market_return_trip!(JSON.stringify(trip ?? null)),
+            ),
+        }),
+    ...(runtime.market_return_policy === undefined
+      ? {}
+      : {
+          marketReturnPolicy: () =>
+            decodeMarketReturnPolicy(runtime.market_return_policy!()),
+        }),
     ...(runtime.landmark_map_view === undefined
       ? {}
       : {
@@ -1277,6 +1319,20 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.courierDestination === undefined)
       throw new CourierCapabilityUnavailable();
     return bindings.courierDestination(origin, projection);
+  }
+
+  public async marketReturnTrip(trip: unknown): Promise<boolean> {
+    const bindings = await this.loadBindings();
+    if (bindings.marketReturnTrip === undefined)
+      throw new Error("0x1 Core Wasm market return binding is missing");
+    return bindings.marketReturnTrip(trip);
+  }
+
+  public async marketReturnPolicy(): Promise<CoreMarketReturnPolicy> {
+    const bindings = await this.loadBindings();
+    if (bindings.marketReturnPolicy === undefined)
+      throw new Error("0x1 Core Wasm market return binding is missing");
+    return bindings.marketReturnPolicy();
   }
 
   public async subscriptionStatus(

@@ -5,11 +5,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import type { CourierPlan } from "@nilx-one/application";
 import type { EmbeddedMarketCatalogPort } from "./market-dock";
-import {
-  MARKET_RECHECK_MS,
-  useMarketReturn,
-  useReturnFlight,
-} from "./use-market-return";
+import { useMarketReturn, useReturnFlight } from "./use-market-return";
+
+const RECHECK = [30_000, 120_000, 600_000];
 
 const trip: CourierPlan = {
   origin: { longitude_e7: "305000000", latitude_e7: "504000000" },
@@ -129,8 +127,8 @@ it("asks again on a bounded schedule and flies once Identity confirms", async ()
   try {
     const confirmReturn = vi
       .fn()
-      .mockResolvedValueOnce({ confirmed: false, retry: true })
-      .mockResolvedValueOnce({ confirmed: false, retry: true })
+      .mockResolvedValueOnce({ confirmed: false, recheckMs: RECHECK })
+      .mockResolvedValueOnce({ confirmed: false, recheckMs: RECHECK })
       .mockResolvedValueOnce({ confirmed: true, trip });
     const returnHome = vi.fn();
     const hook = handoff(confirmReturn, returnHome);
@@ -140,15 +138,15 @@ it("asks again on a bounded schedule and flies once Identity confirms", async ()
     });
     expect(hook.result.current.notice).toEqual({
       confirmed: false,
-      retry: true,
+      recheckMs: RECHECK,
     });
     expect(returnHome).not.toHaveBeenCalled();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(MARKET_RECHECK_MS[0]!);
+      await vi.advanceTimersByTimeAsync(RECHECK[0]!);
     });
     expect(confirmReturn).toHaveBeenCalledTimes(2);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(MARKET_RECHECK_MS[1]!);
+      await vi.advanceTimersByTimeAsync(RECHECK[1]!);
     });
     expect(confirmReturn).toHaveBeenCalledTimes(3);
     expect(returnHome).toHaveBeenCalledOnce();
@@ -163,13 +161,13 @@ it("stops asking within the page after the last scheduled recheck", async () => 
   try {
     const confirmReturn = vi
       .fn()
-      .mockResolvedValue({ confirmed: false, retry: true });
+      .mockResolvedValue({ confirmed: false, recheckMs: RECHECK });
     handoff(confirmReturn, vi.fn());
-    for (const delay of [...MARKET_RECHECK_MS, 3_600_000])
+    for (const delay of [...RECHECK, 3_600_000])
       await act(async () => {
         await vi.advanceTimersByTimeAsync(delay);
       });
-    expect(confirmReturn).toHaveBeenCalledTimes(MARKET_RECHECK_MS.length + 1);
+    expect(confirmReturn).toHaveBeenCalledTimes(RECHECK.length + 1);
   } finally {
     vi.useRealTimers();
   }
