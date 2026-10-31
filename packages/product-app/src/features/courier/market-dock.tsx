@@ -163,8 +163,6 @@ export function MarketDock({
   const [purchase, setPurchase] = useState<PurchaseState>({ kind: "idle" });
   // One key per chosen offer: a retry after a lost reply replays the order.
   const attempt = useRef<{ sku: string; key: string }>(undefined);
-  const purchased = useRef(onPurchased);
-  purchased.current = onPurchased;
 
   useEffect(() => {
     if (!checkout) return;
@@ -203,11 +201,12 @@ export function MarketDock({
       ? state.products.find((product) => product.id === selectedId)
       : undefined;
   const offer = selected && offers.find((item) => item.sku === selected.id);
-
-  useEffect(() => {
+  // Another product is another purchase: its attempt and outcome start over.
+  const select = (id: string | undefined) => {
     attempt.current = undefined;
     setPurchase({ kind: "idle" });
-  }, [selectedId]);
+    setSelectedId(id);
+  };
 
   const buy = async (chosen: EmbeddedMarketOffer) => {
     if (!checkout) return;
@@ -235,7 +234,7 @@ export function MarketDock({
       attempt.current = undefined;
       if (order.status === "fulfilled") {
         setPurchase({ kind: "purchased" });
-        purchased.current?.(order);
+        onPurchased?.(order);
       } else {
         setPurchase({ kind: "rejected", code: order.rejectionCode });
       }
@@ -267,7 +266,7 @@ export function MarketDock({
                 type="button"
                 onClick={() => {
                   setState({ kind: "loading" });
-                  setSelectedId(undefined);
+                  select(undefined);
                   setRetry((value) => value + 1);
                 }}
               >
@@ -287,9 +286,7 @@ export function MarketDock({
                   key={product.id}
                   aria-pressed={selectedId === product.id}
                   onClick={() =>
-                    setSelectedId((id) =>
-                      id === product.id ? undefined : product.id,
-                    )
+                    select(selectedId === product.id ? undefined : product.id)
                   }
                 >
                   <strong>{product.name}</strong>
