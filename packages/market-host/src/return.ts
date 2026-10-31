@@ -5,6 +5,10 @@ import type { EmbeddedMarketCatalogPort } from "@nilx-one/product-app/business";
 
 const VISIT = "market_visit";
 const ORDER = "market_order";
+const TRIP = "nilx-one.market.trip";
+// An unconfirmed return is asked again on this tab's next page loads, a few
+// times, because Identity may only have been briefly unreachable.
+const RETRIES = 3;
 
 /** Where Market sends the tab back to after a fulfilled order. */
 export function marketReturnUrl(input: {
@@ -22,9 +26,23 @@ export function marketReturnUrl(input: {
   return url.href;
 }
 
+interface Pending {
+  readonly visitId: string;
+  readonly orderId: string;
+  readonly attempts: number;
+}
+
+interface TripRecord {
+  readonly version: 1;
+  readonly plan: CourierPlan;
+  readonly pending?: Pending;
+}
+
 /**
  * The 0x1 side of the return flight. The query names an order; only Identity's
- * completion check, tied to this Bond's visit and receipt, confirms it.
+ * completion check, tied to this Bond's visit and receipt, confirms it. The
+ * tab's route home is handed back only with a confirmed purchase; until then
+ * it stays, with the order to ask about again.
  */
 export function createMarketReturn(
   authorization?: () => string | undefined,
@@ -32,95 +50,183 @@ export function createMarketReturn(
 ): NonNullable<EmbeddedMarketCatalogPort["confirmReturn"]> {
   return async () => {
     const url = new URL(location.href);
-    const visitId = url.searchParams.get(VISIT);
-    const orderId = url.searchParams.get(ORDER);
-    if (visitId === null && orderId === null) return undefined;
-    // A reload or shared link must not ask again for the same order.
-    url.searchParams.delete(VISIT);
-    url.searchParams.delete(ORDER);
-    history.replaceState(
-      history.state,
-      "",
-      url.pathname + url.search + url.hash,
-    );
-    const trip = takeTrip();
-    const flight = trip === undefined ? {} : { trip };
-    if (
-      visitId === null ||
-      orderId === null ||
-      !/^[\w-]{43}$/.test(visitId) ||
-      !/^[A-Za-z0-9._:-]{1,128}$/.test(orderId)
-    ) {
-      return { confirmed: false, ...flight };
-    }
-    const token = authorization?.();
-    try {
-      const response = await request(
-        `/api/v1/identity/market-return?visit_id=${encodeURIComponent(visitId)}&order_id=${encodeURIComponent(orderId)}`,
-        {
-          credentials: "same-origin",
-          cache: "no-store",
-          redirect: "error",
-          signal: AbortSignal.timeout(15_000),
-          headers: {
-            Accept: "application/json",
-            ...(token ? { authorization: token } : {}),
-          },
-        },
+    const queried = url.searchParams.has(VISIT) || url.searchParams.has(ORDER);
+    const record = readTrip();
+    let ask: Pending;
+    if (queried) {
+      const visitId = url.searchParams.get(VISIT);
+      const orderId = url.searchParams.get(ORDER);
+      // A reload or shared link must not ask again for the same order.
+      url.searchParams.delete(VISIT);
+      url.searchParams.delete(ORDER);
+      history.replaceState(
+        history.state,
+        "",
+        url.pathname + url.search + url.hash,
       );
-      if (!response.ok) return { confirmed: false, ...flight };
-      const body = (await response.json()) as {
-        confirmed?: unknown;
-        order_id?: unknown;
-      };
-      return {
-        confirmed: body.confirmed === true && body.order_id === orderId,
-        ...flight,
-      };
-    } catch {
-      return { confirmed: false, ...flight };
+      if (
+        visitId === null ||
+        orderId === null ||
+        !validReturn(visitId, orderId)
+      )
+        return { confirmed: false };
+      ask = { visitId, orderId, attempts: 0 };
+    } else if (record?.pending) {
+      ask = record.pending;
+    } else {
+      return undefined;
     }
+
+    const confirmed = await confirm(ask, authorization?.(), request);
+    if (confirmed) {
+      removeTrip();
+      return record ? { confirmed, trip: record.plan } : { confirmed };
+    }
+    if (record) {
+      const attempts = ask.attempts + 1;
+      writeTrip(
+        attempts < RETRIES
+          ? { ...record, pending: { ...ask, attempts } }
+          : { version: 1, plan: record.plan },
+      );
+    }
+    return { confirmed };
   };
 }
 
-const TRIP = "nilx-one.market.trip";
-const E7 = /^-?[0-9]{1,10}$/;
+function validReturn(visitId: string, orderId: string): boolean {
+  return (
+    /^[\w-]{43}$/.test(visitId) && /^[A-Za-z0-9._:-]{1,128}$/.test(orderId)
+  );
+}
 
-/** The tab's one pending return route; read once, whatever it holds. */
-function takeTrip(): CourierPlan | undefined {
+async function confirm(
+  { visitId, orderId }: Pending,
+  token: string | undefined,
+  request: typeof fetch,
+): Promise<boolean> {
+  try {
+    const response = await request(
+      `/api/v1/identity/market-return?visit_id=${encodeURIComponent(visitId)}&order_id=${encodeURIComponent(orderId)}`,
+      {
+        credentials: "same-origin",
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+        headers: {
+          Accept: "application/json",
+          ...(token ? { authorization: token } : {}),
+        },
+      },
+    );
+    if (!response.ok) return false;
+    const body = (await response.json()) as {
+      confirmed?: unknown;
+      order_id?: unknown;
+    };
+    return body.confirmed === true && body.order_id === orderId;
+  } catch {
+    return false;
+  }
+}
+
+const E7 = /^-?[0-9]{1,10}$/;
+const STATION = /^0xda-market-[\p{L}\p{N}][\p{L}\p{N}_-]{0,63}$/u;
+
+function coordinate(value: unknown): boolean {
+  const { longitude_e7, latitude_e7 } = (value ?? {}) as Record<
+    string,
+    unknown
+  >;
+  if (
+    typeof longitude_e7 !== "string" ||
+    typeof latitude_e7 !== "string" ||
+    !E7.test(longitude_e7) ||
+    !E7.test(latitude_e7)
+  ) {
+    return false;
+  }
+  const longitude = Number(longitude_e7) / 1e7;
+  const latitude = Number(latitude_e7) / 1e7;
+  return Math.abs(longitude) <= 180 && Math.abs(latitude) <= 90;
+}
+
+function station(value: unknown): boolean {
+  const { id, pub_dress } = (value ?? {}) as {
+    id?: { owner_pub_dress?: unknown; number?: unknown };
+    pub_dress?: unknown;
+  };
+  return (
+    id?.owner_pub_dress === "0xda-market" &&
+    Number.isSafeInteger(id.number) &&
+    typeof pub_dress === "string" &&
+    STATION.test(pub_dress)
+  );
+}
+
+function isPending(value: unknown): value is Pending {
+  const { visitId, orderId, attempts } = (value ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return (
+    typeof visitId === "string" &&
+    typeof orderId === "string" &&
+    validReturn(visitId, orderId) &&
+    typeof attempts === "number" &&
+    Number.isSafeInteger(attempts) &&
+    attempts >= 0 &&
+    attempts < RETRIES
+  );
+}
+
+/** The tab's route out to Market if it is a real one; a broken one is dropped. */
+function readTrip(): TripRecord | undefined {
   let raw: string | null;
   try {
     raw = sessionStorage.getItem(TRIP);
-    sessionStorage.removeItem(TRIP);
   } catch {
     return undefined;
   }
   if (raw === null) return undefined;
   try {
-    const { version, plan } = JSON.parse(raw) as {
+    const record = JSON.parse(raw) as {
       version?: unknown;
       plan?: CourierPlan;
+      pending?: unknown;
     };
-    const point = (value: unknown) => {
-      const { longitude_e7, latitude_e7 } = (value ?? {}) as Record<
-        string,
-        unknown
-      >;
-      return (
-        typeof longitude_e7 === "string" &&
-        E7.test(longitude_e7) &&
-        typeof latitude_e7 === "string" &&
-        E7.test(latitude_e7)
-      );
-    };
-    return version === 1 &&
-      plan !== undefined &&
-      point(plan.origin) &&
-      point(plan.destination?.coordinate) &&
-      typeof plan.destination.pub_dress === "string"
-      ? plan
-      : undefined;
+    const plan = record.plan;
+    if (
+      record.version !== 1 ||
+      plan === undefined ||
+      !coordinate(plan.origin) ||
+      !coordinate(plan.destination?.coordinate) ||
+      !station(plan.destination)
+    ) {
+      removeTrip();
+      return undefined;
+    }
+    return isPending(record.pending)
+      ? { version: 1, plan, pending: record.pending }
+      : { version: 1, plan };
   } catch {
+    removeTrip();
     return undefined;
+  }
+}
+
+function writeTrip(record: TripRecord) {
+  try {
+    sessionStorage.setItem(TRIP, JSON.stringify(record));
+  } catch {
+    // Without storage the order is simply not asked about again.
+  }
+}
+
+function removeTrip() {
+  try {
+    sessionStorage.removeItem(TRIP);
+  } catch {
+    // Nothing was kept.
   }
 }

@@ -11,6 +11,7 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useCourier } from "../courier/use-courier";
+import { useMarketReturn, useReturnFlight } from "../courier/use-market-return";
 import { CourierOffer } from "../courier/courier-offer";
 import {
   MarketDock,
@@ -30,7 +31,6 @@ import {
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
-  type CourierPlan,
   type XpingEngineAccessPort,
   type CoreRuntimePort,
   type BusinessStationAccessPort,
@@ -1035,11 +1035,7 @@ export function AuthenticatedMapHomeView({
     [],
   );
   // Said once, on the page Market returned this tab to after a purchase.
-  const [marketReturnToast, setMarketReturnToast] = useState<
-    StatusToastItem | undefined
-  >(undefined);
-  // The route this tab flew out to Market on, flown home once xPing can fly.
-  const homewardTrip = useRef<CourierPlan | undefined>(undefined);
+  const marketReturn = useMarketReturn(marketCatalog);
   const sceneSequence = useRef(0);
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
@@ -1420,7 +1416,23 @@ export function AuthenticatedMapHomeView({
       : [statusToast]),
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
-    ...(marketReturnToast === undefined ? [] : [marketReturnToast]),
+    ...(marketReturn.notice === undefined
+      ? []
+      : [
+          marketReturn.notice.confirmed
+            ? {
+                id: "market-return:confirmed",
+                kind: "active" as const,
+                title: t("market.returnConfirmed"),
+                description: t("market.returnConfirmedDetail"),
+              }
+            : {
+                id: "market-return:unconfirmed",
+                kind: "warning" as const,
+                title: t("market.returnUnconfirmed"),
+                description: t("market.returnUnconfirmedDetail"),
+              },
+        ]),
     ...(findToast === undefined ? [] : [findToast]),
     ...(manualBondFailedShown
       ? [
@@ -1858,36 +1870,6 @@ export function AuthenticatedMapHomeView({
       updateProgression(pubDress, markSettingsHintSeen);
     }
   }, [downloadPending, pubDress, section]);
-  // Only Identity's completion check may say a Special purchase went through.
-  useEffect(() => {
-    const confirmReturn = marketCatalog?.confirmReturn;
-    if (!confirmReturn) return;
-    let live = true;
-    void confirmReturn().then((result) => {
-      if (!live || result === undefined) return;
-      homewardTrip.current = result.trip;
-      setMarketReturnToast(
-        result.confirmed
-          ? {
-              id: "market-return:confirmed",
-              kind: "active",
-              title: t("market.returnConfirmed"),
-              description: t("market.returnConfirmedDetail"),
-            }
-          : {
-              id: "market-return:unconfirmed",
-              kind: "warning",
-              title: t("market.returnUnconfirmed"),
-              description: t("market.returnUnconfirmedDetail"),
-            },
-      );
-    });
-    return () => {
-      live = false;
-    };
-    // The return is read once per page; a locale change must not ask again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marketCatalog]);
   // "Saved" is a passing confirmation; what it paid is the dialog's to say.
   useEffect(() => {
     if (avaiaSavedToast === undefined) return;
@@ -2019,6 +2001,11 @@ export function AuthenticatedMapHomeView({
   // from this device's inventory, which also gets the starter Seeds once.
   const xping = useXpingEngine(pubDress, xpingEngine, findItems);
   useStarterSeeds(pubDress, findItems);
+  const courierSuspended =
+    guideActive ||
+    achievementDialog !== undefined ||
+    systemInformer.activeId !== undefined ||
+    !startup.ready;
   const courier = useCourier({
     renderer,
     origin: observedPosition,
@@ -2028,22 +2015,10 @@ export function AuthenticatedMapHomeView({
     engine: xpingEngine,
     cue,
     feedback,
-    suspended:
-      guideActive ||
-      achievementDialog !== undefined ||
-      systemInformer.activeId !== undefined ||
-      !startup.ready,
-  }); // Back from Market: xPing flies home along the route it left on. A start
-  // made before the flyover is ready is ignored, so this waits for one.
-  useEffect(() => {
-    const trip = homewardTrip.current;
-    if (trip === undefined) return;
-    if (courier.flyover.active) {
-      homewardTrip.current = undefined;
-      return;
-    }
-    courier.returnHome(trip);
-  }, [courier, marketReturnToast]);
+    suspended: courierSuspended,
+  });
+  // Back from Market with a confirmed purchase, xPing flies home.
+  useReturnFlight(marketReturn.result, !courierSuspended, courier.returnHome);
 
   useSystemInformerBlock(
     !startup.ready ||
@@ -3628,8 +3603,8 @@ export function AuthenticatedMapHomeView({
               setAvaiaSavedToast(undefined);
               return;
             }
-            if (marketReturnToast?.id === id) {
-              setMarketReturnToast(undefined);
+            if (id.startsWith("market-return:")) {
+              marketReturn.dismiss();
               return;
             }
             if (findToast?.id === id) {
