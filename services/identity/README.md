@@ -65,6 +65,65 @@ Discord identity requests use `Authorization: discord <access_token>`. The Activ
 
 Availability is advisory. The database insert remains the only collision boundary, so a client must still handle a candidate becoming unavailable between the check and registration.
 
+## aiaiaiai Identity issuer (`auth.aiaiaiai.org`)
+
+Contract 17. This service is also the issuer every product signs people in
+through, on one origin, so a password manager keeps one credential for all
+of them ([unified auth](../../docs/unified-auth.md)). It speaks OpenID
+Connect: authorization code with PKCE (S256 only), a **pairwise** `sub` per
+client (Core's `client_pairwise_subject`, never the private subject) and
+`id_token`s signed with **EdDSA** (Ed25519).
+
+- `GET /.well-known/openid-configuration` and `GET /.well-known/jwks.json`.
+- `GET /authorize` renders the sign-in page on the server; it needs no
+  JavaScript. The person names a `pub_dress`; an existing one asks for its
+  password, a free one creates the account **with** a password. Only the
+  issuer host (`Host` equal to `AIAIAIAI_ISSUER`'s) is served. An unknown
+  client or an unregistered redirect URI stops on an error page and never
+  redirects. The request travels through the page signed and bound to the
+  browser by `__Host-aiaiaiai_authz`, so a form posted from elsewhere is
+  refused. `__Host-aiaiaiai_bond` remembers the last address, as a hint only.
+- `POST /token` authenticates the client (Basic or form secret, compared by
+  SHA-256), spends the code on its first exchange right or wrong, checks the
+  redirect URI and the PKCE verifier, and answers an `id_token` that lives
+  five minutes. Codes live sixty seconds in process memory; a restart only
+  makes the person sign in again. The `access_token` OIDC requires is
+  accepted by nothing yet.
+
+An unfinished Bond, one without an active password, cannot sign in here.
+There is no issuer session yet: every product sign-in asks for the password.
+
+Settings, all three or none: `AIAIAIAI_ISSUER` (https origin),
+`AIAIAIAI_ISSUER_SIGNING_KEY` (base64url 32-byte Ed25519 seed, server-only)
+and `AIAIAIAI_ISSUER_CLIENTS` (a JSON array of `client_id`, `name`, exact
+`redirect_uris`, `secret_sha256`, and `pub_dress` to allow that scope).
+
+### The 0x1 site as a client
+
+0x1 reaches the issuer only through Core: `SignInFlow` in `nilx-one/core`
+(`docs/aiaiaiai-sign-in.md`) forms the request, holds the signed
+`__Host-0x1_aiaiaiai` transaction cookie, checks `state` and the return path,
+exchanges the code, verifies the token, resolves the Bond from 0x1's own
+`aiaiaiai_accounts` table and names any failure. These routes only forward
+the query and `Cookie` header to it and apply the redirect and `Set-Cookie`
+values it answers:
+
+- `GET /api/v1/auth/aiaiaiai/config` answers `{ "enabled", "issuer" }`.
+- `GET /api/v1/auth/aiaiaiai/start?return=/path` → `SignInFlow::start`.
+- `GET /api/v1/auth/aiaiaiai/callback` → `SignInFlow::finish`; a sign-in
+  opens the ordinary `__Host-0x1_session` and returns to the path Core
+  approved, a failure returns to `/?auth_error=` with Core's code.
+
+Settings, both or neither: `AIAIAIAI_SIGN_IN_ISSUER` and
+`AIAIAIAI_SIGN_IN_CLIENT_SECRET`; optional `AIAIAIAI_SIGN_IN_CLIENT_ID`
+(default `nilx-one`) and `AIAIAIAI_SIGN_IN_BACKCHANNEL` for reaching `/token`
+and the keys inside the deployment. The callback is `PUBLIC_ORIGIN` +
+`/api/v1/auth/aiaiaiai/callback`.
+
+Both are off until configured. The runtime environment file, the public
+route for `auth.aiaiaiai.org` and the site's "Sign in" button are separate
+steps.
+
 ## Bond roles and location modes
 
 All hexadecimal prefixes `0`–`f` are available for new human registrations.
@@ -251,7 +310,8 @@ wallets and activating the Market catalog are separate, authorized steps.
 
 ## Secret boundary
 
-`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `TELOXIDE_TOKEN`,
+`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `AIAIAIAI_ISSUER_SIGNING_KEY`,
+`AIAIAIAI_SIGN_IN_CLIENT_SECRET`, `TELOXIDE_TOKEN`,
 `DISCORD_CLIENT_SECRET`, `SPEECH_INGEST_TOKEN`, and `PARTNER_LOOKUP_TOKEN` are server-only runtime secrets. The native authentication
 secret and password pepper must be independent values of at least 32 bytes. None
 may be exposed through Vite, browser configuration, repository files, build

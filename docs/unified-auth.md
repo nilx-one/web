@@ -3,7 +3,7 @@
 
 # One sign-in page: `auth.aiaiaiai.org`
 
-Status: v0 contract proposal, nothing implemented yet
+Status: v1 issuer and the 0x1 client routes implemented (contract 17), not deployed
 Owner: Identity service (`services/identity`)
 Parent design: [ECO-0001](https://github.com/aiaiaiai-org/.github/blob/main/ecosystem/identity/DESIGN.md)
 

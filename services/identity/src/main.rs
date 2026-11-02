@@ -20,9 +20,9 @@ use identity_bot::{
     GithubEvidenceConfig, GithubEvidenceRepository, IdentityProvider, IdentityRecord,
     IdentityRepository, NativeAuthConfig, OAuthClientCredentials, PartnerLookupConfig,
     PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
-    TelegramInitDataVerifier, TelegramLocationIntents, api, browser_web_auth, business_command,
-    github_evidence, location_control_router, partner_account_router, partner_lookup_router,
-    provider_self_service_router, public_api,
+    TelegramInitDataVerifier, TelegramLocationIntents, aiaiaiai_sign_in, api, browser_web_auth,
+    business_command, github_evidence, issuer, location_control_router, partner_account_router,
+    partner_lookup_router, provider_self_service_router, public_api,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -357,17 +357,27 @@ async fn main() {
         .menu_button(MenuButton::Commands)
         .await
         .expect("Telegram default chat menu button must open the command list");
+    let browser_oauth = BrowserOAuthConfig::new(
+        public_origin.clone(),
+        telegram_browser_oauth,
+        discord_credentials,
+        github_browser_oauth,
+    );
+    let browser_oauth = match aiaiaiai_sign_in_from_environment(&public_origin) {
+        Some(client) => browser_oauth.with_aiaiaiai_sign_in(aiaiaiai_sign_in::SignInFlow::new(
+            client,
+            native_auth.secret_digester(),
+        )),
+        None => browser_oauth,
+    };
     let provider_api = browser_web_auth::router(
         repository.clone(),
         provider_links.clone(),
         native_auth.clone(),
-        BrowserOAuthConfig::new(
-            public_origin.clone(),
-            telegram_browser_oauth,
-            discord_credentials,
-            github_browser_oauth,
-        ),
+        browser_oauth,
     );
+    let issuer_api = issuer_from_environment()
+        .map(|config| issuer::router(config, repository.clone(), native_auth.clone()));
     let github_evidence_api = github_evidence::router(
         repository.clone(),
         github_evidence_connections,
@@ -441,6 +451,10 @@ async fn main() {
     .merge(session_activation_api)
     .merge(github_evidence_api)
     .merge(public_api);
+    let api = match issuer_api {
+        Some(issuer_api) => api.merge(issuer_api),
+        None => api,
+    };
     let api = match speech_api {
         Some(speech_api) => api.merge(speech_api),
         None => api,
@@ -511,6 +525,65 @@ async fn main() {
         result = axum::serve(listener, api) => {
             result.expect("identity HTTP server must remain available");
         }
+    }
+}
+
+/// The aiaiaiai Identity issuer (`auth.aiaiaiai.org`). All three settings or
+/// none: a half-configured issuer must not start.
+fn issuer_from_environment() -> Option<issuer::IssuerConfig> {
+    let read = |key: &str| env::var(key).ok().filter(|value| !value.is_empty());
+    match (
+        read("AIAIAIAI_ISSUER"),
+        read("AIAIAIAI_ISSUER_SIGNING_KEY"),
+        read("AIAIAIAI_ISSUER_CLIENTS"),
+    ) {
+        (Some(origin), Some(key), Some(clients)) => {
+            let config = issuer::IssuerConfig::new(&origin, &key, &clients)
+                .unwrap_or_else(|error| panic!("{error}"));
+            info!(issuer = %origin, "aiaiaiai Identity issuer enabled");
+            Some(config)
+        }
+        (None, None, None) => {
+            info!("aiaiaiai Identity issuer is not configured");
+            None
+        }
+        _ => panic!(
+            "AIAIAIAI_ISSUER, AIAIAIAI_ISSUER_SIGNING_KEY and AIAIAIAI_ISSUER_CLIENTS must be configured together"
+        ),
+    }
+}
+
+/// 0x1 as a client of aiaiaiai Identity, through Core's `aiaiaiai_sign_in`.
+fn aiaiaiai_sign_in_from_environment(
+    public_origin: &Url,
+) -> Option<aiaiaiai_sign_in::SignInClient> {
+    let read = |key: &str| env::var(key).ok().filter(|value| !value.is_empty());
+    match (
+        read("AIAIAIAI_SIGN_IN_ISSUER"),
+        read("AIAIAIAI_SIGN_IN_CLIENT_SECRET"),
+    ) {
+        (Some(issuer), Some(secret)) => {
+            let client_id =
+                read("AIAIAIAI_SIGN_IN_CLIENT_ID").unwrap_or_else(|| "nilx-one".to_owned());
+            let redirect_uri = public_origin
+                .join("/api/v1/auth/aiaiaiai/callback")
+                .expect("the callback path stays on the public origin");
+            let backchannel = read("AIAIAIAI_SIGN_IN_BACKCHANNEL");
+            let config = aiaiaiai_sign_in::SignInClientConfig::new(
+                &issuer,
+                backchannel.as_deref(),
+                &client_id,
+                &secret,
+                redirect_uri.as_str(),
+            )
+            .unwrap_or_else(|error| panic!("aiaiaiai sign-in configuration: {error}"));
+            info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
+            Some(aiaiaiai_sign_in::SignInClient::new(config))
+        }
+        (None, None) => None,
+        _ => panic!(
+            "AIAIAIAI_SIGN_IN_ISSUER and AIAIAIAI_SIGN_IN_CLIENT_SECRET must be configured together"
+        ),
     }
 }
 
