@@ -3,8 +3,8 @@
 
 # Identity boundary: the identity service leaves the game world
 
-Status: accepted direction (owner, 2026-11-02). Plan only: no code, no data
-moves. Each step below is its own change and some need separate authorization.
+Status: accepted direction (owner, 2026-11-02), with a full wipe of existing
+users authorized. Plan only: no code, no data moves. Each step below is its own change and some need separate authorization.
 Parent designs: [ECO-0001](https://github.com/aiaiaiai-org/.github/blob/main/ecosystem/identity/DESIGN.md)
 and [`docs/unified-auth.md`](unified-auth.md).
 
@@ -84,35 +84,51 @@ change when this lands, not before.
 - The link from `sub` to a Bond is created on first sign-in (as now) and never
   by matching `pub_dress`, which is public and mutable.
 
+## Decisions taken since the first draft (owner, 2026-11-02)
+
+- **Wipe instead of migration.** The owner authorizes a full wipe of existing
+  users. The identity database is not split. Existing users receive a message
+  from the Telegram bot beforehand, explaining that the wipe is needed to
+  deliver the new large feature in full. The text and the timing are approved
+  by the owner before anything is sent, and the wipe itself runs with an
+  explicit go-ahead on the day.
+- **One admin role: `gm` (game admin).** It replaces the current admin roles.
+  It belongs to the game and lives with 0x1, not in identity.
+- **The new system is not in `nilx-one/core`.** It goes into a new repository
+  under `aiaiaiai-org`. The repository's name is not chosen yet.
+
 ## Open questions (need an answer before code)
 
-1. **Cross-server path.** nilx.one (edge-prod-1) now calls identity on
-   edge-prod-2 at every sign-in. Contracts forbid routes to a workload on
-   another server. Options: a private tunnel between the two servers (identity
-   is not exposed), or an explicit contract rule for internal links. The tunnel
-   is the recommendation.
-2. **Data move.** The identity database on edge-prod-1 holds every person. Its
-   split between identity and 0x1 is a migration with a backup, a rehearsal on a
-   copy, a window and a rollback. It runs only with explicit authorization.
-3. **Who owns the 0x1 side of `aiaiaiai_accounts`.** Proposed: 0x1, keyed by
+1. **Cross-server path.** nilx.one (edge-prod-1) calls identity on edge-prod-2
+   at every sign-in, and contracts forbid routes to another server. A private
+   tunnel is the recommendation; the owner has not chosen it yet.
+2. **What "modern" means for the new feature.** Stack, hosting and the first
+   scope of the new repository.
+3. **Repository name** under `aiaiaiai-org`, and whether it is created by the
+   owner, since the session cannot create repositories.
+4. **Who owns the 0x1 side of `aiaiaiai_accounts`.** Proposed: 0x1, keyed by
    `(issuer, sub)`, as built in nilx-one/core#91.
-4. **Admin roles.** Which roles gate game features and move to 0x1.
+5. **Services README.** `services/identity/README.md` still describes seeds and
+   game admins as identity's. It changes when the code changes, not before.
 
 ## Order of work
 
 1. This document, reviewed.
-2. Core: a `game` boundary in the crate layout, so the identity crate stops
+2. The new repository under `aiaiaiai-org` with its first scope (after the
+   answers above).
+3. Core: a `game` boundary in the crate layout, so the identity crate stops
    depending on game types. No behavior change.
-3. 0x1 gets its own service and database; first its read path to identity by
-   `sub`.
-4. Seeds to 0x1, with Market calling 0x1. Its own change with its own tests.
-5. Data migration, only after 1–4 are verified on a copy and authorized.
-6. Remove the game code from identity.
+4. The game side reads identity by `sub`, with the single `gm` role.
+5. Seeds to the new game side, with Market calling it. Its own change with its
+   own tests.
+6. The wipe, with the Telegram message sent first and the owner's go-ahead on
+   the day.
+7. Remove the game code from identity.
 
 Each step is a separate PR. Deploy is separate and needs explicit
 authorization.
 
 ## Not decided here
 
-The tunnel's technology, the 0x1 service's name and layout, the exact fields of
-the identity projection, and the timing of step 5.
+The tunnel's technology, the new repository's name and stack, the exact fields of
+the identity projection, and the date of the wipe.
