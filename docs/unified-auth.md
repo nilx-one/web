@@ -8,13 +8,15 @@ Owner: Identity service (`services/identity`)
 Parent design: [ECO-0001](https://github.com/aiaiaiai-org/.github/blob/main/ecosystem/identity/DESIGN.md)
 
 This is the executable contract for the shared sign-in page that ECO-0001
-left open. It records two owner decisions (2026-11-02):
+left open. It records three owner decisions (2026-11-02):
 
 1. The issuer origin is **`auth.aiaiaiai.org`**. DNS exists. Every product
    signs people in on this one origin and no other.
 2. Signing in from a product that already knows a provider account (a
    Telegram bot, a later Discord bot) **connects that account** to the Bond,
    and tells the person the truth when it cannot.
+3. **Every Bond has a password.** Identity hosts the identity; a provider is
+   only an account connected to it, never its only way in.
 
 Wire names below are the proposal. Each implementation PR states the exact
 contract it ships.
@@ -94,6 +96,28 @@ That is the "product-scoped opaque reference" ECO-0001 §1 asked for. Rotating
 the pairwise key rotates every product's reference at once, so the key is
 versioned and the issuer answers both versions during a migration.
 
+## The password is the baseline
+
+`pub_dress` + password is the identity's own credential. Telegram, Discord
+and GitHub are connected accounts: they can make signing in faster, but
+they never hold the identity.
+
+- **Registration always sets a password**, whatever the entry. A bot-first
+  registration verifies the provider, asks for the `pub_dress` and then the
+  password, and only then creates the Bond. There is no provider-only
+  registration.
+- **A Bond without an active password is unfinished.** Older Telegram
+  registrations may still have none (`docs/telegram-password-setup.md`). The
+  issuer issues no `id_token` to any product for such a Bond. Its provider
+  sign-in leads straight to password setup, and the sign-in completes only
+  after setup.
+- **Provider sign-in is a shortcut**, available only to a Bond that has a
+  password. It never replaces the password, and changing or disconnecting a
+  provider never touches the password.
+- Disconnecting any provider is therefore always allowed for a finished
+  Bond. Core's `sole_access_path` refusal stays only as a guard for
+  unfinished legacy Bonds until none remain.
+
 ## Entering with a provider account
 
 A product that came from a provider passes **proof** of that account, not a
@@ -116,13 +140,13 @@ The person proved Telegram account `X` and signed in to Bond `B`. Identity
 loads the snapshot and asks Core (`decide_link`, `docs/provider-bindings.md` in
 `nilx-one/core`):
 
-| Snapshot                         | Core today                     | Page says                                          | Offers                                                                             |
-| -------------------------------- | ------------------------------ | -------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `X` unbound, `B` has no Telegram | `linked`                       | "Telegram connected to `B`"                        | continue                                                                           |
-| `X` already on `B`               | `already_linked`               | nothing                                            | continue                                                                           |
-| `X` on another Bond `C`          | `provider_already_linked`      | "This Telegram belongs to `C`"                     | sign in as `C` · move it to `B`¹ · continue as `B` without it                      |
-| `B` holds another Telegram `Y`   | `provider_type_already_linked` | "`B` is connected to a different Telegram account" | replace `Y` with `X`¹ · open the bot from that other account · continue without it |
-| no `B` yet (registration)        | `linked` after registration    | "Account created, Telegram connected"              | continue                                                                           |
+| Snapshot                         | Core today                     | Page says                                               | Offers                                                                             |
+| -------------------------------- | ------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `X` unbound, `B` has no Telegram | `linked`                       | "Telegram connected to `B`"                             | continue                                                                           |
+| `X` already on `B`               | `already_linked`               | nothing                                                 | continue                                                                           |
+| `X` on another Bond `C`          | `provider_already_linked`      | "This Telegram belongs to `C`"                          | sign in as `C` · move it to `B`¹ · continue as `B` without it                      |
+| `B` holds another Telegram `Y`   | `provider_type_already_linked` | "`B` is connected to a different Telegram account"      | replace `Y` with `X`¹ · open the bot from that other account · continue without it |
+| no `B` yet (registration)        | `linked` after registration    | "Account created with its password, Telegram connected" | continue                                                                           |
 
 "Continue without it" still signs the person in. The product gets
 `provider_link: { "state": "refused", "code": "…" }` and may keep its own chat
@@ -141,12 +165,13 @@ before any host offers it. Proposed `decide_rebind(bond, account, snapshot)`:
 - **Requires** fresh proof of both sides in the same transaction: the provider
   proof for `X` (not older than its `auth_date` bound) and a password or
   session check for `B` made on this page within the last five minutes.
-- **Replace** (`B` holds `Y`): unbind `Y`, bind `X`. The decision is
-  `sole_access_path` if `Y` is `B`'s only way in and `B` has no password.
-  After a password sign-in that cannot happen, but Core checks it anyway.
-- **Move** (`X` on `C`): unbind `X` from `C`, bind it to `B`. Refused with
-  `sole_access_path` when `X` is `C`'s only way in, because `C` would be
-  locked out forever. The page then offers only "sign in as `C`".
+- **Replace** (`B` holds `Y`): unbind `Y`, bind `X`. `B` keeps its password,
+  so nothing is lost but the old connection.
+- **Move** (`X` on `C`): unbind `X` from `C`, bind it to `B`. A finished `C`
+  keeps its password and simply loses a connected account. An **unfinished**
+  `C` (no password) is reachable only through `X`, so whoever proved `X` is
+  `C`'s owner: Core refuses the move with `sole_access_path`, and the page
+  offers "finish `C`" (password setup, then sign in as `C`) instead.
 - Never awards anything. ECO-0001's one-time first-provider award is for a
   first connection of a provider type; a rebind is not one.
 - Records the rebind with both Bonds and the time, for the owner's audit.
@@ -160,8 +185,8 @@ only the honest refusal and "continue without it".
 One PR each, in order:
 
 1. This contract (this PR).
-2. `nilx-one/core`: `decide_rebind` and the rule change in the 0x1 identity
-   rules.
+2. `nilx-one/core`: `decide_rebind`, the password-baseline rule and the rule
+   change in the 0x1 identity rules.
 3. `services/identity`: client registry, pairwise `sub`, signing keys,
    discovery, `/authorize` + `/token` + `/logout`, and the issuer session.
 4. `services/identity`: Mini App proof check (Ed25519) and the attach table
