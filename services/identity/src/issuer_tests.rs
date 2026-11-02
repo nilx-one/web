@@ -15,7 +15,7 @@ use tower::ServiceExt as _;
 use super::*;
 use crate::{
     BrowserOAuthConfig, ProviderLinkRepository,
-    aiaiaiai_sign_in::{SignInClient, SignInClientConfig, SignInError},
+    aiaiaiai_sign_in::{SignInClient, SignInClientConfig, SignInError, SignInFlow},
 };
 
 const ORIGIN: &str = "https://auth.aiaiaiai.org";
@@ -497,7 +497,10 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_its_own_session() {
         links,
         native_auth(),
         BrowserOAuthConfig::new(Url::parse("https://nilx.one").unwrap(), None, None, None)
-            .with_aiaiaiai_sign_in(fixture.client.clone()),
+            .with_aiaiaiai_sign_in(SignInFlow::new(
+                fixture.client.clone(),
+                native_auth().secret_digester(),
+            )),
     );
     let (status, _, body) = send(
         &site,
@@ -563,20 +566,4 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_its_own_session() {
         headers.get(header::LOCATION).unwrap(),
         "/?auth_error=aiaiaiai_sign_in_invalid"
     );
-}
-
-#[tokio::test]
-async fn the_0x1_start_route_never_returns_off_site() {
-    for (requested, expected) in [
-        (Some("/map?x=1"), "/map?x=1"),
-        (Some("https://evil.example"), "/"),
-        (Some("//evil.example"), "/"),
-        (Some("/\\evil.example"), "/"),
-        (None, "/"),
-    ] {
-        assert_eq!(
-            crate::browser_web_auth::safe_return_path_for_tests(requested),
-            expected
-        );
-    }
 }

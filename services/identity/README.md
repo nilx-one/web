@@ -100,20 +100,19 @@ and `AIAIAIAI_ISSUER_CLIENTS` (a JSON array of `client_id`, `name`, exact
 
 ### The 0x1 site as a client
 
-0x1 reaches the issuer only through Core's `aiaiaiai_sign_in` client
-(`nilx-one/core` `docs/aiaiaiai-sign-in.md`); these routes only carry its
-transaction and the redirects:
+0x1 reaches the issuer only through Core: `SignInFlow` in `nilx-one/core`
+(`docs/aiaiaiai-sign-in.md`) forms the request, holds the signed
+`__Host-0x1_aiaiaiai` transaction cookie, checks `state` and the return path,
+exchanges the code, verifies the token, resolves the Bond from 0x1's own
+`aiaiaiai_accounts` table and names any failure. These routes only forward
+the query and `Cookie` header to it and apply the redirect and `Set-Cookie`
+values it answers:
 
 - `GET /api/v1/auth/aiaiaiai/config` answers `{ "enabled", "issuer" }`.
-- `GET /api/v1/auth/aiaiaiai/start?return=/path` keeps the transaction in a
-  signed `__Host-0x1_aiaiaiai` cookie and sends the person to the issuer. Only
-  a same-origin path is a destination.
-- `GET /api/v1/auth/aiaiaiai/callback` checks `state`, lets Core exchange the
-  code and verify the token, resolves the Bond from 0x1's own
-  `aiaiaiai_accounts` table, and opens the ordinary `__Host-0x1_session`.
-  Failures return to `/?auth_error=…` (`aiaiaiai_sign_in_expired`, `_invalid`,
-  `_cancelled`, `_unavailable`, `aiaiaiai_account_unknown`,
-  `aiaiaiai_account_conflict`).
+- `GET /api/v1/auth/aiaiaiai/start?return=/path` → `SignInFlow::start`.
+- `GET /api/v1/auth/aiaiaiai/callback` → `SignInFlow::finish`; a sign-in
+  opens the ordinary `__Host-0x1_session` and returns to the path Core
+  approved, a failure returns to `/?auth_error=` with Core's code.
 
 Settings, both or neither: `AIAIAIAI_SIGN_IN_ISSUER` and
 `AIAIAIAI_SIGN_IN_CLIENT_SECRET`; optional `AIAIAIAI_SIGN_IN_CLIENT_ID`

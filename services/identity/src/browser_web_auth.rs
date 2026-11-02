@@ -23,8 +23,7 @@ use url::Url;
 use crate::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeAuthConfig, ProviderIdentity,
     ProviderLinkOutcome, ProviderLinkRepository, PubDress, SecretDigester, TokenFactory,
-    aiaiaiai_sign_in::{SignInClient, SignInError, SignInTransaction},
-    repository::AiaiaiaiAccountOutcome,
+    aiaiaiai_sign_in::{Callback, SignInFlow, TRANSACTION_COOKIE as AIAIAIAI_TRANSACTION_COOKIE},
 };
 
 const TELEGRAM_AUTHORIZE_URL: &str = "https://oauth.telegram.org/auth";
@@ -42,9 +41,6 @@ const PENDING_PROVIDER_COOKIE: &str = "__Host-0x1_provider";
 const SESSION_COOKIE: &str = "__Host-0x1_session";
 const REMEMBERED_BOND_COOKIE: &str = "__Host-0x1_bond";
 const DISCORD_HANDOFF_COOKIE: &str = "__Host-0x1_discord_handoff";
-const AIAIAIAI_TRANSACTION_COOKIE: &str = "__Host-0x1_aiaiaiai";
-const AIAIAIAI_TRANSACTION_TTL_SECONDS: u64 = 15 * 60;
-const AIAIAIAI_TRANSACTION_DOMAIN: &str = "aiaiaiai-sign-in-transaction";
 const CSRF_HEADER: &str = "x-0x1-csrf";
 const OAUTH_TRANSACTION_TTL_SECONDS: u64 = 10 * 60;
 const PENDING_PROVIDER_TTL_SECONDS: u64 = 15 * 60;
@@ -73,7 +69,7 @@ pub struct BrowserOAuthConfig {
     telegram: Option<OAuthClientCredentials>,
     discord: Option<OAuthClientCredentials>,
     github: Option<OAuthClientCredentials>,
-    aiaiaiai: Option<SignInClient>,
+    aiaiaiai: Option<SignInFlow>,
 }
 
 impl BrowserOAuthConfig {
@@ -92,10 +88,11 @@ impl BrowserOAuthConfig {
         }
     }
 
-    /// Lets the 0x1 site sign people in through aiaiaiai Identity. The client
-    /// is Core's; this host only carries its transaction and redirects.
-    pub fn with_aiaiaiai_sign_in(mut self, client: SignInClient) -> Self {
-        self.aiaiaiai = Some(client);
+    /// Lets the 0x1 site sign people in through aiaiaiai Identity. The flow
+    /// is Core's; this host only forwards requests to it and applies what it
+    /// answers.
+    pub fn with_aiaiaiai_sign_in(mut self, flow: SignInFlow) -> Self {
+        self.aiaiaiai = Some(flow);
         self
     }
 
@@ -1605,15 +1602,10 @@ mod tests {
 }
 
 // ---------------------------------------------------------------------------
-// Sign-in through aiaiaiai Identity (docs/unified-auth.md)
+// Sign-in through aiaiaiai Identity (docs/unified-auth.md). Core's
+// `SignInFlow` forms the request, holds the transaction cookie and decides;
+// these routes only forward to it.
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize, Serialize)]
-struct AiaiaiaiTransaction {
-    sign_in: SignInTransaction,
-    return_path: String,
-    expires_at: u64,
-}
 
 #[derive(Debug, Deserialize)]
 struct AiaiaiaiStartQuery {
@@ -1624,7 +1616,7 @@ struct AiaiaiaiStartQuery {
 async fn aiaiaiai_config(State(state): State<BrowserAuthState>) -> Response {
     let mut response = Json(serde_json::json!({
         "enabled": state.config.aiaiaiai.is_some(),
-        "issuer": state.config.aiaiaiai.as_ref().map(|client| client.config().issuer()),
+        "issuer": state.config.aiaiaiai.as_ref().map(SignInFlow::issuer),
     }))
     .into_response();
     response
@@ -1633,66 +1625,20 @@ async fn aiaiaiai_config(State(state): State<BrowserAuthState>) -> Response {
     response
 }
 
-/// Only a same-origin path may be a destination: an absolute URL, a
-/// scheme-relative `//host` or a backslash trick would turn the sign-in into
-/// an open redirect.
-fn safe_return_path(value: Option<&str>) -> String {
-    match value {
-        Some(path)
-            if path.starts_with('/')
-                && !path.starts_with("//")
-                && !path.contains('\\')
-                && path.len() <= 512
-                && !path.bytes().any(|byte| byte.is_ascii_control()) =>
-        {
-            path.to_owned()
-        }
-        _ => "/".to_owned(),
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn safe_return_path_for_tests(value: Option<&str>) -> String {
-    safe_return_path(value)
-}
-
 async fn start_aiaiaiai_sign_in(
     State(state): State<BrowserAuthState>,
     Query(query): Query<AiaiaiaiStartQuery>,
 ) -> Response {
-    let Some(client) = state.config.aiaiaiai.as_ref() else {
+    let Some(flow) = state.config.aiaiaiai.as_ref() else {
         return provider_unavailable("aiaiaiai_sign_in_not_configured");
     };
     let Some(now) = now_unix_seconds() else {
         return service_unavailable();
     };
-    let Ok((authorization_url, sign_in)) = client.begin() else {
-        return service_unavailable();
-    };
-    let transaction = AiaiaiaiTransaction {
-        sign_in,
-        return_path: safe_return_path(query.return_path.as_deref()),
-        expires_at: now.saturating_add(AIAIAIAI_TRANSACTION_TTL_SECONDS),
-    };
-    let Some(cookie) = state
-        .cookie_signer
-        .issue(AIAIAIAI_TRANSACTION_DOMAIN, &transaction)
-    else {
-        return service_unavailable();
-    };
-    redirect_with_cookies(
-        authorization_url.as_str(),
-        [secure_cookie(
-            AIAIAIAI_TRANSACTION_COOKIE,
-            &cookie,
-            AIAIAIAI_TRANSACTION_TTL_SECONDS,
-        )],
-    )
-}
-
-fn aiaiaiai_failure(code: &'static str) -> Response {
-    let location = format!("/?auth_error={code}");
-    redirect_with_cookies(&location, [clear_cookie(AIAIAIAI_TRANSACTION_COOKIE)])
+    match flow.start(query.return_path.as_deref(), now) {
+        Ok(started) => redirect_with_cookies(started.location.as_str(), [started.set_cookie]),
+        Err(_) => service_unavailable(),
+    }
 }
 
 async fn aiaiaiai_callback(
@@ -1700,68 +1646,36 @@ async fn aiaiaiai_callback(
     headers: HeaderMap,
     Query(query): Query<OAuthCallbackQuery>,
 ) -> Response {
-    let Some(client) = state.config.aiaiaiai.as_ref() else {
+    let Some(flow) = state.config.aiaiaiai.as_ref() else {
         return provider_unavailable("aiaiaiai_sign_in_not_configured");
     };
     let Some(now) = now_unix_seconds() else {
-        return aiaiaiai_failure("aiaiaiai_sign_in_unavailable");
+        return service_unavailable();
     };
-    let Some(transaction) = read_cookie(&headers, AIAIAIAI_TRANSACTION_COOKIE).and_then(|cookie| {
-        state
-            .cookie_signer
-            .verify::<AiaiaiaiTransaction>(AIAIAIAI_TRANSACTION_DOMAIN, &cookie)
-    }) else {
-        return aiaiaiai_failure("aiaiaiai_sign_in_expired");
+    let cookie_header = headers.get(COOKIE).and_then(|value| value.to_str().ok());
+    let callback = Callback {
+        code: query.code.as_deref(),
+        state: query.state.as_deref(),
+        error: query.error.as_deref(),
     };
-    if transaction.expires_at <= now {
-        return aiaiaiai_failure("aiaiaiai_sign_in_expired");
-    }
-    let state_matches = query.state.as_deref().is_some_and(|value| {
-        value
-            .as_bytes()
-            .ct_eq(transaction.sign_in.state.as_bytes())
-            .unwrap_u8()
-            == 1
-    });
-    if !state_matches {
-        return aiaiaiai_failure("aiaiaiai_sign_in_invalid");
-    }
-    if query.error.is_some() {
-        return aiaiaiai_failure("aiaiaiai_sign_in_cancelled");
-    }
-    let Some(code) = query.code.as_deref() else {
-        return aiaiaiai_failure("aiaiaiai_sign_in_invalid");
-    };
-    let verified = match client.complete(code, &transaction.sign_in, now).await {
-        Ok(value) => value,
-        Err(SignInError::Unavailable) => return aiaiaiai_failure("aiaiaiai_sign_in_unavailable"),
-        Err(error) => {
-            tracing::warn!(%error, "aiaiaiai sign-in was refused");
-            return aiaiaiai_failure("aiaiaiai_sign_in_invalid");
-        }
-    };
-    match state
-        .repository
-        .resolve_aiaiaiai_account(&verified, now)
-        .await
-    {
-        Ok(AiaiaiaiAccountOutcome::Linked { pub_dress, .. }) => {
+    let finished = flow
+        .finish(&state.repository, cookie_header, callback, now)
+        .await;
+    match finished.outcome {
+        // The session cookie list already clears the transaction.
+        Ok(signed_in) => {
             issue_native_session_to(
                 &state,
                 &headers,
-                IdentityRecord::unresolved(pub_dress.as_str().to_owned()),
+                IdentityRecord::unresolved(signed_in.pub_dress.as_str().to_owned()),
                 now,
-                &transaction.return_path,
+                &signed_in.return_path,
             )
             .await
         }
-        Ok(AiaiaiaiAccountOutcome::Unknown) => aiaiaiai_failure("aiaiaiai_account_unknown"),
-        Ok(AiaiaiaiAccountOutcome::BondLinkedElsewhere) => {
-            aiaiaiai_failure("aiaiaiai_account_conflict")
-        }
-        Err(error) => {
-            tracing::error!(%error, "aiaiaiai account resolution failed");
-            aiaiaiai_failure("aiaiaiai_sign_in_unavailable")
-        }
+        Err(failure) => redirect_with_cookies(
+            &format!("/?auth_error={}", failure.as_str()),
+            [finished.clear_cookie],
+        ),
     }
 }

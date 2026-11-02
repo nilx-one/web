@@ -364,7 +364,10 @@ async fn main() {
         github_browser_oauth,
     );
     let browser_oauth = match aiaiaiai_sign_in_from_environment(&public_origin) {
-        Some(client) => browser_oauth.with_aiaiaiai_sign_in(client),
+        Some(client) => browser_oauth.with_aiaiaiai_sign_in(aiaiaiai_sign_in::SignInFlow::new(
+            client,
+            native_auth.secret_digester(),
+        )),
         None => browser_oauth,
     };
     let provider_api = browser_web_auth::router(
