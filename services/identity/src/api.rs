@@ -862,7 +862,7 @@ fn now(state: &ApiState) -> Result<u64, ClockError> {
     })
 }
 
-fn request_source(headers: &HeaderMap) -> String {
+pub(crate) fn request_source(headers: &HeaderMap) -> String {
     let candidate = headers
         .get("x-forwarded-for")
         .or_else(|| headers.get("x-real-ip"))

@@ -14,7 +14,9 @@ pub mod api {
     include!("session_activation.rs");
 }
 pub mod browser_web_auth;
+pub use nilxone_identity::aiaiaiai_sign_in;
 pub mod business_command;
+pub mod issuer;
 pub use nilxone_identity::cell_orbs;
 pub use nilxone_identity::credentials;
 pub mod discord_oauth;
