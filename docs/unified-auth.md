@@ -64,7 +64,24 @@ cookie, password or provider token crosses between products.
 The issuer session is `__Host-aiaiaiai_session` on `auth.aiaiaiai.org`. A
 person signed in for one product signs in to the next with one click.
 Single Active Client still applies to 0x1 game sessions; the issuer session
-is not a game client.
+is not a game client. The first release has no issuer session and no
+`/logout`: every product sign-in asks for the password, which the password
+manager fills. The session comes with the second client, when there is
+something to skip.
+
+### Who talks to Identity
+
+Identity is the authority; a product is a client of it and talks to it only
+over this protocol. For 0x1 the client is **`nilx-one/core`**: its
+`nilxone-identity` crate holds the relying-party side (authorization request,
+PKCE, code exchange, `id_token` verification) and the 0x1 table that maps an
+Identity `sub` to a Bond. The 0x1 host routes in `services/identity` only
+carry cookies and redirects and call Core. They never read the issuer's
+state, even while both run in one process on one database.
+
+That process sharing is history, not design: the Identity service grew out
+of 0x1. The protocol boundary is what lets the issuer move to its own
+deployment later without touching 0x1.
 
 ### Clients
 
@@ -156,48 +173,51 @@ remembers (`recent_link_refusal`), so a partner lookup can explain it.
 The page never names `Y`. The person did not prove `Y`, and a Telegram id or
 username is personal data.
 
-### ¹ Rebinding: needs a Core decision first
+### ¹ Rebinding: switching the client you play from
 
-Rules 2 and 3 of the 0x1 provider-binding rules **refuse** both conflicts
-today. Moving or replacing an account is a new decision, so it lands in Core
-before any host offers it. Proposed `decide_rebind(bond, account, snapshot)`:
+The identity is the person, authenticated by their password on this page.
+A provider account is only the client they reach it through, so replacing
+`Y` with `X`, or moving `X` from `C` to `B`, loses nothing: every finished
+Bond keeps its password. It is an ordinary owner action with one explicit
+confirmation ("`B` uses a different Telegram account. Use this one
+instead?"), and no second password prompt, because the person just entered
+it.
 
-- **Requires** fresh proof of both sides in the same transaction: the provider
-  proof for `X` (not older than its `auth_date` bound) and a password or
-  session check for `B` made on this page within the last five minutes.
-- **Replace** (`B` holds `Y`): unbind `Y`, bind `X`. `B` keeps its password,
-  so nothing is lost but the old connection.
-- **Move** (`X` on `C`): unbind `X` from `C`, bind it to `B`. A finished `C`
-  keeps its password and simply loses a connected account. An **unfinished**
-  `C` (no password) is reachable only through `X`, so whoever proved `X` is
-  `C`'s owner: Core refuses the move with `sole_access_path`, and the page
-  offers "finish `C`" (password setup, then sign in as `C`) instead.
-- Never awards anything. ECO-0001's one-time first-provider award is for a
-  first connection of a provider type; a rebind is not one.
-- Records the rebind with both Bonds and the time, for the owner's audit.
-  The record is never served to a partner.
+- **Replace** (`B` holds `Y`): unbind `Y`, bind `X`.
+- **Move** (`X` on `C`): unbind `X` from `C`, bind it to `B`. `C` keeps its
+  password and only loses a connected client.
+- An **unfinished** `C` (an older registration with no password) is
+  reachable only through `X`, so whoever proved `X` is `C`'s owner. Instead
+  of a move the page offers "finish `C`": set its password, then sign in.
+- Never awards anything: ECO-0001's one-time first-provider award is for a
+  first connection of a provider type, not a switch.
 
-Until Core ships that decision and the 0x1 rules allow it, both rows offer
-only the honest refusal and "continue without it".
+Rules 2 and 3 of the 0x1 provider-binding rules refuse both conflicts today,
+so the switch is a new Core decision (`decide_rebind`) that lands before any
+host offers it. Until then both rows offer only the honest refusal and
+"continue without it".
 
 ## Delivery
 
 One PR each, in order:
 
 1. This contract (this PR).
-2. `nilx-one/core`: `decide_rebind`, the password-baseline rule and the rule
-   change in the 0x1 identity rules.
-3. `services/identity`: client registry, pairwise `sub`, signing keys,
-   discovery, `/authorize` + `/token` + `/logout`, and the issuer session.
-4. `services/identity`: Mini App proof check (Ed25519) and the attach table
-   above, with the existing refusals.
-5. The page itself: an `apps/auth` host on `@aiaiaiai/auth-view`, deployed
-   at `auth.aiaiaiai.org`, plus its public route in infra.
-6. First client: the 0x1 site signs in through `auth.aiaiaiai.org`. Its own
-   `__Host-0x1_session` stays the product session. The existing native
+2. `nilx-one/core`: the 0x1 relying party in `nilxone-identity` (authorization
+   request, code exchange, EdDSA `id_token` verification, the `sub` → Bond
+   table) and the issuer's pairwise-subject digest.
+3. `services/identity`: the issuer (client registry, signing key, discovery,
+   JWKS, a server-rendered `/authorize` page for sign-in and registration,
+   `/token`) and the 0x1 routes that call Core's client. Off unless
+   configured.
+4. The 0x1 site sends "Sign in" to `auth.aiaiaiai.org`. Its own
+   `__Host-0x1_session` stays the product session; the existing native
    endpoints keep working until every 0x1 host is moved.
-7. Then `0xda-market`, `prism-hubot`, `mind-web`, and the Prism Hub identity
-   migration, each in its own repository.
+5. Public route for `auth.aiaiaiai.org` in infra, then a manually authorized
+   deploy.
+6. `nilx-one/core`: `decide_rebind` and the password-baseline rule;
+   `services/identity`: the Mini App proof check and the attach table above.
+7. Then the issuer session, `0xda-market`, `prism-hubot`, `mind-web`, and the
+   Prism Hub identity migration, each in its own repository.
 
 Deploying any of it is a separate, manually authorized step.
 
