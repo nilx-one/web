@@ -11,6 +11,8 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: package-clients-${{ github.sha }}
@@ -18,6 +20,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/nilx-one/0x1-web
+  DELIVERY_IMAGE: ghcr.io/nilx-one/web
   VITE_ERRORS_COLLECTOR_ENDPOINT: https://errors.aiaiaiai.org
 
 jobs:
@@ -130,14 +133,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish immutable client runtime
+        id: publish
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/web/Dockerfile
           push: true
-          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          # The full-SHA tag and the digest are what infra's automatic delivery
+          # plans from (docs/automatic-delivery.md); sha-<sha> stays for the
+          # existing Deploy Client Host path.
+          tags: |
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+            ${{ env.DELIVERY_IMAGE }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
           provenance: true
           sbom: true
+
+      - name: Attest delivered client image
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.DELIVERY_IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
