@@ -307,3 +307,21 @@ export function useInventory(
 
   return { model, catalog };
 }
+
+/** Delivery shares the journal's queue with ordinary item placement. */
+export async function deliverToInventory(
+  owner: string,
+  deliver: (grid: CarriedGrid) => Promise<void>,
+): Promise<void> {
+  await updateInventory(owner, async (current) => {
+    let avaia = EMPTY_INVENTORY.avaia;
+    if (current.state !== "") {
+      const parsed: unknown = JSON.parse(current.state);
+      if (!isRecord(parsed)) throw new Error("Invalid inventory");
+      const owned = isRecord(parsed.owned) ? parsed.owned : {};
+      avaia = grid(parsed.avaia, owned.avaia);
+    }
+    await deliver(avaia);
+    return undefined;
+  });
+}

@@ -157,6 +157,8 @@ export interface FlyoverRequest {
    * from a Market visit that left the page while xPing was parked there.
    */
   readonly homeward?: boolean;
+  /** Completed return only, never cancellation or unmount. */
+  readonly onDelivered?: () => void;
 }
 
 export interface Flyover {
@@ -244,10 +246,10 @@ export function useFlyover(
       setParked(false);
       setProgress(undefined);
       setLootNotice(undefined);
-      followingRef.current = true;
-      openRef.current = true;
-      setFollowing(true);
-      setOpen(true);
+      followingRef.current = next.onDelivered === undefined;
+      openRef.current = next.onDelivered === undefined;
+      setFollowing(next.onDelivered === undefined);
+      setOpen(next.onDelivered === undefined);
       setRequest((current) => current ?? next);
     },
     [ready, request],
@@ -351,7 +353,7 @@ export function useFlyover(
     const fly = (route: readonly LonLat[]) => {
       renderer.setRoute?.({ points: route });
       if (reduced && request.homeward) {
-        // Nothing to watch: xPing is simply home again.
+        request.onDelivered?.();
         setRequest(undefined);
         return;
       }
@@ -679,7 +681,10 @@ export function useFlyover(
           arrivalTimer =
             leg === "out"
               ? setTimeout(flyBack, FLYOVER_ARRIVAL_MS)
-              : setTimeout(() => setRequest(undefined), FLYOVER_ARRIVAL_MS);
+              : setTimeout(() => {
+                  request.onDelivered?.();
+                  setRequest(undefined);
+                }, FLYOVER_ARRIVAL_MS);
           return;
         }
         frame = globalThis.requestAnimationFrame(draw);

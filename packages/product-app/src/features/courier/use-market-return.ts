@@ -16,9 +16,13 @@ export function useMarketReturn(
   catalog: EmbeddedMarketCatalogPort | undefined,
 ) {
   const [result, setResult] = useState<MarketReturnResult>();
+  const [checked, setChecked] = useState(false);
   useEffect(() => {
     const confirmReturn = catalog?.confirmReturn;
-    if (!confirmReturn) return;
+    if (!confirmReturn) {
+      setChecked(true);
+      return;
+    }
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Core's schedule from the first answer bounds the rechecks of this page;
@@ -27,7 +31,9 @@ export function useMarketReturn(
     const ask = (round: number) => {
       void confirmReturn().then(
         (answer) => {
-          if (!live || answer === undefined) return;
+          if (!live) return;
+          setChecked(true);
+          if (answer === undefined) return;
           setResult(answer);
           schedule ??= answer.recheckMs;
           const delay =
@@ -36,6 +42,7 @@ export function useMarketReturn(
             timer = setTimeout(() => ask(round + 1), delay);
         },
         () => {
+          if (live) setChecked(true);
           // A failed check confirms nothing; the route waits for the next one.
         },
       );
@@ -52,6 +59,7 @@ export function useMarketReturn(
   const dismiss = useCallback(() => setDismissed(result), [result]);
   return {
     result,
+    checked,
     notice: dismissed === result ? undefined : result,
     dismiss,
   };

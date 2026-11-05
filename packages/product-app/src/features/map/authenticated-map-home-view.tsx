@@ -10,6 +10,7 @@ import type { ReactNode } from "react";
 import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
 import type { CourierDirectoryPort } from "@nilx-one/application";
+import { useSpecialItems } from "../courier/use-special-items";
 import { useCourier } from "../courier/use-courier";
 import { useMarketReturn, useReturnFlight } from "../courier/use-market-return";
 import { CourierOffer } from "../courier/courier-offer";
@@ -55,9 +56,15 @@ import {
   type MapRenderer,
   type MapRendererStatus,
 } from "@nilx-one/map-contract";
-import { StatusToastStack, type StatusToastItem } from "@nilx-one/ui";
+import {
+  ToastRegion,
+  StatusToastStack,
+  type StatusToastItem,
+} from "@nilx-one/ui";
 import {
   useEffect,
+  useMemo,
+  useCallback,
   useRef,
   useState,
   useSyncExternalStore,
@@ -951,7 +958,7 @@ export function AuthenticatedMapHomeView({
   pubInfo,
   committedAwards,
   xpingEngine,
-  findItems,
+  findItems: localFindItems,
   courierDirectory,
   marketCatalog,
   nearbySpeech,
@@ -1035,7 +1042,26 @@ export function AuthenticatedMapHomeView({
     [],
   );
   // Said once, on the page Market returned this tab to after a purchase.
+  const findItems = useMemo(
+    () =>
+      localFindItems && marketCatalog?.inventoryCommand
+        ? new Proxy(localFindItems, {
+            get(target, property) {
+              if (property === "applyInventoryCommand")
+                return marketCatalog.inventoryCommand;
+              const value = Reflect.get(target, property);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          })
+        : localFindItems,
+    [localFindItems, marketCatalog],
+  );
   const marketReturn = useMarketReturn(marketCatalog);
+  const special = useSpecialItems(
+    pubDress,
+    marketCatalog,
+    marketReturn.result?.itemId,
+  );
   const sceneSequence = useRef(0);
   const [findToast, setFindToast] = useState<StatusToastItem | undefined>(
     undefined,
@@ -1416,7 +1442,8 @@ export function AuthenticatedMapHomeView({
       : [statusToast]),
     ...readinessToasts,
     ...(avaiaSavedToast === undefined ? [] : [avaiaSavedToast]),
-    ...(marketReturn.notice === undefined
+    ...(marketReturn.notice === undefined ||
+    marketReturn.notice.itemId !== undefined
       ? []
       : [
           marketReturn.notice.confirmed
@@ -2017,12 +2044,77 @@ export function AuthenticatedMapHomeView({
     feedback,
     suspended: courierSuspended,
   });
-  // Back from Market with a confirmed purchase, xPing flies home.
+  const [pickupOrder, setPickupOrder] = useState<string>();
+  const attemptedPickups = useRef(new Set<string>());
+  const { accept: acceptCourier, returnHome: flyHome } = courier;
+  const { arrive: deliverSpecial } = special;
+  const pickup = useCallback(
+    (id: string) => {
+      attemptedPickups.current.add(id);
+      setPickupOrder(id);
+      void acceptCourier("special");
+    },
+    [acceptCourier],
+  );
+  useEffect(() => {
+    if (
+      !marketReturn.checked ||
+      !observedPosition ||
+      courierSuspended ||
+      courier.flyover.active ||
+      courier.busy ||
+      courier.offer ||
+      (marketReturn.result && !marketReturn.result.confirmed) ||
+      (marketReturn.result?.itemId &&
+        special.items.some(
+          (item) =>
+            item.order_id === marketReturn.result?.itemId &&
+            item.state === "in_transit",
+        ))
+    )
+      return;
+    const item = special.items.find(
+      (item) =>
+        item.state === "paid" && !attemptedPickups.current.has(item.order_id),
+    );
+    if (item) pickup(item.order_id);
+  }, [
+    special.items,
+    marketReturn.checked,
+    marketReturn.result,
+    observedPosition,
+    courierSuspended,
+    courier.flyover.active,
+    courier.busy,
+    courier.offer,
+    pickup,
+  ]);
+  const deliveryId = marketReturn.result?.itemId;
+  const returnHome = useCallback(
+    (trip: Parameters<typeof flyHome>[0]) => {
+      const avaia =
+        avaiaWalk.stance(globalThis.performance.now())?.point ??
+        readWorldMemory(pubDress).avaia;
+      flyHome(
+        trip,
+        deliveryId && avaia
+          ? { avaia, arrived: () => deliverSpecial(deliveryId) }
+          : undefined,
+      );
+    },
+    [flyHome, avaiaWalk, pubDress, deliveryId, deliverSpecial],
+  );
+  // Camera stays with Avaia while xPing brings the item home.
   useReturnFlight(
     marketReturn.result,
-    !courierSuspended,
+    !courierSuspended &&
+      (!deliveryId ||
+        !!(
+          avaiaWalk.stance(globalThis.performance.now())?.point ??
+          readWorldMemory(pubDress).avaia
+        )),
     courier.flyover.active,
-    courier.returnHome,
+    returnHome,
   );
 
   useSystemInformerBlock(
@@ -3584,49 +3676,122 @@ export function AuthenticatedMapHomeView({
         />
       }
       toasts={
-        <StatusToastStack
-          toasts={
-            systemInformer.available
-              ? statusToasts.filter((toast) => toast.kind !== "error")
-              : statusToasts
-          }
-          label={t("shell.worldStatus")}
-          placement="inline"
-          copy={{
-            readMore: t("toast.readMore"),
-            readLess: t("toast.readLess"),
-            dismiss: t("toast.dismiss"),
-          }}
-          onDismiss={(id) => {
-            if (sceneToasts.some((toast) => toast.id === id)) {
-              setSceneToasts((current) =>
-                current.filter((toast) => toast.id !== id),
-              );
-              return;
+        <>
+          {(special.retry ||
+            (marketReturn.notice?.itemId &&
+              special.items.some(
+                (item) =>
+                  item.order_id === marketReturn.notice?.itemId &&
+                  item.state === "in_transit",
+              ))) && (
+            <ToastRegion
+              placement="inline"
+              label="Special"
+              copy={{ reference: "Special", dismiss: t("toast.dismiss") }}
+              toasts={[
+                ...(marketReturn.notice?.itemId &&
+                special.items.some(
+                  (item) =>
+                    item.order_id === marketReturn.notice?.itemId &&
+                    item.state === "in_transit",
+                )
+                  ? [
+                      {
+                        id: "special-delivery",
+                        tone: "neutral" as const,
+                        title:
+                          locale === "uk-UA"
+                            ? "xPing везе Special до Avaia"
+                            : "xPing is bringing Special to Avaia",
+                        description:
+                          locale === "uk-UA"
+                            ? "Активуй зараз або залиш предмет в інвентарі після доставки."
+                            : "Activate now or keep the item in inventory after delivery.",
+                        ...(special.busy
+                          ? {}
+                          : {
+                              action: {
+                                label:
+                                  locale === "uk-UA"
+                                    ? "Активувати"
+                                    : "Activate",
+                                onPerform: () =>
+                                  special.activate(
+                                    marketReturn.notice!.itemId!,
+                                  ),
+                              },
+                            }),
+                      },
+                    ]
+                  : []),
+                ...(special.retry
+                  ? [
+                      {
+                        id: "special-error",
+                        tone: "critical" as const,
+                        title:
+                          locale === "uk-UA"
+                            ? "Не вдалося оновити покупку"
+                            : "Purchase update failed",
+                        action: {
+                          label: locale === "uk-UA" ? "Повторити" : "Retry",
+                          onPerform: special.retry,
+                        },
+                      },
+                    ]
+                  : []),
+              ]}
+              onDismiss={(id) =>
+                id === "special-error"
+                  ? special.dismissError()
+                  : marketReturn.dismiss()
+              }
+            />
+          )}
+          <StatusToastStack
+            toasts={
+              systemInformer.available
+                ? statusToasts.filter((toast) => toast.kind !== "error")
+                : statusToasts
             }
-            if (avaiaSavedToast?.id === id) {
-              setAvaiaSavedToast(undefined);
-              return;
-            }
-            if (id.startsWith("market-return:")) {
-              marketReturn.dismiss();
-              return;
-            }
-            if (findToast?.id === id) {
-              setFindToast(undefined);
-              return;
-            }
-            if (speech.toasts.some((toast) => toast.id === id)) {
-              speech.dismiss(id);
-              return;
-            }
-            if (readiness.issues.some((issue) => issue.id === id)) {
-              setDismissedReadiness((closed) => new Set(closed).add(id));
-              return;
-            }
-            setDismissedStatus(id);
-          }}
-        />
+            label={t("shell.worldStatus")}
+            placement="inline"
+            copy={{
+              readMore: t("toast.readMore"),
+              readLess: t("toast.readLess"),
+              dismiss: t("toast.dismiss"),
+            }}
+            onDismiss={(id) => {
+              if (sceneToasts.some((toast) => toast.id === id)) {
+                setSceneToasts((current) =>
+                  current.filter((toast) => toast.id !== id),
+                );
+                return;
+              }
+              if (avaiaSavedToast?.id === id) {
+                setAvaiaSavedToast(undefined);
+                return;
+              }
+              if (id.startsWith("market-return:")) {
+                marketReturn.dismiss();
+                return;
+              }
+              if (findToast?.id === id) {
+                setFindToast(undefined);
+                return;
+              }
+              if (speech.toasts.some((toast) => toast.id === id)) {
+                speech.dismiss(id);
+                return;
+              }
+              if (readiness.issues.some((issue) => issue.id === id)) {
+                setDismissedReadiness((closed) => new Set(closed).add(id));
+                return;
+              }
+              setDismissedStatus(id);
+            }}
+          />
+        </>
       }
       statusRail={
         startup.ready ? (
@@ -4259,7 +4424,46 @@ export function AuthenticatedMapHomeView({
                           </p>
                         ) : null}
                       </section>
+                      {special.items
+                        .filter((item) => item.state !== "stored")
+                        .map((item) => (
+                          <p key={item.order_id}>
+                            Special ·{" "}
+                            {locale === "uk-UA"
+                              ? item.state === "paid"
+                                ? "Оплачено"
+                                : "Доставляється"
+                              : item.state === "paid"
+                                ? "Paid"
+                                : "In transit"}
+                            <button
+                              type="button"
+                              disabled={
+                                special.busy ||
+                                courier.busy ||
+                                (item.state === "paid" &&
+                                  courier.flyover.active)
+                              }
+                              onClick={() =>
+                                item.state === "paid"
+                                  ? pickup(item.order_id)
+                                  : special.activate(item.order_id)
+                              }
+                            >
+                              {locale === "uk-UA"
+                                ? item.state === "paid"
+                                  ? "Забрати з маркету"
+                                  : "Активувати"
+                                : item.state === "paid"
+                                  ? "Collect from Market"
+                                  : "Activate"}
+                            </button>
+                          </p>
+                        ))}
                       <InventoryPanel
+                        specialItems={special.items}
+                        onActivateSpecial={special.activate}
+                        activatingSpecial={special.busy}
                         owner={pubDress}
                         core={findItems}
                         committed={committedAwards !== undefined}
@@ -4572,6 +4776,7 @@ export function AuthenticatedMapHomeView({
               <MarketDeparture
                 catalog={marketCatalog}
                 plan={courier.arrival}
+                pickupOrderId={pickupOrder}
                 seeds={carriedInventory.seeds}
                 avaia={
                   avaiaWalk.stance(globalThis.performance.now())?.point ??

@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { PaidSpecialItem } from "../courier/market-dock";
 import type { CoreEconomyCatalog, CoreHolder } from "@nilx-one/application";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 
@@ -18,6 +19,9 @@ import { ThingIcon } from "./thing-icon";
 import { thingName } from "./thing-name";
 
 export interface InventoryPanelProps {
+  readonly specialItems?: readonly PaidSpecialItem[];
+  readonly onActivateSpecial?: (id: string) => void;
+  readonly activatingSpecial?: boolean;
   readonly owner: string;
   readonly core: InventoryPort;
   /** Whether experience goes through committed awards on this host. */
@@ -88,6 +92,9 @@ export function InventoryPanel({
   first = "bond",
   shopAndCraft = false,
   together = false,
+  specialItems = [],
+  onActivateSpecial,
+  activatingSpecial = false,
 }: InventoryPanelProps) {
   const { t, resolved } = useLocalization();
   const plural = new Intl.PluralRules(resolved);
@@ -145,12 +152,16 @@ export function InventoryPanel({
     // Every carry sits in a backpack-sized frame, so the cards line up: a
     // smaller carry draws only its own cells, a larger one scrolls within it.
     const frame = carryGrid("backpack");
+    const stored =
+      holder === "avaia"
+        ? specialItems.filter((item) => item.state === "stored")
+        : [];
     const used = carried.things.reduce<number | undefined>((total, thing) => {
       const size = sizeOf(catalog, thing.id);
       return total === undefined || size === undefined
         ? undefined
         : total + size.width * size.height;
-    }, 0);
+    }, stored.length * 4);
     const occupancy = t(
       used === undefined ? "inventory.capacityUnknown" : "inventory.occupancy",
     )
@@ -268,6 +279,28 @@ export function InventoryPanel({
                 aria-hidden="true"
               />
             ))}
+            {stored.map((item) => (
+              <button
+                key={item.order_id}
+                type="button"
+                className="inventory__thing"
+                disabled={activatingSpecial || !onActivateSpecial}
+                style={{
+                  gridColumn: `${item.slot_x! + 1} / span 2`,
+                  gridRow: `${item.slot_y! + 1} / span 2`,
+                }}
+                aria-label={`Special ${item.sku.replace("0x1_special_", "")} · 2×2 · ${resolved === "uk-UA" ? "Активувати" : "Activate"}`}
+                onClick={() => onActivateSpecial?.(item.order_id)}
+              >
+                <span>
+                  Special
+                  <br />
+                  {item.sku.replace("0x1_special_", "")}
+                  <br />
+                  2×2
+                </span>
+              </button>
+            ))}
             {carried.things.map((thing, index) => {
               const size = sizeOf(catalog, thing.id) ?? { width: 1, height: 1 };
               const pressed =
@@ -302,7 +335,7 @@ export function InventoryPanel({
             })}
           </div>
         </div>
-        {carried.things.length === 0 ? (
+        {carried.things.length === 0 && stored.length === 0 ? (
           <p className="inventory__hint">{t("inventory.holderEmpty")}</p>
         ) : (
           <ol className="inventory__manifest">

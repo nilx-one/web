@@ -17,11 +17,13 @@ export function MarketDeparture({
   plan,
   seeds,
   avaia,
+  pickupOrderId,
 }: {
   catalog: EmbeddedMarketCatalogPort;
   plan: CourierPlan;
   seeds: number;
   avaia: MapPointSelection | undefined;
+  pickupOrderId?: string | undefined;
 }) {
   const { resolved } = useLocalization();
   const uk = resolved === "uk-UA";
@@ -34,6 +36,7 @@ export function MarketDeparture({
     plan.destination.id.owner_pub_dress,
     plan.destination.id.number,
     plan.started_at_ms,
+    pickupOrderId,
     attempt,
   ].join(":");
 
@@ -53,6 +56,7 @@ export function MarketDeparture({
           beginVisit({
             point: plan.destination.pub_dress.replace(/^0xda-market-/, ""),
             seeds: String(seeds),
+            ...(pickupOrderId ? { pickupOrderId } : {}),
             avaia,
             plan,
             signal: controller.signal,
@@ -70,7 +74,7 @@ export function MarketDeparture({
     return () => {
       live = false;
     };
-  }, [catalog, plan, seeds, avaia, visitKey]);
+  }, [catalog, plan, seeds, avaia, visitKey, pickupOrderId]);
 
   return (
     <section className="market-dock">
