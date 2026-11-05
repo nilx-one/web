@@ -50,6 +50,7 @@ it("continues the one-time handoff if sessionStorage is restricted", async () =>
   expect(requestBody).toEqual({
     point: "zoloti-vorota",
     avaia: { longitude: 30.5, latitude: 50.4 },
+    return_path: "/",
   });
   expect(requestBody).not.toHaveProperty("seeds");
   expect(submit).toHaveBeenCalledTimes(1);

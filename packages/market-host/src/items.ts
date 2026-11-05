@@ -7,6 +7,8 @@ import type {
 } from "@nilx-one/application";
 import type { PaidSpecialItem } from "@nilx-one/product-app/business";
 
+export class PaidItemsUnavailable extends Error {}
+
 async function identity(
   path: string,
   token: string | undefined,
@@ -29,6 +31,8 @@ async function identity(
     },
     ...(command === undefined ? {} : { body: JSON.stringify(command) }),
   });
+  if (path === "special-items" && response.status === 404)
+    throw new PaidItemsUnavailable();
   if (!response.ok) throw new Error("Identity request failed");
   return response.json();
 }

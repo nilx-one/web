@@ -64,3 +64,28 @@ The rule is `features/inventory/workshops.ts`. The map answers through `pointsNe
 In the sealed `avaia-finds` journal, as `inventory.state` events: Core's whole stored inventory after each change, plus the find a pick-up put in. The journal's own AES-GCM key seals them, and the wipe that deletes the journal deletes them. Nothing about the inventory reaches the service yet: the Seeds balance and craft times held against a commitment come next.
 
 <!-- © 2026 aiaiaiai · aiaiaiai.org -->
+
+## Paid subscription items
+
+Special purchases issue an authority-owned item when the development Identity
+worker has `MARKET_SPECIAL_ITEM_DELIVERY=1` and `DEPLOY_ENV=development`. Payment
+starts no subscription time. A verified Market visit collects the paid item.
+xPing flies to Avaia while the camera stays with her. The notice can activate
+Special in flight. Ignoring it stores a 2×2 item at arrival, or activates it if
+no contiguous square fits. Activation starts the shared Bond/Avaia term once.
+
+Paid receipts survive cancellation and may be collected at any Market point.
+Opening the authenticated world starts pickup of a waiting paid item. A manual
+pickup action remains available after cancellation. In-transit items also remain
+activatable in the inventory screen if a return flight was interrupted.
+
+The host serializes delivery with ordinary journal writes. Identity supplies
+stored-item reservations to Core for normal inventory commands. Ordinary items
+remain device-journal data, while receipt ownership, reserved subscription slots
+and activation remain server-owned. A conflicting layout fails without removing
+any item. Activating the subscription releases its reservation.
+
+An older Identity deployment with no paid-items endpoint retains the existing
+local inventory engine. Authentication errors, malformed replies and temporary
+server failures do not enable that fallback. Deployment and enabling issuance
+are separate from merging this integration.

@@ -310,3 +310,37 @@ describe("InventoryPanel", () => {
     );
   });
 });
+
+it("places Special in Avaia's grid as a 2×2 activation control", () => {
+  const activate = vi.fn();
+  const model = useInventory("0x0sky", core);
+  vi.mocked(useInventory).mockReturnValueOnce({
+    ...model,
+    model: {
+      ...model.model,
+      avaia: { ...model.model.avaia, carry: "backpack" },
+    },
+  });
+  render(
+    <InventoryPanel
+      owner="0x0sky"
+      core={core}
+      committed
+      first="avaia"
+      specialItems={[
+        {
+          order_id: "paid-order-123",
+          sku: "0x1_special_1m",
+          state: "stored",
+          slot_x: 1,
+          slot_y: 2,
+        },
+      ]}
+      onActivateSpecial={activate}
+    />,
+  );
+  const item = screen.getByRole("button", { name: /Special 1m · 2×2/ });
+  expect(item).toHaveStyle({ gridColumn: "2 / span 2", gridRow: "3 / span 2" });
+  fireEvent.click(item);
+  expect(activate).toHaveBeenCalledWith("paid-order-123");
+});

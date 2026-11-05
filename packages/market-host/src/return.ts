@@ -42,7 +42,8 @@ interface TripRecord {
 export type MarketReturnCore = Pick<
   CoreRuntimePort,
   "marketReturnTrip" | "marketReturnPolicy"
->;
+> &
+  Partial<Pick<CoreRuntimePort, "applyInventoryCommand">>;
 
 /**
  * The 0x1 side of the return flight. The query names an order; only Identity's

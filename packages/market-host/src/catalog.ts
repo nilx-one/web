@@ -9,6 +9,7 @@ import {
 import { catalogTransport } from "./transport";
 import { createMarketReturn, type MarketReturnCore } from "./return";
 import {
+  PaidItemsUnavailable,
   readPaidItems,
   changePaidItem,
   inventoryCommand,
@@ -43,6 +44,18 @@ export function createNilxOneMarketCatalog(
 ) {
   const transport = catalogTransport(request);
   const subscriptions = subscriptionSource(options.authorization, request);
+  let capability: "unknown" | "available" | "legacy" = "unknown";
+  const items = async () => {
+    try {
+      const result = await readPaidItems(options.authorization?.(), request);
+      capability = "available";
+      return result;
+    } catch (error) {
+      if (!(error instanceof PaidItemsUnavailable)) throw error;
+      capability = "legacy";
+      return [];
+    }
+  };
   const cache = new Map<
     string,
     {
@@ -56,7 +69,7 @@ export function createNilxOneMarketCatalog(
     ...(options.handoff === false
       ? {}
       : {
-          items: () => readPaidItems(options.authorization?.(), request),
+          items,
           changeItem: async (
             id: string,
             command: Parameters<
@@ -71,18 +84,29 @@ export function createNilxOneMarketCatalog(
             );
             subscriptions.invalidate();
           },
-          inventoryCommand: (
+          inventoryCommand: async (
             state: string,
             command: Parameters<
               NonNullable<EmbeddedMarketCatalogPort["inventoryCommand"]>
             >[1],
-          ) =>
-            inventoryCommand(
+            nowMs = Date.now(),
+          ) => {
+            if (capability === "unknown") await items();
+            if (capability === "legacy")
+              return (
+                options.core?.applyInventoryCommand?.(
+                  state,
+                  command,
+                  nowMs,
+                ) ?? { ok: false as const, error: "unavailable" }
+              );
+            return inventoryCommand(
               state,
               command,
               options.authorization?.(),
               request,
-            ),
+            );
+          },
           subscriptions,
           beginVisit: createMarketVisit(options.authorization),
           confirmReturn: createMarketReturn(
