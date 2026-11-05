@@ -2095,6 +2095,7 @@ export function AuthenticatedMapHomeView({
       const avaia =
         avaiaWalk.stance(globalThis.performance.now())?.point ??
         readWorldMemory(pubDress).avaia;
+      if (deliveryId && avaia) setChosenWheel("avaia");
       flyHome(
         trip,
         deliveryId && avaia
@@ -4378,6 +4379,7 @@ export function AuthenticatedMapHomeView({
                           onExclusive={(tier) => {
                             setDetailState(undefined);
                             navigate(WORLD_ROUTE);
+                            setPickupOrder(undefined);
                             courier.open(tier);
                           }}
                         />

@@ -22,17 +22,15 @@ beforeEach(() => {
 });
 
 it("delivers the committed grid and refreshes the stored item", async () => {
-  const items = vi
-    .fn()
-    .mockResolvedValue([
-      {
-        order_id: id,
-        sku: "0x1_special_1m",
-        state: "in_transit",
-        slot_x: null,
-        slot_y: null,
-      },
-    ]);
+  const items = vi.fn().mockResolvedValue([
+    {
+      order_id: id,
+      sku: "0x1_special_1m",
+      state: "in_transit",
+      slot_x: null,
+      slot_y: null,
+    },
+  ]);
   const changeItem = vi.fn(async () => {
     items.mockResolvedValue([
       {

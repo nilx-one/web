@@ -52,23 +52,21 @@ it("invalidates the shared subscription source after a confirmed item action", a
 });
 
 it("refuses malformed reserved geometry", async () => {
-  const request = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          items: [
-            {
-              order_id: "paid-order-123",
-              sku: "0x1_special_1m",
-              state: "stored",
-              slot_x: -1,
-              slot_y: 0,
-            },
-          ],
-        }),
-      ),
-    );
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        items: [
+          {
+            order_id: "paid-order-123",
+            sku: "0x1_special_1m",
+            state: "stored",
+            slot_x: -1,
+            slot_y: 0,
+          },
+        ],
+      }),
+    ),
+  );
   await expect(readPaidItems(undefined, request)).rejects.toThrow(
     "Invalid paid inventory",
   );
