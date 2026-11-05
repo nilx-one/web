@@ -162,21 +162,3 @@ jobs:
       required_contract: ${{ fromJSON(needs.plan.outputs.required_identity_contract) }}
       force: ${{ fromJSON(needs.plan.outputs.force_identity) }}
     secrets: inherit
-
-  deploy-clients:
-    name: Deploy ${{ matrix.target }}
-    needs:
-      - plan
-      - prepare-packages
-      - ensure-identity
-    if: needs.plan.outputs.has_clients == 'true'
-    strategy:
-      fail-fast: true
-      max-parallel: 1
-      matrix:
-        target: ${{ fromJSON(needs.plan.outputs.clients) }}
-    uses: ./.github/workflows/deploy-web.yml
-    with:
-      target: ${{ matrix.target }}
-      release_sha: ${{ needs.plan.outputs.release_sha }}
-    secrets: inherit
