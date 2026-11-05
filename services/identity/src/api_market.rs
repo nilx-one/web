@@ -160,7 +160,7 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
     if !crate::market_visit::market_return_confirmed(claim, &visit, &receipt, &order) { return missing(); }
     with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({
         "confirmed": true, "visit_id": query.visit_id, "order_id": query.order_id,
-        "owner": owner.as_str()
+        "owner": owner.as_str(), "item_delivery": receipt.duration_ms == 0
     })), cookie)
 }
 
@@ -177,5 +177,76 @@ async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) ->
     match clock.snapshot(now_ms, now_ms.saturating_add(30_000)) {
         Ok(snapshot) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!(snapshot)), cookie),
         Err(_) => unavailable(),
+    }
+}
+
+
+async fn read_special_items(State(state): State<ApiState>, headers: HeaderMap) -> Response {
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, _, _, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    match state.repository.special_items(&owner).await {
+        Ok(items) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({"items": items})), cookie),
+        Err(_) => unavailable(),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+enum SpecialItemCommand {
+    Collect { visit_id: String },
+    Activate,
+    Deliver { carry: String, things: Vec<DeliveryThing> },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeliveryThing { id: String, x: u8, y: u8 }
+
+async fn change_special_item(
+    State(state): State<ApiState>, axum::extract::Path(order_id): axum::extract::Path<String>,
+    headers: HeaderMap, Json(command): Json<SpecialItemCommand>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) { return response; }
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, active, session_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    if !active || session_hash.len() != 32 { return with_session_cookie(session_inactive(), cookie); }
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    let invalid = || api_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_item_command", "Invalid item command.");
+    if !crate::market_visit::is_market_order_id(&order_id) { return invalid(); }
+    if state.limiter.consume(format!("special-item:{}", owner.as_str()), now, 30, 60).is_err() {
+        return api_error(StatusCode::TOO_MANY_REQUESTS, "special_item_limit", "Please retry later.");
+    }
+    let now_ms = now.saturating_mul(1000);
+    let result = match command {
+        SpecialItemCommand::Collect { visit_id } => {
+            if !crate::market_visit::is_market_visit_id(&visit_id) { return invalid(); }
+            state.repository.collect_special_item(&owner, &order_id, &visit_id, &session_hash, now_ms).await
+        }
+        SpecialItemCommand::Activate => state.repository.activate_special_item(&owner, &order_id, &session_hash, now_ms).await,
+        SpecialItemCommand::Deliver { carry, things } => {
+            use nilxone_contracts::{Backpack, Carry};
+            let carry = match carry.as_str() {
+                "pocket" => Carry::Pocket, "backpack" => Carry::Backpack, "bag" => Carry::Bag,
+                _ => return invalid(),
+            };
+            if things.len() > 120 { return invalid(); }
+            // Ordinary inventory is the host's committed journal. Core validates
+            // its geometry and combines it with authority-owned paid items.
+            let mut bag = Backpack::new(carry);
+            for thing in things {
+                if bag.put_at(&thing.id, thing.x, thing.y).is_err() { return invalid(); }
+            }
+            state.repository.deliver_special_item(&owner, &order_id, &session_hash, now_ms, &bag).await
+        }
+    };
+    match result {
+        Ok(true) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({"ok": true})), cookie),
+        Ok(false) => api_error(StatusCode::CONFLICT, "item_not_available", "Item is not available for this action."),
+        Err(error) => { tracing::error!(%error, "special item command failed"); unavailable() }
     }
 }
