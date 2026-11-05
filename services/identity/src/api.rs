@@ -124,6 +124,7 @@ fn router_with_clock(
         .route("/api/v1/identity/market-return", get(read_market_return))
         .route("/api/v1/identity/subscription", get(read_subscription))
         .route("/api/v1/identity/special-items", get(read_special_items))
+        .route("/api/v1/identity/special-inventory", post(change_special_inventory))
         .route("/api/v1/identity/special-items/{order_id}", post(change_special_item))
         .route("/api/v1/identity/organizations", get(read_my_organizations).post(create_business_organization))
         .route("/api/v1/auth/discord/config", get(discord_config))
@@ -2266,6 +2267,24 @@ mod tests {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             let response = app.clone().oneshot(Request::post(path).body(Body::empty()).unwrap()).await.unwrap();
             assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        }
+    }
+
+    #[tokio::test]
+    async fn paid_item_commands_require_csrf_and_authentication() {
+        let app = app().await;
+        for (path, body) in [
+            ("/api/v1/identity/special-items/test-order", r#"{"op":"activate"}"#),
+            ("/api/v1/identity/special-items/test-order", r#"{"op":"deliver","carry":"pocket","things":[]}"#),
+            ("/api/v1/identity/special-items/test-order", r#"{"op":"collect","visit_id":"x"}"#),
+            ("/api/v1/identity/special-inventory", r#"{"state":"","command":{"op":"normalize"}}"#),
+        ] {
+            for csrf in [false, true] {
+                let mut request = Request::post(path).header("content-type", "application/json");
+                if csrf { request = request.header(super::CSRF_HEADER, "1"); }
+                let response = app.clone().oneshot(request.body(Body::from(body)).unwrap()).await.unwrap();
+                assert_eq!(response.status(), if csrf { StatusCode::UNAUTHORIZED } else { StatusCode::FORBIDDEN });
+            }
         }
     }
 
