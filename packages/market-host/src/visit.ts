@@ -48,6 +48,12 @@ async function beginMarketVisit(
         // The server reads seeds from the authoritative Identity wallet.
         // Never ship a browser inventory amount across the market handoff.
         avaia: input.avaia,
+        ...(input.pickupOrderId
+          ? { pickup_order_id: input.pickupOrderId }
+          : {}),
+        return_path: /^\/(?:[a-z0-9-]+\/)?$/.test(location.pathname)
+          ? location.pathname
+          : "/",
       }),
     });
     if (!response.ok) throw new Error("Market handoff unavailable");

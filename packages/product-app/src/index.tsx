@@ -1186,11 +1186,18 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
       <SubscriptionStatusProvider
-        previewCycle={viewModel.identity.pubDress === "0x0sky"}
+        previewCycle={
+          viewModel.identity.pubDress === "0x0sky" &&
+          !dependencies.subscriptions &&
+          !dependencies.marketCatalog?.subscriptions
+        }
         owner={viewModel.identity.pubDress}
         avaia={ownedAvaiaPubDress}
         core={dependencies.core}
-        source={dependencies.subscriptions}
+        source={
+          dependencies.subscriptions ??
+          dependencies.marketCatalog?.subscriptions
+        }
       >
         <AuthenticatedMapHomeView
           {...(business === undefined

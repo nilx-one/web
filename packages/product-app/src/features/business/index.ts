@@ -4,6 +4,7 @@
 export { BusinessWorld } from "./business-world";
 export type {
   EmbeddedMarketCatalogPort,
+  PaidSpecialItem,
   EmbeddedMarketCheckoutPort,
   EmbeddedMarketOffer,
   EmbeddedMarketOrder,

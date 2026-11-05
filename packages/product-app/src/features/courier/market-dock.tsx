@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { useEffect, useRef, useState } from "react";
-import type { CourierPlan } from "@nilx-one/application";
+import type {
+  CoreInventoryAnswer,
+  CoreInventoryCommand,
+  SubscriptionStatusPort,
+  CourierPlan,
+} from "@nilx-one/application";
 import { useLocalization } from "../../shell/localization";
 import { DockWindow } from "../../shell/dock-window";
 import { marketPointTitle } from "./market-points";
@@ -14,11 +19,36 @@ export interface EmbeddedMarketProduct {
   readonly price: string | null;
 }
 
+export interface PaidSpecialItem {
+  readonly order_id: string;
+  readonly sku: string;
+  readonly state: "paid" | "in_transit" | "stored";
+  readonly slot_x: number | null;
+  readonly slot_y: number | null;
+}
+
 /** The host supplies only the 0x1 catalog projection. It owns the transport. */
 export interface EmbeddedMarketCatalogPort {
+  items?(): Promise<readonly PaidSpecialItem[]>;
+  changeItem?(
+    id: string,
+    command:
+      | { op: "activate" }
+      | {
+          op: "deliver";
+          carry: string;
+          things: readonly { id: string; x: number; y: number }[];
+        },
+  ): Promise<void>;
+  inventoryCommand?(
+    state: string,
+    command: CoreInventoryCommand,
+  ): Promise<CoreInventoryAnswer>;
+  subscriptions?: SubscriptionStatusPort;
   load(locale: string): Promise<readonly EmbeddedMarketProduct[]>;
   beginVisit?(input: {
     point: string;
+    pickupOrderId?: string;
     seeds: string;
     avaia: { longitude: number; latitude: number };
     plan: CourierPlan;
@@ -32,6 +62,7 @@ export interface EmbeddedMarketCatalogPort {
   confirmReturn?(): Promise<
     | {
         confirmed: boolean;
+        itemId?: string;
         /** The xPing route this tab flew out on, to fly back along. */
         trip?: CourierPlan;
         /**

@@ -8,6 +8,13 @@ import {
 } from "@0xda-market/webapp-core";
 import { catalogTransport } from "./transport";
 import { createMarketReturn, type MarketReturnCore } from "./return";
+import {
+  readPaidItems,
+  changePaidItem,
+  inventoryCommand,
+  subscriptionSource,
+} from "./items";
+import type { EmbeddedMarketCatalogPort } from "@nilx-one/product-app/business";
 import { createMarketVisit } from "./visit";
 
 export interface MarketHostOptions {
@@ -35,6 +42,7 @@ export function createNilxOneMarketCatalog(
   options: MarketHostOptions = {},
 ) {
   const transport = catalogTransport(request);
+  const subscriptions = subscriptionSource(options.authorization, request);
   const cache = new Map<
     string,
     {
@@ -48,6 +56,34 @@ export function createNilxOneMarketCatalog(
     ...(options.handoff === false
       ? {}
       : {
+          items: () => readPaidItems(options.authorization?.(), request),
+          changeItem: async (
+            id: string,
+            command: Parameters<
+              NonNullable<EmbeddedMarketCatalogPort["changeItem"]>
+            >[1],
+          ) => {
+            await changePaidItem(
+              id,
+              command,
+              options.authorization?.(),
+              request,
+            );
+            subscriptions.invalidate();
+          },
+          inventoryCommand: (
+            state: string,
+            command: Parameters<
+              NonNullable<EmbeddedMarketCatalogPort["inventoryCommand"]>
+            >[1],
+          ) =>
+            inventoryCommand(
+              state,
+              command,
+              options.authorization?.(),
+              request,
+            ),
+          subscriptions,
           beginVisit: createMarketVisit(options.authorization),
           confirmReturn: createMarketReturn(
             options.authorization,
