@@ -5,6 +5,13 @@
 
 Status: v1 issuer and the 0x1 client routes implemented (contract 17), not deployed
 Owner: Identity service (`services/identity`)
+
+Service ownership was updated by the owner on 2026-11-06: the shared identity
+runtime belongs to `aiaiaiai-org/4x-ais`, while 0x1 product service logic
+belongs to `nilx-one/core`. See [the current boundary](identity-boundary.md).
+The existing issuer remains the implementation source until the actual AIS
+runtime and the product host adapter are delivered.
+
 Parent design: [ECO-0001](https://github.com/aiaiaiai-org/.github/blob/main/ecosystem/identity/DESIGN.md)
 
 This is the executable contract for the shared sign-in page that ECO-0001
