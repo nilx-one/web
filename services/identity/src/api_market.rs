@@ -5,6 +5,8 @@
 #[serde(deny_unknown_fields)]
 struct MarketVisitRequest {
     point: String,
+    #[serde(default)]
+    pickup_order_id: Option<String>,
     // Legacy client inventory hint; ignored for all economy authority.
     #[serde(default, rename = "seeds")]
     _untrusted_seeds: Option<String>,
@@ -58,6 +60,14 @@ async fn create_market_visit(
         Ok(owner) => owner,
         Err(_) => return unavailable(),
     };
+    if let Some(id) = &request.pickup_order_id {
+        let items = match state.repository.special_items(&owner).await {
+            Ok(items) => items, Err(_) => return unavailable(),
+        };
+        if !items.iter().any(|item| item.order_id == *id && item.state == "paid") {
+            return api_error(StatusCode::CONFLICT, "item_not_available", "Paid item is not available for pickup.");
+        }
+    }
     // Read exactly the same server-owned wallet the issuer debits.
     // Do not forward the browser's legacy inventory number to the Market.
     let seeds = match state.repository.read_seeds_balance_with_starter(&owner, now.saturating_mul(1000)).await {
@@ -79,6 +89,9 @@ async fn create_market_visit(
     let subject = subject.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     let mut handoff = serde_json::json!({"subject": subject, "point": request.point,
         "seeds": seeds, "seeds_authority": "identity_snapshot", "avaia": request.avaia});
+    if let Some(id) = request.pickup_order_id {
+        handoff["pickup_order_id"] = serde_json::Value::String(id);
+    }
     // A purchase needs the session that confirms it. A provider login whose
     // session could not be minted still browses, but cannot buy on this visit.
     if session_hash.len() == 32 {
@@ -160,7 +173,7 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
     if !crate::market_visit::market_return_confirmed(claim, &visit, &receipt, &order) { return missing(); }
     with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({
         "confirmed": true, "visit_id": query.visit_id, "order_id": query.order_id,
-        "owner": owner.as_str()
+        "owner": owner.as_str(), "item_delivery": receipt.duration_ms == 0
     })), cookie)
 }
 
@@ -178,4 +191,115 @@ async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) ->
         Ok(snapshot) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!(snapshot)), cookie),
         Err(_) => unavailable(),
     }
+}
+
+
+async fn read_special_items(State(state): State<ApiState>, headers: HeaderMap) -> Response {
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, _, _, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    match state.repository.special_items(&owner).await {
+        Ok(items) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({"items": items})), cookie),
+        Err(_) => unavailable(),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+enum SpecialItemCommand {
+    Collect { visit_id: String },
+    Activate,
+    Deliver { carry: String, things: Vec<DeliveryThing> },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeliveryThing { id: String, x: u8, y: u8 }
+
+async fn change_special_item(
+    State(state): State<ApiState>, axum::extract::Path(order_id): axum::extract::Path<String>,
+    headers: HeaderMap, Json(command): Json<SpecialItemCommand>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) { return response; }
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, active, session_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    if !active || session_hash.len() != 32 { return with_session_cookie(session_inactive(), cookie); }
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    let invalid = || api_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_item_command", "Invalid item command.");
+    if !crate::market_visit::is_market_order_id(&order_id) { return invalid(); }
+    if state.limiter.consume(format!("special-item:{}", owner.as_str()), now, 30, 60).is_err() {
+        return api_error(StatusCode::TOO_MANY_REQUESTS, "special_item_limit", "Please retry later.");
+    }
+    let now_ms = now.saturating_mul(1000);
+    let result = match command {
+        SpecialItemCommand::Collect { visit_id } => {
+            if !crate::market_visit::is_market_visit_id(&visit_id) { return invalid(); }
+            state.repository.collect_special_item(&owner, &order_id, &visit_id, &session_hash, now_ms).await
+        }
+        SpecialItemCommand::Activate => state.repository.activate_special_item(&owner, &order_id, &session_hash, now_ms).await,
+        SpecialItemCommand::Deliver { carry, things } => {
+            use nilxone_contracts::{Backpack, Carry};
+            let carry = match carry.as_str() {
+                "pocket" => Carry::Pocket, "backpack" => Carry::Backpack, "bag" => Carry::Bag,
+                _ => return invalid(),
+            };
+            if things.len() > 120 { return invalid(); }
+            // Ordinary inventory is the host's committed journal. Core validates
+            // its geometry and combines it with authority-owned paid items.
+            let mut bag = Backpack::new(carry);
+            for thing in things {
+                if bag.put_at(&thing.id, thing.x, thing.y).is_err() { return invalid(); }
+            }
+            state.repository.deliver_special_item(&owner, &order_id, &session_hash, now_ms, &bag).await
+        }
+    };
+    match result {
+        Ok(true) => with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({"ok": true})), cookie),
+        Ok(false) => api_error(StatusCode::CONFLICT, "item_not_available", "Item is not available for this action."),
+        Err(error) => { tracing::error!(%error, "special item command failed"); unavailable() }
+    }
+}
+
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SpecialInventoryCommand { state: String, command: serde_json::Value }
+
+/// Ordinary inventory stays in the host journal. Paid-item reservations are
+/// supplied by the authority independently of the browser command.
+async fn change_special_inventory(
+    State(state): State<ApiState>, headers: HeaderMap, Json(request): Json<SpecialInventoryCommand>,
+) -> Response {
+    if let Some(response) = reject_missing_csrf(&headers) { return response; }
+    let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
+    let (identity, active, session_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
+        Ok(value) => value, Err(error) => return error.into_response(),
+    };
+    if !active || session_hash.len() != 32 { return with_session_cookie(session_inactive(), cookie); }
+    let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
+    let items = match state.repository.special_items(&owner).await {
+        Ok(items) => items, Err(_) => return unavailable(),
+    };
+    let reserved: Vec<_> = items.iter().filter(|item| item.state == "stored")
+        .filter_map(|item| item.slot_x.zip(item.slot_y)).collect();
+    let answer = nilxone_contracts::apply_inventory_command_with_reserved(
+        &request.state, &request.command.to_string(), now.saturating_mul(1000), &reserved,
+    );
+    let Ok(answer) = serde_json::from_str::<serde_json::Value>(&answer) else { return unavailable(); };
+    let result = if answer["ok"] == true {
+        let outcome = &answer["outcome"];
+        let amount = |name: &str| outcome[name].as_str().and_then(|x| x.parse::<u64>().ok());
+        let (Some(gained), Some(spent)) = (amount("seeds_gained"), amount("seeds_spent")) else { return unavailable(); };
+        let mut result = serde_json::json!({"ok": true, "state": answer["state"].to_string(),
+            "seedsGained": gained, "seedsSpent": spent, "experience": outcome["experience"]});
+        if answer.get("item").is_some() { result["item"] = answer["item"].clone(); }
+        if outcome["gifted"] == true { result["gifted"] = serde_json::json!(true); }
+        if outcome["left_behind"].is_string() { result["leftBehind"] = outcome["left_behind"].clone(); }
+        result
+    } else { answer };
+    with_session_cookie(no_store_json(StatusCode::OK, result), cookie)
 }

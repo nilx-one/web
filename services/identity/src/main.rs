@@ -507,6 +507,13 @@ async fn main() {
             market,
             Arc::new(identity_bot::market_issuer::system_now_ms),
         );
+        let worker = if std::env::var("DEPLOY_ENV").as_deref() == Ok("development")
+            && std::env::var("MARKET_SPECIAL_ITEM_DELIVERY").as_deref() == Ok("1")
+        {
+            worker.with_paid_items()
+        } else {
+            worker
+        };
         tokio::spawn(identity_bot::market_issuer::run_market_issuer_worker(
             worker, interval,
         ));

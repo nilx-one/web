@@ -234,3 +234,117 @@ it("without Core confirms but neither flies nor keeps an unconfirmed order", asy
   // A confirmed order needs nothing more of the tab: the route is cleared.
   expect(sessionStorage.getItem(TRIP)).toBeNull();
 });
+
+it.each(["paid", "in_transit"])(
+  "resumes a %s item and retains the route until delivery",
+  async (state) => {
+    const id = "paid-order-123";
+    storeTrip({ version: 1, plan });
+    returnTo(`?market_visit=${visitId}&market_order=${id}`);
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (path, options) => {
+        if (String(path).includes("market-return"))
+          return new Response(
+            JSON.stringify({
+              confirmed: true,
+              order_id: id,
+              item_delivery: true,
+            }),
+          );
+        if (options?.method === "POST")
+          return new Response(JSON.stringify({ ok: true }));
+        return new Response(
+          JSON.stringify({
+            items: [
+              {
+                order_id: id,
+                sku: "0x1_special_1m",
+                state,
+                slot_x: null,
+                slot_y: null,
+              },
+            ],
+          }),
+        );
+      });
+    await expect(
+      createMarketReturn(undefined, request, core())(),
+    ).resolves.toEqual({ confirmed: true, trip: plan, itemId: id });
+    expect(stored().pending.orderId).toBe(id);
+    expect(
+      request.mock.calls.filter(([, options]) => options?.method === "POST"),
+    ).toHaveLength(state === "paid" ? 1 : 0);
+  },
+);
+
+it("does not replay an already stored or activated item after reload", async () => {
+  const id = "paid-order-123";
+  for (const items of [
+    [],
+    [
+      {
+        order_id: id,
+        sku: "0x1_special_1m",
+        state: "stored",
+        slot_x: 0,
+        slot_y: 0,
+      },
+    ],
+  ]) {
+    storeTrip({
+      version: 1,
+      plan,
+      pending: { visitId, orderId: id, since: Date.now() },
+    });
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(
+        async (path) =>
+          new Response(
+            JSON.stringify(
+              String(path).includes("market-return")
+                ? { confirmed: true, order_id: id, item_delivery: true }
+                : { items },
+            ),
+          ),
+      );
+    await expect(
+      createMarketReturn(undefined, request, core())(),
+    ).resolves.toEqual({ confirmed: true });
+    expect(stored()).toBeNull();
+  }
+});
+
+it("retains a paid pickup for retry when collection is refused", async () => {
+  const id = "paid-order-123";
+  storeTrip({ version: 1, plan });
+  returnTo(`?market_visit=${visitId}&market_order=${id}`);
+  const request = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ confirmed: true, order_id: id, item_delivery: true }),
+      ),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              order_id: id,
+              sku: "0x1_special_1m",
+              state: "paid",
+              slot_x: null,
+              slot_y: null,
+            },
+          ],
+        }),
+      ),
+    )
+    .mockResolvedValueOnce(new Response("{}", { status: 409 }));
+  await expect(
+    createMarketReturn(undefined, request, core())(),
+  ).resolves.toEqual({ confirmed: false, recheckMs: RECHECK });
+  expect(stored().pending.orderId).toBe(id);
+});

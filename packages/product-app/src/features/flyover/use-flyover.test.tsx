@@ -313,6 +313,45 @@ describe("useFlyover", () => {
     expect(vi.mocked(renderer.setRoute).mock.lastCall?.[0]).toEqual(road);
   });
 
+  it.each([false, true])(
+    "completes delivery once with reduced motion %s and preserves the Avaia camera",
+    async (reduced) => {
+      reduceMotion(reduced);
+      const { hook, renderer } = setup();
+      const onDelivered = vi.fn();
+      await act(async () => {
+        hook.result.current.start({
+          from: FROM,
+          to: TO,
+          homeward: true,
+          onDelivered,
+        });
+      });
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(onDelivered).toHaveBeenCalledTimes(1);
+      expect(renderer.getCamera()).toEqual(BASE);
+      expect(hook.result.current.active).toBe(false);
+    },
+  );
+
+  it.each(["leave", "unmount"])("does not deliver on %s", async (action) => {
+    const { hook } = setup();
+    const onDelivered = vi.fn();
+    await act(async () => {
+      hook.result.current.start({
+        from: FROM,
+        to: TO,
+        homeward: true,
+        onDelivered,
+      });
+    });
+    act(() => vi.advanceTimersByTime(100));
+    if (action === "leave") act(() => hook.result.current.leave());
+    else hook.unmount();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(onDelivered).not.toHaveBeenCalled();
+  });
+
   it("flies only the way home from the station on a homeward flight", async () => {
     const { renderer, drone, hook } = setup();
     await act(async () => {

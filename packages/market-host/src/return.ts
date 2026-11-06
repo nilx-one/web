@@ -3,6 +3,8 @@
 import type { CoreRuntimePort, CourierPlan } from "@nilx-one/application";
 import type { EmbeddedMarketCatalogPort } from "@nilx-one/product-app/business";
 
+import { readPaidItems, changePaidItem } from "./items";
+
 const VISIT = "market_visit";
 const ORDER = "market_order";
 const TRIP = "nilx-one.market.trip";
@@ -40,7 +42,8 @@ interface TripRecord {
 export type MarketReturnCore = Pick<
   CoreRuntimePort,
   "marketReturnTrip" | "marketReturnPolicy"
->;
+> &
+  Partial<Pick<CoreRuntimePort, "applyInventoryCommand">>;
 
 /**
  * The 0x1 side of the return flight. The query names an order; only Identity's
@@ -88,8 +91,35 @@ export function createMarketReturn(
 
     const confirmed = await confirm(ask, authorization?.(), request);
     if (confirmed) {
+      if (confirmed === "item") {
+        if (record) writeTrip({ ...record, pending: ask });
+        try {
+          const items = await readPaidItems(authorization?.(), request);
+          const item = items.find((item) => item.order_id === ask.orderId);
+          if (!item || item.state === "stored") {
+            removeTrip();
+            return { confirmed: true };
+          }
+          if (!record) return { confirmed: true };
+          if (item.state === "paid")
+            await changePaidItem(
+              ask.orderId,
+              { op: "collect", visit_id: ask.visitId },
+              authorization?.(),
+              request,
+            );
+          return { confirmed: true, trip: record.plan, itemId: ask.orderId };
+        } catch {
+          return {
+            confirmed: false,
+            ...(policy ? { recheckMs: policy.recheckMs } : {}),
+          };
+        }
+      }
       removeTrip();
-      return record ? { confirmed, trip: record.plan } : { confirmed };
+      return record
+        ? { confirmed: true, trip: record.plan }
+        : { confirmed: true };
     }
     const open =
       policy !== undefined && Date.now() - ask.since < policy.pendingMs;
@@ -122,7 +152,7 @@ async function confirm(
   { visitId, orderId }: Pending,
   token: string | undefined,
   request: typeof fetch,
-): Promise<boolean> {
+): Promise<boolean | "item"> {
   try {
     const response = await request(
       `/api/v1/identity/market-return?visit_id=${encodeURIComponent(visitId)}&order_id=${encodeURIComponent(orderId)}`,
@@ -141,8 +171,13 @@ async function confirm(
     const body = (await response.json()) as {
       confirmed?: unknown;
       order_id?: unknown;
+      item_delivery?: unknown;
     };
-    return body.confirmed === true && body.order_id === orderId;
+    return body.confirmed === true && body.order_id === orderId
+      ? body.item_delivery === true
+        ? "item"
+        : true
+      : false;
   } catch {
     return false;
   }

@@ -46,6 +46,7 @@ interface Visit {
   /** Present only for a visit Identity can settle a purchase for. */
   visit_id?: string;
   return_path?: string;
+  pickup_order_id?: string;
 }
 
 export function MarketLanding() {
@@ -211,6 +212,31 @@ export function MarketLanding() {
   const visitedPoint =
     visit &&
     points.find((point) => point.pub_dress === `0xda-market-${visit.point}`);
+  useEffect(() => {
+    const id = visit?.pickup_order_id;
+    if (
+      !id ||
+      !/^[A-Za-z0-9._:-]{8,128}$/.test(id) ||
+      !visit.visit_id ||
+      !visit.return_path ||
+      !selected ||
+      selected.pub_dress !== visitedPoint?.pub_dress
+    )
+      return;
+    // The Dock opens before returning. Identity verifies the owner's receipt.
+    const timer = setTimeout(
+      () =>
+        location.assign(
+          marketReturnUrl({
+            returnPath: visit.return_path!,
+            visitId: visit.visit_id!,
+            orderId: id,
+          }),
+        ),
+      1_000,
+    );
+    return () => clearTimeout(timer);
+  }, [visit, selected, visitedPoint]);
   const ordered = [...points].sort((a, b) => {
     // Client-selected point is not proof of physical arrival.
     if (visitedPoint && a.id.number === visitedPoint.id.number) return -1;

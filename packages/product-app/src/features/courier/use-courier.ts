@@ -73,99 +73,116 @@ export function useCourier(input: {
     setError(false);
     setOffer(tier);
   }, []);
-  const accept = useCallback(async () => {
-    if (requesting.current || offer === undefined) return;
-    const { core, directory, origin, engine } = latest.current;
-    if (active) {
-      close();
-      return;
-    }
-    if (
-      !directory ||
-      !origin ||
-      (!core?.courierDestination && !directory.previewDestination)
-    ) {
-      setError(true);
-      return;
-    }
-    const ticket = ++generation.current;
-    requesting.current = true;
-    setBusy(true);
-    setError(false);
-    setBlocked(undefined);
-    try {
-      // A broken engine keeps xPing in its dock until it mends or is repaired.
-      const read = await engine?.readXpingEngine();
-      if (ticket !== generation.current) return;
-      if (read?.kind === "read" && read.view.broken) {
-        setBlocked("broken");
+  const accept = useCallback(
+    async (intent?: "special" | "exclusive") => {
+      if (requesting.current || (intent ?? offer) === undefined) return;
+      const { core, directory, origin, engine } = latest.current;
+      if (active) {
+        close();
+        return;
+      }
+      if (
+        !directory ||
+        !origin ||
+        (!core?.courierDestination && !directory.previewDestination)
+      ) {
         setError(true);
         return;
       }
-      const projection = await directory.points();
-      if (ticket !== generation.current) return;
-      const from = courierCoordinate(origin);
-      let destination: BusinessPoint;
+      const ticket = ++generation.current;
+      requesting.current = true;
+      setBusy(true);
+      setError(false);
+      setBlocked(undefined);
       try {
-        if (!core?.courierDestination) throw new CourierCapabilityUnavailable();
-        destination = await core.courierDestination(from, projection);
-      } catch (failure) {
-        if (
-          !(failure instanceof CourierCapabilityUnavailable) ||
-          !directory.previewDestination
-        )
-          throw failure;
-        destination = directory.previewDestination(from, projection);
+        // A broken engine keeps xPing in its dock until it mends or is repaired.
+        const read = await engine?.readXpingEngine();
+        if (ticket !== generation.current) return;
+        if (read?.kind === "read" && read.view.broken) {
+          setBlocked("broken");
+          setError(true);
+          return;
+        }
+        const projection = await directory.points();
+        if (ticket !== generation.current) return;
+        const from = courierCoordinate(origin);
+        let destination: BusinessPoint;
+        try {
+          if (!core?.courierDestination)
+            throw new CourierCapabilityUnavailable();
+          destination = await core.courierDestination(from, projection);
+        } catch (failure) {
+          if (
+            !(failure instanceof CourierCapabilityUnavailable) ||
+            !directory.previewDestination
+          )
+            throw failure;
+          destination = directory.previewDestination(from, projection);
+        }
+        if (ticket !== generation.current) return;
+        const next: CourierPlan = {
+          origin: from,
+          destination,
+          started_at_ms: String(Date.now()),
+        };
+        const flightForcing =
+          engine !== undefined && read?.kind === "read"
+            ? createXpingForcing(engine, read, () => {
+                setBrokenAt(Date.now());
+                leaveRef.current();
+              })
+            : undefined;
+        setArrival(undefined);
+        setPlan(next);
+        setOffer(undefined);
+        setBrokenAt(undefined);
+        setForcing(flightForcing);
+        start({
+          from: origin,
+          to: courierPoint(next.destination.coordinate),
+          // useFlyover only docks a flight that was neither left nor unmounted;
+          // an offer closed mid-flight must not strand the parked xPing.
+          ...(latest.current.dockOnArrival
+            ? {
+                onDock: () => {
+                  flightForcing?.close();
+                  setArrival(next);
+                },
+              }
+            : {}),
+          ...(flightForcing === undefined ? {} : { forcing: flightForcing }),
+        });
+      } catch {
+        if (ticket === generation.current) setError(true);
+      } finally {
+        if (ticket === generation.current) {
+          requesting.current = false;
+          setBusy(false);
+        }
       }
-      if (ticket !== generation.current) return;
-      const next: CourierPlan = {
-        origin: from,
-        destination,
-        started_at_ms: String(Date.now()),
-      };
-      const flightForcing =
-        engine !== undefined && read?.kind === "read"
-          ? createXpingForcing(engine, read, () => {
-              setBrokenAt(Date.now());
-              leaveRef.current();
-            })
-          : undefined;
-      setArrival(undefined);
-      setPlan(next);
-      setOffer(undefined);
-      setBrokenAt(undefined);
-      setForcing(flightForcing);
-      start({
-        from: origin,
-        to: courierPoint(next.destination.coordinate),
-        // useFlyover only docks a flight that was neither left nor unmounted;
-        // an offer closed mid-flight must not strand the parked xPing.
-        ...(latest.current.dockOnArrival
-          ? {
-              onDock: () => {
-                flightForcing?.close();
-                setArrival(next);
-              },
-            }
-          : {}),
-        ...(flightForcing === undefined ? {} : { forcing: flightForcing }),
-      });
-    } catch {
-      if (ticket === generation.current) setError(true);
-    } finally {
-      if (ticket === generation.current) {
-        requesting.current = false;
-        setBusy(false);
-      }
-    }
-  }, [active, start, close, offer]);
+    },
+    [active, start, close, offer],
+  );
   // Back from Market, xPing flies home from the station it was parked at.
   const returnHome = useCallback(
-    (trip: CourierPlan) => {
+    (
+      trip: CourierPlan,
+      delivery?: { avaia: MapPointSelection; arrived: () => void },
+    ) => {
+      if (delivery)
+        latest.current.renderer.setCamera(
+          {
+            ...latest.current.renderer.getCamera(),
+            center: [delivery.avaia.longitude, delivery.avaia.latitude],
+          },
+          { motion: "immediate" },
+        );
       start({
-        from: latest.current.origin ?? courierPoint(trip.origin),
+        from:
+          delivery?.avaia ?? latest.current.origin ?? courierPoint(trip.origin),
         to: courierPoint(trip.destination.coordinate),
         homeward: true,
+        ...(delivery ? { onDelivered: delivery.arrived } : {}),
       });
     },
     [start],
