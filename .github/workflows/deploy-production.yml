@@ -1,164 +1,62 @@
 # © 2026 aiaiaiai · aiaiaiai.org
 # SPDX-License-Identifier: MPL-2.0
 
-name: Deploy Production
-
-run-name: Deploy Production — ${{ inputs.target }}
+# Producer-side preflight only. Infra owns activation and server credentials.
+# Run "Reconcile deliveries" in aiaiaiai-org/infra to request a deployment.
+name: Production Delivery Preflight
 
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: Production target
+        description: Client workload to verify (Identity is not yet migrated)
         required: true
-        default: all
         type: choice
+        default: all
         options:
           - all
           - web
           - telegram
           - discord
-          - identity
 
 permissions:
-  actions: write
   contents: read
   packages: read
-
-concurrency:
-  group: deploy-0x1-production
-  cancel-in-progress: false
+  attestations: read
 
 jobs:
-  plan:
-    name: Resolve deployment plan
+  preflight:
+    name: Validate production delivery candidate
     runs-on: ubuntu-latest
-    outputs:
-      release_sha: ${{ steps.plan.outputs.release_sha }}
-      source_ref: ${{ steps.plan.outputs.source_ref }}
-      is_master: ${{ steps.plan.outputs.is_master }}
-      clients: ${{ steps.plan.outputs.clients }}
-      has_clients: ${{ steps.plan.outputs.has_clients }}
-      required_identity_contract: ${{ steps.plan.outputs.required_identity_contract }}
-      force_identity: ${{ steps.plan.outputs.force_identity }}
     steps:
       - uses: actions/checkout@v4
-      - id: plan
-        name: Build deterministic target plan
+      - name: Verify immutable master image and target contracts
         env:
           TARGET: ${{ inputs.target }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-          [[ "$GITHUB_REF" == refs/heads/* ]]
-          source_ref="${GITHUB_REF#refs/heads/}"
-          release_sha="$GITHUB_SHA"
-          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
-
-          if [ "$source_ref" = master ]; then
-            is_master=true
-          else
-            is_master=false
-          fi
-
-          identity_contract="$(tr -d '[:space:]' < services/identity/deploy/contract.version)"
-          [[ "$identity_contract" =~ ^[0-9]+$ ]]
-
-          case "$TARGET" in
-            identity)
-              clients='[]'
-              force_identity=true
-              required_identity_contract="$identity_contract"
-              ;;
-            all)
-              clients="$(jq -c '.deployOrder' deploy/web/targets.json)"
-              force_identity=false
-              required_identity_contract="$(jq -r '[.deployOrder[] as $name | .targets[$name].requiresIdentityContract] | max' deploy/web/targets.json)"
-              ;;
-            web|telegram|discord)
-              jq -e --arg target "$TARGET" '.targets[$target]' deploy/web/targets.json >/dev/null
-              clients="$(jq -cn --arg target "$TARGET" '[$target]')"
-              force_identity=false
-              required_identity_contract="$(jq -r --arg target "$TARGET" '.targets[$target].requiresIdentityContract' deploy/web/targets.json)"
-              ;;
-            *)
-              echo "Unsupported deployment target: $TARGET" >&2
-              exit 1
-              ;;
-          esac
-
-          [[ "$required_identity_contract" =~ ^[0-9]+$ ]]
-          if (( required_identity_contract > identity_contract )); then
-            echo "Client requires identity contract $required_identity_contract but repository provides $identity_contract" >&2
+          if [[ "$GITHUB_REF" != refs/heads/master ]]; then
+            echo "::error::Automatic production delivery accepts only master."
             exit 1
           fi
-
-          if [ "$clients" = '[]' ]; then
-            has_clients=false
-          else
-            has_clients=true
+          image="ghcr.io/nilx-one/web:$GITHUB_SHA"
+          jq -e '.schema == 1 and .deployOrder == ["web", "telegram", "discord"]' deploy/web/targets.json >/dev/null
+          if [[ "$TARGET" != all ]]; then
+            jq -e --arg target "$TARGET" '.targets[$target] != null' deploy/web/targets.json >/dev/null
           fi
-
-          echo "release_sha=$release_sha" >>"$GITHUB_OUTPUT"
-          echo "source_ref=$source_ref" >>"$GITHUB_OUTPUT"
-          echo "is_master=$is_master" >>"$GITHUB_OUTPUT"
-          echo "clients=$clients" >>"$GITHUB_OUTPUT"
-          echo "has_clients=$has_clients" >>"$GITHUB_OUTPUT"
-          echo "required_identity_contract=$required_identity_contract" >>"$GITHUB_OUTPUT"
-          echo "force_identity=$force_identity" >>"$GITHUB_OUTPUT"
-
+          docker buildx imagetools inspect "$image" >/dev/null
+          gh attestation verify "oci://$image" --repo "$GITHUB_REPOSITORY" >/dev/null
           {
-            echo "### Deployment plan"
+            echo "### Verified delivery candidate"
             echo
-            echo "- source branch: \`$source_ref\`"
-            echo "- release: \`$release_sha\`"
-            echo "- requested target: \`$TARGET\`"
-            echo "- client targets (one at a time, in order): \`$clients\`"
-            echo "- required identity contract: \`$required_identity_contract\`"
-            echo "- force identity: \`$force_identity\`"
-          } >>"$GITHUB_STEP_SUMMARY"
-
-  prepare-packages:
-    name: Prepare immutable packages
-    needs: plan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Reuse master push packages
-        if: needs.plan.outputs.is_master == 'true'
-        run: echo "Master packages are produced by the push packaging workflows."
-
-      - name: Dispatch packages for selected branch
-        if: needs.plan.outputs.is_master != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_REF: ${{ needs.plan.outputs.source_ref }}
-          HAS_CLIENTS: ${{ needs.plan.outputs.has_clients }}
-        run: |
-          set -Eeuo pipefail
-          gh workflow run package-identity-service.yml --repo "$GITHUB_REPOSITORY" --ref "$SOURCE_REF"
-          if [ "$HAS_CLIENTS" = true ]; then
-            gh workflow run package-web.yml --repo "$GITHUB_REPOSITORY" --ref "$SOURCE_REF"
-          fi
-
-          {
-            echo "### Package preparation"
+            echo "- Source: `$GITHUB_SHA` (master)"
+            echo "- Image: `$image`"
+            echo "- Target: `$TARGET`"
             echo
-            echo "- source branch: \`$SOURCE_REF\`"
-            echo "- identity package: dispatched"
-            if [ "$HAS_CLIENTS" = true ]; then
-              echo "- client package: dispatched"
-            else
-              echo "- client package: not required"
-            fi
-          } >>"$GITHUB_STEP_SUMMARY"
-
-  ensure-identity:
-    name: Ensure Identity dependency
-    needs:
-      - plan
-      - prepare-packages
-    uses: ./.github/workflows/deploy-identity-service.yml
-    with:
-      release_sha: ${{ needs.plan.outputs.release_sha }}
-      required_contract: ${{ fromJSON(needs.plan.outputs.required_identity_contract) }}
-      force: ${{ fromJSON(needs.plan.outputs.force_identity) }}
-    secrets: inherit
+            echo "This workflow does not deploy or dispatch another repository."
+            echo "To reconcile production, run **Reconcile deliveries** in"
+            echo "[aiaiaiai-org/infra](https://github.com/aiaiaiai-org/infra/actions/workflows/reconcile-deliveries.yml)."
+            echo "Select the matching workload (nilxone-web, nilxone-telegram, nilxone-discord),"
+            echo "or leave it blank for all automatic workloads."
+          } >> "$GITHUB_STEP_SUMMARY"
