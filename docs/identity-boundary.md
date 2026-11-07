@@ -3,13 +3,67 @@
 
 # Identity boundary: the identity service leaves the game world
 
-Status: accepted direction (owner, 2026-11-02), corrected 2026-11-03. A full wipe
-of existing users is authorized. Plan only: no code, no data moves. Each step
-below is its own change, and some need separate authorization.
+Status: service ownership updated by the owner on 2026-11-06. The historical
+2026-11-02/03 proposal is preserved below for context, not as the current
+repository or hosting decision. No deployment, data moves or wipe run here.
 Parent designs: [ECO-0001](https://github.com/aiaiaiai-org/.github/blob/main/ecosystem/identity/DESIGN.md)
 and [`docs/unified-auth.md`](unified-auth.md).
 
-## Decision
+## Current decision (2026-11-06)
+
+The owner chose **`nilx-one/core`** for the 0x1 service logic. This supersedes
+the earlier unnamed game repository under `aiaiaiai-org` and the instruction
+below that Core should receive removal only.
+
+| Authority                     | Owns                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `aiaiaiai-org/4x-ais`         | Shared identity, unique `pub_dress` and public-label allocation, native credentials, providers and OIDC issuer          |
+| `nilx-one/core` (server-side) | 0x1 product profile, public information and shared game behavior; product state stays outside AIS                       |
+| `nilx-one/web`                | HTTP/process composition, product-session cookies, request authentication, CSRF/rate limits, host SDKs and presentation |
+
+The product-side contract and first implementation are in
+[Core PR #95](https://github.com/nilx-one/core/pull/95), including
+`docs/ais-public-info.md`. `PublicInfoService` composes the existing OIDC
+verifier with a separate product database. Only a verified `(issuer, sub)`
+for client `nilx-one` creates or resolves a profile. A public name never
+attaches a pre-existing Bond, and another product's pairwise subject cannot
+select a 0x1 row. A rename preserves the product id and its state.
+
+The public DTO contains only a product `profile_id`, optional display name
+`pub_dress` and XP with `authority: "client"`. Pairwise subjects, credentials,
+provider identifiers, wallet balances, precise locations and internal roles
+are excluded. A stored owner assertion creates no BondChain evidence.
+
+This is an opt-in Core path, not a running shared-auth rollout. Existing
+`SignInFlow::finish` and `aiaiaiai_accounts` consumers retain the legacy
+first-sight address link until their adapter is explicitly moved. A new host
+must use the product service and its own checked session binding, not mint a
+legacy native session by matching a public address.
+
+`4x-ais/master` has a placeholder, styles and image publisher; the actual
+identity runtime is still missing. Its prepared `auth.aiaiaiai.org` route is
+on edge-prod-2. Existing 0x1 workloads remain on edge-prod-1. Core itself is
+a library, not an edge workload. The OIDC browser redirect and server-side
+code/JWKS calls use HTTPS and require no cross-server container route or tunnel.
+
+Delivery proceeds through the Core slice, actual AIS runtime, thin HTTP and
+session adapter, then remaining product-state moves and authenticated ordered
+identity updates/deletion. End-to-end and deploy validation precede separately
+authorized activation. No current host is switched by the Core PR.
+
+The preserved safety contracts remain: the visit-bound issuer worker is the
+only seeds debit until its replacement is implemented; `gm` belongs to the
+game. An approved advance Telegram notice and explicit day-of authorization
+are still required before any destructive wipe. Neither action runs here.
+
+## Historical proposal (2026-11-02/03)
+
+The sections below record the earlier design and inventory. Their references
+to an unnamed repository, Core removal only, identity staying on edge-prod-1,
+and their repository/hosting open questions are superseded by the current
+decision above. The existing debit contract and protected rollout gates remain.
+
+### Earlier decision
 
 The aiaiaiai identity service keeps only what makes a person one person across
 products. Everything that exists because of the 0x1 game moves to 0x1.
