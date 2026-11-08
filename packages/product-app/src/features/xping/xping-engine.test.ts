@@ -28,12 +28,7 @@ vi.mock("../progression/committed-journal", () => ({
   subscribeCommittedJournal: vi.fn(),
 }));
 
-const {
-  grantStarterSeeds,
-  repairXping,
-  resetStarterSeedsForTest,
-  useXpingEngine,
-} = await import("./xping-engine");
+const { repairXping, useXpingEngine } = await import("./xping-engine");
 const { act, renderHook, waitFor } = await import("@testing-library/react");
 
 const BROKEN: XpingEngineRead = {
@@ -61,7 +56,6 @@ function engine(repaired: XpingEngineResult): XpingEngineAccessPort & {
 
 beforeEach(() => {
   stored = { state: '{"seeds":"100"}', pickedUp: new Set() };
-  resetStarterSeedsForTest();
 });
 
 describe("repairXping", () => {
@@ -93,30 +87,6 @@ describe("repairXping", () => {
     await expect(repairXping("0x1sky", service)).resolves.toMatchObject({
       kind: "repaired",
     });
-  });
-});
-
-describe("grantStarterSeeds", () => {
-  it("asks Core once a session per owner", async () => {
-    const core = {
-      applyInventoryCommand: vi.fn(async () => ({
-        ok: true as const,
-        state: '{"seeds":"10100","starter":true}',
-        seedsGained: 10_000,
-        seedsSpent: 0,
-        experience: 0,
-      })),
-      economyCatalog: vi.fn(),
-    };
-    await expect(grantStarterSeeds("0x1sky", core)).resolves.toBe(true);
-    await expect(grantStarterSeeds("0x1sky", core)).resolves.toBe(false);
-    expect(core.applyInventoryCommand).toHaveBeenCalledOnce();
-    expect(core.applyInventoryCommand).toHaveBeenCalledWith(
-      '{"seeds":"100"}',
-      { op: "grant_starter_seeds" },
-      expect.any(Number),
-    );
-    expect(stored.state).toBe('{"seeds":"10100","starter":true}');
   });
 });
 

@@ -2,6 +2,8 @@
 
 What the Bond and its Avaia carry, and the Bond's Seeds ₴€£. Every rule is Core's (`docs/economy.md` and `docs/find-items.md` in `nilx-one/core`): what a find is, what fits where, what sells for what, what a craft takes. This client stores Core's answer and shows it.
 
+**Seeds come only from Identity** (nilx-one/web#567). The balance on screen is the Bond's Identity wallet (`GET /api/v1/identity/seeds`), the one Market purchases and xPing repair debit. The browser inventory's own `seeds` are retired without transfer: they cannot be verified, and Identity's once-only 10,000 starter credit already covers every Bond. The browser no longer grants local starter seeds, and selling finds, buying carries and crafting (all priced in local seeds) stay closed until they go through Identity.
+
 ## Two grids
 
 The Bond and the Avaia each carry a S.T.A.L.K.E.R.-style grid: pockets (1×3, 3 cells), a backpack (3×4, 12 cells) or a bag (12×10, 120 cells). Every thing takes its own rectangle. Both **start with pockets**. Anything bigger has to be owned before it can be worn:
@@ -37,7 +39,7 @@ A find goes into its finder's grid when its pick-up award is **kept**, that is, 
 
 **Inventory** (Ukrainian: «Рюкзак») opens from the Dock's header, the glyph left of «змінити»: a bag filled as far as the driver's state goes (the Avaia's energy, else progress to the next level), in their colour. For whoever is driving, the Bond or its Avaia, it shows their state (level, and the Avaia's energy), their grid and the balance. The other's grid shows only while the two **stand together**: Core's `near` proximity level, under 15 m between the Bond and the Avaia ([Avaia proximity](https://github.com/nilx-one/core/blob/master/docs/avaia-proximity.md)). Apart, or while either place is unknown, each sees only its own, and the screen says the other's shows when they stand together. The Bond's screen in the Dock opens it too. Tap a thing to:
 
-- **sell** it from the Bond's grid, for Core's price. Things nobody buys say so;
+- **sell** it from the Bond's grid, for Core's price (closed for now: it would credit retired local seeds; see above). Things nobody buys say so;
 - **hand it across**: from the Avaia to the Bond, or back, only while they stand together.
 
 A change Core refuses (no room, not for sale) changes nothing, and the screen says why.

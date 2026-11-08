@@ -36,8 +36,10 @@ export interface InventoryPanelProps {
   /** The repair workshop this device stands at, if any. */
   readonly workshop?: { readonly name?: string | undefined } | undefined;
   /**
-   * Buying carries and crafting. Off for now: carries will change only at
-   * home, and both come back together later.
+   * Buying carries, crafting and selling finds: everything priced in the
+   * browser inventory's local seeds. Off: Identity's wallet is the only seeds
+   * balance (#567), so local seeds are neither issued nor spent until these
+   * go through Identity. Carries will change only at home.
    */
   readonly shopAndCraft?: boolean;
   /** Whose grid is shown, and first: the one the screen was opened for. */
@@ -387,7 +389,7 @@ export function InventoryPanel({
           </button>
         </div>
         <div className="inventory__actions">
-          {selected.holder === "bond" ? (
+          {selected.holder === "bond" && shopAndCraft ? (
             typeof price === "number" ? (
               <button
                 type="button"
