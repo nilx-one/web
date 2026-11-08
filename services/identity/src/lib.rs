@@ -8,6 +8,7 @@ pub mod api {
     include!("api_pub_info.rs");
     include!("api_awards.rs");
     include!("api_xping.rs");
+    include!("api_finds.rs");
     include!("api_market.rs");
     include!("api_business_memberships.rs");
     include!("api_business_creation.rs");
@@ -20,6 +21,7 @@ pub mod issuer;
 pub use nilxone_identity::cell_orbs;
 pub use nilxone_identity::credentials;
 pub mod discord_oauth;
+pub use nilxone_identity::find_attestation;
 pub use nilxone_identity::finds;
 pub mod github_evidence;
 pub mod location_control;
