@@ -36,6 +36,7 @@ import {
   hasBusinessStationAccess,
   hasNearbySpeechAccess,
   hasCommittedAwardAccess,
+  hasSeedsWalletAccess,
   hasXpingEngineAccess,
   hasPubInfoAccess,
   type BondProviderConnections,
@@ -1274,6 +1275,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             : {})}
           {...(hasXpingEngineAccess(dependencies.identity)
             ? { xpingEngine: dependencies.identity }
+            : {})}
+          {...(hasSeedsWalletAccess(dependencies.identity)
+            ? { seedsWallet: dependencies.identity }
             : {})}
           findItems={dependencies.core}
           {...(dependencies.marketCatalog === undefined

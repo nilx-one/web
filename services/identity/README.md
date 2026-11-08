@@ -271,6 +271,11 @@ rename, so the credit is never issued again, even after it is spent. A refused
 purchase or repair commits nothing, the credit included. A browser
 `inventory.state` balance is never credited.
 
+Web reads this wallet through `SeedsWalletAccessPort.readSeedsWallet()` and the
+inventory shows only that balance (or says it is unavailable); it never shows
+the browser inventory's local `seeds` as spendable, and the Market handoff
+carries no seeds at all.
+
 ## Market Special orders (0x1 issuer)
 
 0xda-market sells Special in seeds; this service is the issuer that owns the

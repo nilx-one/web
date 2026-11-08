@@ -77,10 +77,20 @@ const { useInventory } = await import("./inventory");
 const core = { applyInventoryCommand: vi.fn(), economyCatalog: vi.fn() };
 
 describe("InventoryPanel", () => {
-  it("shows both grids, the balance, and things in their cells", () => {
-    render(<InventoryPanel owner="0x0sky" core={core} committed together />);
+  it("shows both grids, the wallet balance, and things in their cells", () => {
+    render(
+      <InventoryPanel
+        owner="0x0sky"
+        core={core}
+        committed
+        together
+        seeds={{ kind: "read", balance: 9360n }}
+      />,
+    );
 
-    expect(screen.getByRole("status")).toHaveTextContent("15 Seed ₴€£");
+    // Identity's wallet, never the browser inventory's 15 local seeds.
+    expect(screen.getByRole("status")).toHaveTextContent("9,360 Seed ₴€£");
+    expect(screen.getByRole("status")).not.toHaveTextContent("15");
     const bottle = screen.getByRole("button", { name: "Bottle" });
     expect(bottle.style.gridColumn).toBe("1 / span 1");
     expect(bottle.style.gridRow).toBe("1 / span 2");
@@ -91,6 +101,27 @@ describe("InventoryPanel", () => {
     expect(screen.getByRole("button", { name: "Flyer" }).style.gridRow).toBe(
       "3 / span 1",
     );
+  });
+
+  it("never shows the local inventory amount as a balance", () => {
+    const { rerender } = render(
+      <InventoryPanel owner="0x0sky" core={core} committed together />,
+    );
+    expect(screen.queryByText(/Seed ₴€£/)).not.toBeInTheDocument();
+
+    rerender(
+      <InventoryPanel
+        owner="0x0sky"
+        core={core}
+        committed
+        together
+        seeds={{ kind: "unavailable" }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Seeds are unavailable right now.",
+    );
+    expect(screen.queryByText(/15 Seed/)).not.toBeInTheDocument();
   });
 
   it("frames every carry at 3×4 size: pockets draw their three cells, bags scroll", () => {

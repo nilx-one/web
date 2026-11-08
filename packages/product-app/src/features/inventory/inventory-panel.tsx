@@ -17,8 +17,15 @@ import {
 } from "./inventory";
 import { ThingIcon } from "./thing-icon";
 import { thingName } from "./thing-name";
+import type { SeedsWalletView } from "./use-seeds-wallet";
 
 export interface InventoryPanelProps {
+  /**
+   * The Bond's authoritative Identity seeds wallet. Absent, the host has no
+   * wallet and no balance is shown: the browser inventory's amount is never
+   * presented as spendable seeds.
+   */
+  readonly seeds?: SeedsWalletView | undefined;
   readonly specialItems?: readonly PaidSpecialItem[];
   readonly onActivateSpecial?: (id: string) => void;
   readonly activatingSpecial?: boolean;
@@ -95,6 +102,7 @@ export function InventoryPanel({
   specialItems = [],
   onActivateSpecial,
   activatingSpecial = false,
+  seeds,
 }: InventoryPanelProps) {
   const { t, resolved } = useLocalization();
   const plural = new Intl.PluralRules(resolved);
@@ -428,9 +436,20 @@ export function InventoryPanel({
 
   return (
     <div className="inventory">
-      <p className="inventory__seeds" role="status">
-        {t("inventory.seeds").replace("{amount}", String(model.seeds))}
-      </p>
+      {seeds === undefined ? null : (
+        <p className="inventory__seeds" role="status">
+          {seeds.kind === "read"
+            ? t("inventory.seeds").replace(
+                "{amount}",
+                new Intl.NumberFormat(resolved).format(seeds.balance),
+              )
+            : t(
+                seeds.kind === "loading"
+                  ? "inventory.seedsLoading"
+                  : "inventory.seedsUnavailable",
+              )}
+        </p>
+      )}
       <p className="inventory__hint">
         {t(empty ? "inventory.empty" : "inventory.selectHint")}
       </p>

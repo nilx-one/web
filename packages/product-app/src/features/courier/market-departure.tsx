@@ -15,13 +15,11 @@ interface PendingVisit {
 export function MarketDeparture({
   catalog,
   plan,
-  seeds,
   avaia,
   pickupOrderId,
 }: {
   catalog: EmbeddedMarketCatalogPort;
   plan: CourierPlan;
-  seeds: number;
   avaia: MapPointSelection | undefined;
   pickupOrderId?: string | undefined;
 }) {
@@ -55,7 +53,6 @@ export function MarketDeparture({
         const promise = Promise.resolve().then(() =>
           beginVisit({
             point: plan.destination.pub_dress.replace(/^0xda-market-/, ""),
-            seeds: String(seeds),
             ...(pickupOrderId ? { pickupOrderId } : {}),
             avaia,
             plan,
@@ -74,7 +71,7 @@ export function MarketDeparture({
     return () => {
       live = false;
     };
-  }, [catalog, plan, seeds, avaia, visitKey, pickupOrderId]);
+  }, [catalog, plan, avaia, visitKey, pickupOrderId]);
 
   return (
     <section className="market-dock">

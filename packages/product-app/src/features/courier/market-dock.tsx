@@ -49,7 +49,6 @@ export interface EmbeddedMarketCatalogPort {
   beginVisit?(input: {
     point: string;
     pickupOrderId?: string;
-    seeds: string;
     avaia: { longitude: number; latitude: number };
     plan: CourierPlan;
     /** Abort a stale handoff if the selected arrival changes. */

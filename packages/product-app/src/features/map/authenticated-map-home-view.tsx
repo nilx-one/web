@@ -32,6 +32,7 @@ import {
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
+  type SeedsWalletAccessPort,
   type XpingEngineAccessPort,
   type CoreRuntimePort,
   type BusinessStationAccessPort,
@@ -89,6 +90,7 @@ import { oweBackpackScene, useBackpackGift } from "../inventory/backpack-gift";
 import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind, useInventory } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
+import { useSeedsWallet } from "../inventory/use-seeds-wallet";
 import {
   ERROR_TOAST_MS,
   useErrorToastFeedback,
@@ -414,6 +416,8 @@ export interface AuthenticatedMapHomeViewProps {
   readonly committedAwards?: CommittedAwardAccessPort;
   /** xPing's engine as the identity service stores it; absent, no forcing. */
   readonly xpingEngine?: XpingEngineAccessPort;
+  /** The authoritative Identity seeds wallet; absent, no balance is shown. */
+  readonly seedsWallet?: SeedsWalletAccessPort;
   /**
    * Core, naming what a find is and reading the pick-up setting. Absent or
    * older, finds are still paid; the toast then names the tier, not the item.
@@ -958,6 +962,7 @@ export function AuthenticatedMapHomeView({
   pubInfo,
   committedAwards,
   xpingEngine,
+  seedsWallet,
   findItems: localFindItems,
   courierDirectory,
   marketCatalog,
@@ -2027,6 +2032,12 @@ export function AuthenticatedMapHomeView({
   // xPing's engine lives with the identity service; its repairs are paid
   // from this device's inventory, which also gets the starter Seeds once.
   const xping = useXpingEngine(pubDress, xpingEngine, findItems);
+  // Identity's wallet, read again each time the inventory opens and after
+  // an xPing repair; never the browser inventory's local seeds amount.
+  const walletSeeds = useSeedsWallet(
+    seedsWallet,
+    `${activeDetail}:${xping.read?.state.at_ms}`,
+  );
   useStarterSeeds(pubDress, findItems);
   const courierSuspended =
     guideActive ||
@@ -4472,6 +4483,7 @@ export function AuthenticatedMapHomeView({
                         workshop={workshop}
                         first={detailState?.subject ?? "bond"}
                         together={avaiaProximity?.policy.level === "near"}
+                        seeds={walletSeeds}
                       />
                     </>
                   ) : null}
@@ -4779,7 +4791,6 @@ export function AuthenticatedMapHomeView({
                 catalog={marketCatalog}
                 plan={courier.arrival}
                 pickupOrderId={pickupOrder}
-                seeds={carriedInventory.seeds}
                 avaia={
                   avaiaWalk.stance(globalThis.performance.now())?.point ??
                   readWorldMemory(pubDress).avaia

@@ -1338,4 +1338,51 @@ describe("Telegram self-disconnect transport", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(4);
   });
+
+  it("reads the authoritative Identity seeds wallet without writing", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        response(200, {
+          balance: "9360",
+          denomination: "seeds",
+          symbol: "₴€£",
+          authority: "identity",
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(401, {
+          error: { code: "provider_authentication_required", message: "" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(200, { balance: "9360", denomination: "seeds" }),
+      )
+      .mockRejectedValueOnce(new TypeError("offline"));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => "tma abc",
+    });
+
+    await expect(adapter.readSeedsWallet()).resolves.toEqual({
+      kind: "read",
+      balance: 9360n,
+    });
+    expect(fetch).toHaveBeenNthCalledWith(1, "/api/v1/identity/seeds", {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { authorization: "tma abc" },
+    });
+    await expect(adapter.readSeedsWallet()).resolves.toEqual({
+      kind: "rejected",
+      reason: "authentication-required",
+    });
+    await expect(adapter.readSeedsWallet()).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    await expect(adapter.readSeedsWallet()).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+  });
 });
