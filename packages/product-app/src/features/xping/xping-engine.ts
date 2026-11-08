@@ -87,6 +87,11 @@ export interface XpingEngineState {
   readonly receivedAt: number;
   readonly busy: boolean;
   readonly error: XpingRepairOutcome | undefined;
+  /**
+   * How many repairs Identity confirmed (and so debited) in this view. It
+   * changes only on a confirmed repair, never on a mere engine read.
+   */
+  readonly repairs: number;
   repair(): void;
 }
 
@@ -107,6 +112,7 @@ export function useXpingEngine(
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<XpingRepairOutcome>();
+  const [repairs, setRepairs] = useState(0);
   useEffect(() => {
     if (engine === undefined) return;
     let active = true;
@@ -130,11 +136,13 @@ export function useXpingEngine(
     setError(undefined);
     void repairXping(owner, engine, core)
       .then((outcome) => {
-        if (outcome.kind === "repaired") setRead(outcome.read);
-        else setError(outcome);
+        if (outcome.kind === "repaired") {
+          setRead(outcome.read);
+          setRepairs((count) => count + 1);
+        } else setError(outcome);
       })
       .catch(() => setError({ kind: "unavailable" }))
       .finally(() => setBusy(false));
   }, [busy, core, engine, owner, setRead]);
-  return { read, receivedAt, busy, error, repair };
+  return { read, receivedAt, busy, error, repairs, repair };
 }

@@ -33,19 +33,21 @@ it("waits for Avaia coordinates instead of caching a rejected handoff", async ()
     <MarketDeparture
       catalog={catalog}
       plan={plan}
-      seeds={10}
+
       avaia={undefined}
     />,
   );
   expect(screen.getByText("Waiting for Avaia position…")).toBeInTheDocument();
   expect(beginVisit).not.toHaveBeenCalled();
   view.rerender(
-    <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={avaia} />,
+    <MarketDeparture catalog={catalog} plan={plan} avaia={avaia} />,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(1));
   expect(beginVisit).toHaveBeenCalledWith(
-    expect.objectContaining({ point: "zoloti-vorota", seeds: "10", avaia }),
+    expect.objectContaining({ point: "zoloti-vorota", avaia }),
   );
+  // The browser inventory amount never crosses the Market handoff.
+  expect(beginVisit.mock.calls[0]?.[0]).not.toHaveProperty("seeds");
 });
 
 it("changes point without duplicate StrictMode handoff", async () => {
@@ -62,14 +64,14 @@ it("changes point without duplicate StrictMode handoff", async () => {
   };
   const view = render(
     <StrictMode>
-      <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={avaia} />
+      <MarketDeparture catalog={catalog} plan={plan} avaia={avaia} />
     </StrictMode>,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(1));
   const oldSignal = beginVisit.mock.calls[0]![0].signal as AbortSignal;
   view.rerender(
     <StrictMode>
-      <MarketDeparture catalog={catalog} plan={next} seeds={10} avaia={avaia} />
+      <MarketDeparture catalog={catalog} plan={next} avaia={avaia} />
     </StrictMode>,
   );
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(2));
@@ -83,9 +85,7 @@ it("retries a real handoff failure explicitly", async () => {
     .mockRejectedValueOnce(new Error("503"))
     .mockResolvedValueOnce(undefined);
   const catalog = { load: vi.fn().mockResolvedValue([]), beginVisit };
-  render(
-    <MarketDeparture catalog={catalog} plan={plan} seeds={10} avaia={avaia} />,
-  );
+  render(<MarketDeparture catalog={catalog} plan={plan} avaia={avaia} />);
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument(),
   );

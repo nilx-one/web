@@ -20,7 +20,6 @@ const plan: CourierPlan = {
 };
 const visit = {
   point: "zoloti-vorota",
-  seeds: "400",
   avaia: { longitude: 30.5, latitude: 50.4 },
   plan,
 };

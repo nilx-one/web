@@ -306,6 +306,15 @@ export {
 } from "./courier";
 
 export {
+  hasSeedsWalletAccess,
+  parseSeedsWalletRead,
+  type SeedsWalletAccessPort,
+  type SeedsWalletRead,
+  type SeedsWalletRejection,
+  type SeedsWalletResult,
+} from "./seeds-wallet";
+
+export {
   hasXpingEngineAccess,
   parseXpingEngineRead,
   type XpingEngineAccessPort,

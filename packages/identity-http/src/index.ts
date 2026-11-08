@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  parseSeedsWalletRead,
+  type SeedsWalletAccessPort,
+  type SeedsWalletResult,
   parseXpingEngineRead,
   type XpingEngineAccessPort,
   type XpingEngineResult,
@@ -284,6 +287,7 @@ class IdentityHttpAdapter
     NearbySpeechAccessPort,
     BusinessStationAccessPort,
     XpingEngineAccessPort,
+    SeedsWalletAccessPort,
     OrganizationsAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
@@ -1452,6 +1456,35 @@ class IdentityHttpAdapter
     return pubInfoRefusal(body);
   }
 
+  /** The authoritative Identity seeds wallet; never a local inventory amount. */
+  public async readSeedsWallet(): Promise<SeedsWalletResult> {
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch("/api/v1/identity/seeds", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: authorization === undefined ? {} : { authorization },
+      });
+    } catch {
+      return { kind: "service-unavailable" };
+    }
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok) {
+      const read = parseSeedsWalletRead(body);
+      return read === undefined
+        ? { kind: "service-unavailable" }
+        : { kind: "read", ...read };
+    }
+    const refusal = pubInfoRefusal(body);
+    return refusal.kind === "rejected" &&
+      (refusal.reason === "authentication-required" ||
+        refusal.reason === "inactive")
+      ? { kind: "rejected", reason: refusal.reason }
+      : { kind: "service-unavailable" };
+  }
+
   public async readXpingEngine(): Promise<XpingEngineResult> {
     return this.xpingEngine("GET");
   }
@@ -1839,6 +1872,7 @@ export function createIdentityHttpAdapter(
   NearbySpeechAccessPort &
   BusinessStationAccessPort &
   XpingEngineAccessPort &
+  SeedsWalletAccessPort &
   OrganizationsAccessPort {
   return new IdentityHttpAdapter(options);
 }

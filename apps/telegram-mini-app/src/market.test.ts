@@ -77,7 +77,6 @@ it("opens the Market handoff for an arrival with the Telegram credential", async
   if (!catalog.beginVisit) throw new Error("Telegram hands over to Market");
   await catalog.beginVisit({
     point: "zoloti-vorota",
-    seeds: "0",
     avaia: { longitude: 30.5, latitude: 50.4 },
     plan,
   });
