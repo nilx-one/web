@@ -28,8 +28,13 @@ vi.mock("../progression/committed-journal", () => ({
   subscribeCommittedJournal: vi.fn(),
 }));
 
-const { grantStarterSeeds, repairXping, resetStarterSeedsForTest } =
-  await import("./xping-engine");
+const {
+  grantStarterSeeds,
+  repairXping,
+  resetStarterSeedsForTest,
+  useXpingEngine,
+} = await import("./xping-engine");
+const { act, renderHook, waitFor } = await import("@testing-library/react");
 
 const BROKEN: XpingEngineRead = {
   state: { energy_permille: 0, at_ms: "1000", broken_at_ms: "1000" },
@@ -112,5 +117,32 @@ describe("grantStarterSeeds", () => {
       expect.any(Number),
     );
     expect(stored.state).toBe('{"seeds":"10100","starter":true}');
+  });
+});
+
+describe("useXpingEngine repairs", () => {
+  it("counts only repairs Identity confirmed, not engine reads", async () => {
+    const repaired = {
+      ...BROKEN,
+      state: { energy_permille: 1000, at_ms: "9000" },
+    };
+    const port = engine({ kind: "read", ...repaired });
+    port.repairXpingEngine
+      .mockResolvedValueOnce({ kind: "read", ...repaired })
+      .mockResolvedValueOnce({ kind: "rejected", reason: "not_enough_seeds" });
+    const { result } = renderHook(() =>
+      useXpingEngine("0x0sky", port, undefined),
+    );
+    await waitFor(() => expect(result.current.read).toBeDefined());
+    expect(result.current.repairs).toBe(0);
+
+    act(() => result.current.repair());
+    await waitFor(() => expect(result.current.repairs).toBe(1));
+    await waitFor(() => expect(result.current.busy).toBe(false));
+
+    // A refused repair debits nothing, so the wallet need not be read again.
+    act(() => result.current.repair());
+    await waitFor(() => expect(result.current.error).toBeDefined());
+    expect(result.current.repairs).toBe(1);
   });
 });

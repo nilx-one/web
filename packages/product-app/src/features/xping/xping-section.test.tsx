@@ -46,6 +46,7 @@ it("shows energy, smoke, when it is full and the repair's price", () => {
         read: read(),
         receivedAt: 100_000,
         busy: false,
+        repairs: 0,
         error: undefined,
         repair,
       }}
@@ -71,6 +72,7 @@ it("says a broken engine mends itself and when, and why a repair failed", () => 
         }),
         receivedAt: 100_000,
         busy: false,
+        repairs: 0,
         error: { kind: "refused", reason: "not_enough_seeds" },
         repair: vi.fn(),
       }}
@@ -99,6 +101,7 @@ it("offers no repair for a full engine", () => {
         }),
         receivedAt: 100_000,
         busy: false,
+        repairs: 0,
         error: undefined,
         repair: vi.fn(),
       }}

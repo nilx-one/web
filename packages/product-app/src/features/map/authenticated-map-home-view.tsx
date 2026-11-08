@@ -2035,8 +2035,9 @@ export function AuthenticatedMapHomeView({
   // Identity's wallet, read again each time the inventory opens and after
   // an xPing repair; never the browser inventory's local seeds amount.
   const walletSeeds = useSeedsWallet(
+    pubDress,
     seedsWallet,
-    `${activeDetail}:${xping.read?.state.at_ms}`,
+    `${activeDetail}:${xping.repairs}`,
   );
   useStarterSeeds(pubDress, findItems);
   const courierSuspended =
