@@ -68,6 +68,9 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/xping/engine",
             get(read_xping_engine).post(command_xping_engine),
         )
+        .route("/api/v1/identity/finds/attest", post(attest_find))
+        .route("/api/v1/identity/finds/sell", post(sell_find))
+        .route("/api/v1/identity/crafts", post(start_craft))
         .layer(DefaultBodyLimit::max(PUB_INFO_MAX_BYTES))
         .with_state(state)
 }
@@ -1224,5 +1227,170 @@ mod pub_info_api_tests {
                 "{body}"
             );
         }
+    }
+
+    async fn finds_request(
+        app: &axum::Router,
+        auth: &str,
+        session: &mut Option<String>,
+        path: &str,
+        body: Value,
+        csrf: bool,
+    ) -> axum::response::Response {
+        let request = Request::post(path).header("content-type", "application/json");
+        let request = if csrf { request.header("x-0x1-csrf", "1") } else { request };
+        let request = match session {
+            Some(cookie) => request.header(COOKIE, cookie.as_str()),
+            None => request.header(AUTHORIZATION, format!("tma {auth}")),
+        };
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::from(body.to_string())).expect("request"))
+            .await
+            .expect("response");
+        if session.is_none() && response.headers().contains_key(SET_COOKIE) {
+            *session = Some(session_cookie(&response));
+        }
+        response
+    }
+
+    /// A common find the pack rolls in NOW's week, its item, and its cell's
+    /// centre in degrees.
+    fn a_common_find(want: impl Fn(&str) -> bool) -> (String, &'static str, f64, f64) {
+        let epoch = crate::finds::epoch_of(i64::try_from(NOW * 1000).expect("now"));
+        let row_degrees = 50.0 / 111_195.0;
+        let column_degrees = row_degrees * 1.5698;
+        for row in 311_900_i64..313_000 {
+            for column in 298_000_i64..298_300 {
+                let Some(roll) =
+                    crate::finds::roll_segment(crate::finds::FIND_PACK_ID, 1, epoch, row, column)
+                        .expect("roll")
+                else {
+                    continue;
+                };
+                if roll.tier > 3 {
+                    continue;
+                }
+                let tier = nilxone_contracts::FindTier::new(roll.tier).expect("tier");
+                let item = nilxone_contracts::item_for_find(&roll.artifact_id, tier)
+                    .expect("item")
+                    .id;
+                if want(item) {
+                    #[allow(clippy::cast_precision_loss)]
+                    return (
+                        roll.artifact_id,
+                        item,
+                        (column as f64 + 0.5) * column_degrees - 180.0,
+                        (row as f64 + 0.5) * row_degrees - 90.0,
+                    );
+                }
+            }
+        }
+        panic!("no such find in range")
+    }
+
+    #[tokio::test]
+    async fn an_attested_find_sells_once_for_cores_price_and_a_repair_uses_it_up() {
+        let (app, sky, other) = two_bonds().await;
+        let (mut session, mut other_session) = (None, None);
+        let now_ms = NOW * 1000;
+        let attest = |artifact: &str, longitude: f64, latitude: f64| {
+            serde_json::json!({
+                "artifact_id": artifact, "finder": "bond",
+                "found_at_ms": now_ms - 60_000, "longitude": longitude, "latitude": latitude,
+            })
+        };
+        let wallet = |session: &Option<String>| {
+            let cookie = session.clone().expect("session");
+            let app = app.clone();
+            async move {
+                let response = app
+                    .oneshot(
+                        Request::get("/api/v1/identity/seeds")
+                            .header(COOKIE, cookie)
+                            .body(Body::empty())
+                            .expect("request"),
+                    )
+                    .await
+                    .expect("response");
+                json(response).await["balance"].clone()
+            }
+        };
+
+        // A sellable thing.
+        let (artifact, item, longitude, latitude) = a_common_find(|item| {
+            nilxone_contracts::item_kind(item).and_then(|kind| kind.sell_price).is_some()
+        });
+        let price = nilxone_contracts::item_kind(item).unwrap().sell_price.unwrap();
+        // Without CSRF nothing is attested.
+        let no_csrf = finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/attest",
+            attest(&artifact, longitude, latitude), false).await;
+        assert!(no_csrf.status().is_client_error());
+        let attested = finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/attest",
+            attest(&artifact, longitude, latitude), true).await;
+        assert_eq!(attested.status(), StatusCode::OK);
+        assert_eq!(attested.headers()["cache-control"], "no-store");
+        let attested = json(attested).await;
+        assert_eq!(attested["outcome"], "attested");
+        assert_eq!(attested["item_id"], item);
+        let id = attested["attestation_id"].as_str().expect("id").to_owned();
+        let again = json(finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/attest",
+            attest(&artifact, longitude, latitude), true).await).await;
+        assert_eq!(again["outcome"], "already_yours");
+        assert_eq!(again["attestation_id"], id.as_str());
+
+        // Far away, or a made-up id, is refused.
+        let far = finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/attest",
+            attest(&artifact, longitude + 0.01, latitude), true).await;
+        assert_eq!(json(far).await["error"]["code"], "too_far");
+        let made_up = finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/attest",
+            attest("art:seg:1:2:e1:1:0", longitude, latitude), true).await;
+        assert_eq!(json(made_up).await["error"]["code"], "unknown_find");
+        // A client cannot name a price.
+        let priced = finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/sell",
+            serde_json::json!({ "attestation_id": id, "price": 9999 }), true).await;
+        assert!(priced.status().is_client_error());
+
+        // Another Bond cannot sell it; its owner sells it once.
+        let foreign = finds_request(&app, &other, &mut other_session, "/api/v1/identity/finds/sell",
+            serde_json::json!({ "attestation_id": id }), true).await;
+        assert_eq!(foreign.status(), StatusCode::NOT_FOUND);
+        let before = wallet(&session).await;
+        let sold = json(finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/sell",
+            serde_json::json!({ "attestation_id": id }), true).await).await;
+        assert_eq!(sold["outcome"], "sold");
+        assert_eq!(sold["seeds_credited"], price.to_string());
+        let resold = json(finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/sell",
+            serde_json::json!({ "attestation_id": id }), true).await).await;
+        assert_eq!(resold["outcome"], "already_sold");
+        let after = wallet(&session).await;
+        let gained = after.as_str().unwrap().parse::<u64>().unwrap()
+            - before.as_str().unwrap().parse::<u64>().unwrap();
+        assert_eq!(gained, price);
+
+        // A broken player, repaired: Core's price, once; then it cannot be sold.
+        let (broken, item, longitude, latitude) =
+            a_common_find(|item| item == "broken_headphones");
+        let broken_id = json(finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/attest",
+            attest(&broken, longitude, latitude), true).await).await["attestation_id"]
+            .as_str().expect("id").to_owned();
+        assert_eq!(item, "broken_headphones");
+        let craft = serde_json::json!({
+            "craft_id": "craft-web-0001", "recipe": "repair_headphones", "inputs": [broken_id],
+        });
+        let started = json(finds_request(&app, &sky, &mut session, "/api/v1/identity/crafts",
+            craft.clone(), true).await).await;
+        assert_eq!(started["outcome"], "started");
+        assert_eq!(started["seeds_debited"], "20");
+        let replay = json(finds_request(&app, &sky, &mut session, "/api/v1/identity/crafts",
+            craft, true).await).await;
+        assert_eq!(replay["outcome"], "already_started");
+        assert_eq!(
+            wallet(&session).await.as_str().unwrap().parse::<u64>().unwrap(),
+            after.as_str().unwrap().parse::<u64>().unwrap() - 20
+        );
+        let used = finds_request(&app, &sky, &mut session, "/api/v1/identity/finds/sell",
+            serde_json::json!({ "attestation_id": broken_id }), true).await;
+        assert_eq!(json(used).await["error"]["code"], "used_up");
     }
 }

@@ -276,6 +276,28 @@ inventory shows only that balance (or says it is unavailable); it never shows
 the browser inventory's local `seeds` as spendable, and the Market handoff
 carries no seeds at all.
 
+## Attested finds, sales and paid crafts
+
+Contract 18. Core owns the rules (`nilx-one/core` `docs/find-attestation.md`);
+these routes authenticate an active Bond, require CSRF, rate-limit and answer
+`no-store`. No request carries an amount.
+
+- `POST /api/v1/identity/finds/attest` takes `{ "artifact_id", "finder":
+"bond"|"avaia", "found_at_ms", "longitude", "latitude" }`. Core rolls the id,
+  checks the finder's tier, the find's week and a 50 m radius, and the service
+  stores the pick-up with its time and position. `200 { "outcome":
+"attested"|"already_yours", "attestation_id", "item_id", "seeds_credited" }`
+  (money is credited here, once); `409 taken`; `422` with `unknown_find`,
+  `out_of_time`, `too_far`, `not_the_avaias` or `invalid_pickup`.
+- `POST /api/v1/identity/finds/sell` takes `{ "attestation_id" }` and credits
+  Core's price once: `200 { "outcome": "sold"|"already_sold",
+"seeds_credited" }`; `404 unknown_attestation`; `409 not_for_sale`/`used_up`.
+- `POST /api/v1/identity/crafts` takes `{ "craft_id", "recipe", "inputs":
+[attestation ids] }` and debits Core's recipe price under the active session,
+  using the inputs up: `200 { "outcome": "started"|"already_started",
+"seeds_debited" }`; `404 unknown_recipe`; `409` with `not_enough_seeds`,
+  `wrong_inputs`, `unverifiable_inputs` or `conflicting_replay`.
+
 ## Market Special orders (0x1 issuer)
 
 0xda-market sells Special in seeds; this service is the issuer that owns the
