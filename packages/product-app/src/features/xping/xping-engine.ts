@@ -9,8 +9,6 @@ import type {
 } from "@nilx-one/application";
 import { useCallback, useEffect, useState } from "react";
 
-import { applyInventory, type InventoryPort } from "../inventory/inventory";
-
 /** How often the Dock reads the engine again while it is shown. */
 export const XPING_ENGINE_REFRESH_MS = 30_000;
 
@@ -45,40 +43,6 @@ export async function repairXping(
   return repaired.kind === "rejected"
     ? { kind: "refused", reason: repaired.reason }
     : { kind: "unavailable" };
-}
-
-const granted = new Set<string>();
-
-/**
- * Gives the ten thousand starter Seeds ₴€£ once. Core keeps the once-only
- * flag in the inventory and refuses a second grant as `not_due`; this only
- * saves asking twice in one session.
- */
-export async function grantStarterSeeds(
-  owner: string,
-  core: InventoryPort,
-): Promise<boolean> {
-  if (granted.has(owner)) return false;
-  granted.add(owner);
-  const answer = await applyInventory(owner, core, {
-    op: "grant_starter_seeds",
-  });
-  return answer.ok;
-}
-
-/** Forgets which owners were granted this session; for tests only. */
-export function resetStarterSeedsForTest(): void {
-  granted.clear();
-}
-
-export function useStarterSeeds(
-  owner: string,
-  core: InventoryPort | undefined,
-): void {
-  useEffect(() => {
-    if (core?.applyInventoryCommand === undefined) return;
-    void grantStarterSeeds(owner, core).catch(() => undefined);
-  }, [core, owner]);
 }
 
 export interface XpingEngineState {

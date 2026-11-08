@@ -313,8 +313,30 @@ describe("InventoryPanel", () => {
     );
   });
 
-  it("sells what the Bond carries and hands the Avaia's across", async () => {
+  it("issues no local seeds by default: finds are not sold", () => {
     render(<InventoryPanel owner="0x0sky" core={core} committed together />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bottle" }));
+    expect(
+      screen.queryByRole("button", { name: /Sell for/ }),
+    ).not.toBeInTheDocument();
+    expect(applyInventory).not.toHaveBeenCalledWith(
+      "0x0sky",
+      core,
+      expect.objectContaining({ op: "sell" }),
+    );
+  });
+
+  it("sells what the Bond carries and hands the Avaia's across", async () => {
+    render(
+      <InventoryPanel
+        owner="0x0sky"
+        core={core}
+        committed
+        together
+        shopAndCraft
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Bottle" }));
     fireEvent.click(screen.getByRole("button", { name: "Sell for 5 ₴€£" }));

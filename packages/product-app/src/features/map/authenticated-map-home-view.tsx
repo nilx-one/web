@@ -230,7 +230,7 @@ import { openingCamera } from "./opening-camera";
 import { useWorldStartup } from "./use-world-startup";
 import { CameraModeControl } from "./camera-mode-control";
 import { FlyoverControls } from "../flyover/flyover-controls";
-import { useStarterSeeds, useXpingEngine } from "../xping/xping-engine";
+import { useXpingEngine } from "../xping/xping-engine";
 import { useAmbientDrones } from "../ambient-drones/use-ambient-drones";
 import { useAmbientAnimals } from "../ambient-animals/use-ambient-animals";
 import { useAvaiaAnimalRemarks } from "./avaia-animal-remarks";
@@ -2039,7 +2039,6 @@ export function AuthenticatedMapHomeView({
     seedsWallet,
     `${activeDetail}:${xping.repairs}`,
   );
-  useStarterSeeds(pubDress, findItems);
   const courierSuspended =
     guideActive ||
     achievementDialog !== undefined ||

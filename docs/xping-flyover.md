@@ -194,5 +194,5 @@ A repair runs inside the owner's inventory queue (`features/xping`): read the
 engine and the service's clock, let Core's `xping_repair` price it against the
 inventory, have the service record it on exactly that engine state, and only
 then store the inventory. A refusal (`stale`, `underpaid`, not enough Seeds)
-stores nothing. Every Bond is given 10,000 starter Seed ₴€£ once, by Core's
-`grant_starter_seeds`.
+stores nothing. Every Bond is given 10,000 starter Seed ₴€£ once, by Identity's
+wallet; the browser no longer asks Core's local `grant_starter_seeds`.
