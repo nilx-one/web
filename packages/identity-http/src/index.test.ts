@@ -1385,4 +1385,71 @@ describe("Telegram self-disconnect transport", () => {
       kind: "service-unavailable",
     });
   });
+
+  it("attests, sells and pays crafts by ids alone, with CSRF", async () => {
+    const id = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(
+        response(200, {
+          outcome: "attested",
+          attestation_id: id,
+          item_id: "bottle",
+          seeds_credited: "0",
+        }),
+      )
+      .mockResolvedValueOnce(
+        response(200, { outcome: "sold", seeds_credited: "5" }),
+      )
+      .mockResolvedValueOnce(
+        response(409, { error: { code: "wrong_inputs", message: "" } }),
+      )
+      .mockRejectedValueOnce(new TypeError("offline"));
+    const adapter = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    const pickup = {
+      artifactId: "art:seg:1:2:e2961:1:0",
+      finder: "bond" as const,
+      foundAtMs: 1_000,
+      longitude: 30.5,
+      latitude: 50.4,
+    };
+    await expect(adapter.attestFind(pickup)).resolves.toEqual({
+      kind: "attested",
+      attestationId: id,
+      itemId: "bottle",
+      seedsCredited: 0n,
+    });
+    expect(fetch).toHaveBeenNthCalledWith(1, "/api/v1/identity/finds/attest", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "x-0x1-csrf": "1" },
+      body: JSON.stringify({
+        artifact_id: pickup.artifactId,
+        finder: "bond",
+        found_at_ms: 1_000,
+        longitude: 30.5,
+        latitude: 50.4,
+      }),
+    });
+    await expect(adapter.sellFind(id)).resolves.toEqual({
+      kind: "sold",
+      seedsCredited: 5n,
+    });
+    expect(JSON.parse(String(fetch.mock.calls[1]![1]!.body))).toEqual({
+      attestation_id: id,
+    });
+    await expect(
+      adapter.payCraft("craft-1", "repair_cd_player", [id]),
+    ).resolves.toEqual({
+      kind: "refused",
+      reason: "wrong_inputs",
+    });
+    await expect(adapter.sellFind(id)).resolves.toEqual({
+      kind: "unavailable",
+    });
+  });
 });

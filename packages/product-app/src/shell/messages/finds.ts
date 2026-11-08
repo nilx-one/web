@@ -69,6 +69,8 @@ export const FINDS_EN = {
   "inventory.sold": "Sold · +{amount} Seed ₴€£",
   "inventory.error.no_room": "No room for it there.",
   "inventory.error.generic": "That didn’t work. Nothing changed.",
+  "inventory.error.unverified": "Only finds Identity confirmed can be sold.",
+  "craft.error.unverified": "This needs finds Identity confirmed.",
   "inventory.full": "No room for {item}. It stays where it lay.",
   "inventory.tooBig.title": "Too big",
   "inventory.tooBig":
@@ -185,6 +187,10 @@ export const FINDS_UK: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "inventory.sold": "Продано · +{amount} Зерно ₴€£",
   "inventory.error.no_room": "Там для цього немає місця.",
   "inventory.error.generic": "Не вийшло. Нічого не змінилося.",
+  "inventory.error.unverified":
+    "Продати можна лише знахідки, які підтвердила Identity.",
+  "craft.error.unverified":
+    "Для цього потрібні знахідки, які підтвердила Identity.",
   "inventory.full": "Немає місця для «{item}». Лишилося лежати, де було.",
   "inventory.tooBig.title": "Річ завелика",
   "inventory.tooBig":
@@ -301,6 +307,9 @@ export const FINDS_RU: Readonly<Record<keyof typeof FINDS_EN, string>> = {
   "inventory.sold": "Продано · +{amount} Зерно ₴€£",
   "inventory.error.no_room": "Там для этого нет места.",
   "inventory.error.generic": "Не получилось. Ничего не изменилось.",
+  "inventory.error.unverified":
+    "Продать можно только находки, подтверждённые Identity.",
+  "craft.error.unverified": "Для этого нужны находки, подтверждённые Identity.",
   "inventory.full": "Нет места для «{item}». Осталось лежать, где было.",
   "inventory.tooBig.title": "Вещь слишком большая",
   "inventory.tooBig":

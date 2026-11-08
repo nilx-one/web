@@ -8,6 +8,7 @@ import {
   awardsFor,
   canPickUp,
   epochOf,
+  findPoint,
   isFindPerceptible,
   rollAlong,
   rollSegment,
@@ -25,6 +26,7 @@ import { claimedLeads } from "../progression/claims";
 import {
   closeCommittedLead,
   currentCommittedLeads,
+  noteFindLocation,
   pruneCommittedLeads,
   readCommittedJournal,
   recordedFindEvents,
@@ -83,17 +85,32 @@ async function recordFind(
   roll: FindRoll,
   by: FindEarner,
   pickup: FindPickupPort | undefined,
+  /** Where the finder stood: the device's fix, or the Avaia's walk. */
+  where: { readonly longitude: number; readonly latitude: number },
 ): Promise<void> {
   const snapshot = await readCommittedJournal(owner);
+  const at = Date.now();
   const awards = worldAwardsForFind(
     roll,
     by,
     recordedFindEvents(snapshot),
-    Date.now(),
+    at,
     await picksUp(pickup, roll),
   );
   if (awards.length === 0) return;
   await queueWorldAwards(owner, awards);
+  // A pick-up is attested by Identity once it is kept: remember where and
+  // when it happened (core docs/find-attestation.md). It stays on this device
+  // until then, in the encrypted journal.
+  if (awards.some((award) => award.record.kind === "find_picked_up")) {
+    await noteFindLocation(owner, {
+      artifactId: roll.artifactId,
+      finder: by,
+      foundAtMs: at,
+      longitude: where.longitude,
+      latitude: where.latitude,
+    });
+  }
 }
 
 /** Core's answer to the pick-up setting (`CoreRuntimePort.picksUp`). */
@@ -250,7 +267,12 @@ export function useFindLoop({
       void (async () => {
         for (const roll of rolls) {
           if (isFindPerceptible(roll)) {
-            await recordFind(owner, roll, "avaia", latestPickup.current);
+            // The Avaia walked past the find, within its perception.
+            const [longitude, latitude] = findPoint(roll);
+            await recordFind(owner, roll, "avaia", latestPickup.current, {
+              longitude,
+              latitude,
+            });
           }
         }
       })().catch(() => undefined);
@@ -301,9 +323,10 @@ export function useFindLoop({
       segment,
     });
     if (roll !== null) {
-      void recordFind(owner, roll, "bond", latestPickup.current).catch(
-        () => undefined,
-      );
+      void recordFind(owner, roll, "bond", latestPickup.current, {
+        longitude: deviceLongitude,
+        latitude: deviceLatitude,
+      }).catch(() => undefined);
     }
   }, [
     bondDriving,

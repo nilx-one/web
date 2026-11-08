@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
+  parseAttestAnswer,
+  parseCraftAnswer,
+  parseSaleAnswer,
+  type AttestResult,
+  type CraftPaymentResult,
+  type FindAttestationPort,
+  type ReportedPickup,
+  type SaleResult,
   parseSeedsWalletRead,
   type SeedsWalletAccessPort,
   type SeedsWalletResult,
@@ -288,6 +296,7 @@ class IdentityHttpAdapter
     BusinessStationAccessPort,
     XpingEngineAccessPort,
     SeedsWalletAccessPort,
+    FindAttestationPort,
     OrganizationsAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
@@ -1456,6 +1465,72 @@ class IdentityHttpAdapter
     return pubInfoRefusal(body);
   }
 
+  /** Asks Identity to attest a pick-up; the answer names its opaque id. */
+  public async attestFind(pickup: ReportedPickup): Promise<AttestResult> {
+    const answer = await this.findsPost("/api/v1/identity/finds/attest", {
+      artifact_id: pickup.artifactId,
+      finder: pickup.finder,
+      found_at_ms: pickup.foundAtMs,
+      longitude: pickup.longitude,
+      latitude: pickup.latitude,
+    });
+    return answer === undefined
+      ? { kind: "unavailable" }
+      : parseAttestAnswer(answer.ok, answer.body);
+  }
+
+  /** Sells an attested thing by its id alone, for Core's price. */
+  public async sellFind(attestationId: string): Promise<SaleResult> {
+    const answer = await this.findsPost("/api/v1/identity/finds/sell", {
+      attestation_id: attestationId,
+    });
+    return answer === undefined
+      ? { kind: "unavailable" }
+      : parseSaleAnswer(answer.ok, answer.body);
+  }
+
+  /** Pays a craft from the wallet and uses its attested inputs up. */
+  public async payCraft(
+    craftId: string,
+    recipe: string,
+    inputs: readonly string[],
+  ): Promise<CraftPaymentResult> {
+    const answer = await this.findsPost("/api/v1/identity/crafts", {
+      craft_id: craftId,
+      recipe,
+      inputs,
+    });
+    return answer === undefined
+      ? { kind: "unavailable" }
+      : parseCraftAnswer(answer.ok, answer.body);
+  }
+
+  private async findsPost(
+    path: string,
+    body: unknown,
+  ): Promise<{ ok: boolean; body: unknown } | undefined> {
+    const authorization = this.authorization();
+    try {
+      const response = await this.fetch(path, {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          "content-type": "application/json",
+          "x-0x1-csrf": "1",
+        },
+        body: JSON.stringify(body),
+      });
+      return {
+        ok: response.ok,
+        body: await response.json().catch(() => undefined),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The authoritative Identity seeds wallet; never a local inventory amount. */
   public async readSeedsWallet(): Promise<SeedsWalletResult> {
     const authorization = this.authorization();
@@ -1873,6 +1948,7 @@ export function createIdentityHttpAdapter(
   BusinessStationAccessPort &
   XpingEngineAccessPort &
   SeedsWalletAccessPort &
+  FindAttestationPort &
   OrganizationsAccessPort {
   return new IdentityHttpAdapter(options);
 }

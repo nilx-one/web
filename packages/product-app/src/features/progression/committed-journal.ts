@@ -64,6 +64,34 @@ export interface CommittedJournalSnapshot {
   readonly history: readonly KeptCommittedAward[];
   readonly leads: readonly FindLead[];
   readonly inventory: InventoryRecord;
+  /** Attested finds (`docs/find-attestation.md` in core); see `FindsRecord`. */
+  readonly finds: FindsRecord;
+}
+
+/** Where and when a find was picked up, kept until Identity attests it. */
+export interface FindLocation {
+  readonly artifactId: string;
+  readonly finder: "bond" | "avaia";
+  readonly foundAtMs: number;
+  readonly longitude: number;
+  readonly latitude: number;
+}
+
+/** A thing Identity attested, by the opaque id that alone leaves the device. */
+export interface AttestedFind {
+  readonly artifactId: string;
+  readonly attestationId: string;
+  readonly itemId: string;
+}
+
+/**
+ * The finds this device picked up and Identity attested. `located` holds the
+ * pick-ups not attested yet; `attested` the things still held, neither sold
+ * nor used up in a craft.
+ */
+export interface FindsRecord {
+  readonly located: readonly FindLocation[];
+  readonly attested: readonly AttestedFind[];
 }
 
 /**
@@ -109,6 +137,18 @@ type JournalEvent =
       readonly type: "lead.closed";
       readonly artifactId: ArtifactId;
       readonly reason: "picked-up" | "already-yours" | "taken" | "expired";
+    }
+  | { readonly type: "find.located"; readonly find: FindLocation }
+  | { readonly type: "find.attested"; readonly find: AttestedFind }
+  | {
+      readonly type: "find.unattestable";
+      readonly artifactId: string;
+      readonly reason: string;
+    }
+  | {
+      readonly type: "find.spent";
+      readonly attestationId: string;
+      readonly reason: "sold" | "crafted";
     }
   | {
       readonly type: "inventory.state";
@@ -310,6 +350,8 @@ export function foldCommittedJournal(
   let leads: FindLead[] = [];
   let inventoryState = "";
   const pickedUp = new Set<string>();
+  const located = new Map<string, FindLocation>();
+  const attested = new Map<string, AttestedFind>();
 
   for (const event of events) {
     switch (event.type) {
@@ -333,6 +375,24 @@ export function foldCommittedJournal(
       case "lead.closed":
         leads = leads.filter((lead) => lead.artifactId !== event.artifactId);
         break;
+      case "find.located":
+        if (
+          ![...attested.values()].some(
+            (find) => find.artifactId === event.find.artifactId,
+          )
+        )
+          located.set(event.find.artifactId, event.find);
+        break;
+      case "find.attested":
+        located.delete(event.find.artifactId);
+        attested.set(event.find.attestationId, event.find);
+        break;
+      case "find.unattestable":
+        located.delete(event.artifactId);
+        break;
+      case "find.spent":
+        attested.delete(event.attestationId);
+        break;
       case "inventory.state":
         inventoryState = event.state;
         if (event.pickedUp !== undefined) pickedUp.add(event.pickedUp);
@@ -350,6 +410,7 @@ export function foldCommittedJournal(
     history,
     leads,
     inventory: { state: inventoryState, pickedUp },
+    finds: { located: [...located.values()], attested: [...attested.values()] },
   };
 }
 
@@ -773,6 +834,63 @@ export function rebaseCommittedAwards(
       database.close();
     }
   });
+}
+
+/** Appends one attested-finds event for `owner`. */
+function noteFind(
+  owner: string,
+  event: Extract<
+    JournalEvent,
+    {
+      type:
+        "find.located" | "find.attested" | "find.unattestable" | "find.spent";
+    }
+  >,
+): Promise<void> {
+  return serial(owner, async () => {
+    const database = await openDatabase();
+    try {
+      const { sealKey } = await snapshotFrom(database, owner);
+      await appendEvent(database, owner, sealKey, event);
+    } finally {
+      database.close();
+    }
+    notify(owner);
+  });
+}
+
+/** Remembers where a find was picked up, for Identity to attest it. */
+export function noteFindLocation(
+  owner: string,
+  find: FindLocation,
+): Promise<void> {
+  return noteFind(owner, { type: "find.located", find });
+}
+
+/** Keeps Identity's attestation of a find: its id is what leaves again. */
+export function noteFindAttested(
+  owner: string,
+  find: AttestedFind,
+): Promise<void> {
+  return noteFind(owner, { type: "find.attested", find });
+}
+
+/** Gives up on a pick-up Identity refused to attest; it is never retried. */
+export function noteFindUnattestable(
+  owner: string,
+  artifactId: string,
+  reason: string,
+): Promise<void> {
+  return noteFind(owner, { type: "find.unattestable", artifactId, reason });
+}
+
+/** An attested thing was sold or used up in a craft Identity paid for. */
+export function noteFindSpent(
+  owner: string,
+  attestationId: string,
+  reason: "sold" | "crafted",
+): Promise<void> {
+  return noteFind(owner, { type: "find.spent", attestationId, reason });
 }
 
 export function noteCommittedLead(

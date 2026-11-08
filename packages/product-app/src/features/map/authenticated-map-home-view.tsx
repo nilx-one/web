@@ -32,6 +32,7 @@ import {
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
+  type FindAttestationPort,
   type SeedsWalletAccessPort,
   type XpingEngineAccessPort,
   type CoreRuntimePort,
@@ -91,6 +92,7 @@ import { useCraftCompletion } from "../inventory/craft";
 import { pickUpFind, useInventory } from "../inventory/inventory";
 import { InventoryPanel } from "../inventory/inventory-panel";
 import { useSeedsWallet } from "../inventory/use-seeds-wallet";
+import { useFindAttestation } from "../finds/attested-finds";
 import {
   ERROR_TOAST_MS,
   useErrorToastFeedback,
@@ -418,6 +420,11 @@ export interface AuthenticatedMapHomeViewProps {
   readonly xpingEngine?: XpingEngineAccessPort;
   /** The authoritative Identity seeds wallet; absent, no balance is shown. */
   readonly seedsWallet?: SeedsWalletAccessPort;
+  /**
+   * Identity's attested finds: pick-ups attested, things sold and crafts paid
+   * through it. Absent, nothing is sold or crafted.
+   */
+  readonly findAttestation?: FindAttestationPort;
   /**
    * Core, naming what a find is and reading the pick-up setting. Absent or
    * older, finds are still paid; the toast then names the tier, not the item.
@@ -963,6 +970,7 @@ export function AuthenticatedMapHomeView({
   committedAwards,
   xpingEngine,
   seedsWallet,
+  findAttestation,
   findItems: localFindItems,
   courierDirectory,
   marketCatalog,
@@ -2034,10 +2042,18 @@ export function AuthenticatedMapHomeView({
   const xping = useXpingEngine(pubDress, xpingEngine, findItems);
   // Identity's wallet, read again each time the inventory opens and after
   // an xPing repair; never the browser inventory's local seeds amount.
+  // Identity credited or debited the wallet (money picked up, a sale, a
+  // paid craft): read it again.
+  const [walletChanges, setWalletChanges] = useState(0);
+  const walletChanged = useCallback(
+    () => setWalletChanges((count) => count + 1),
+    [],
+  );
+  useFindAttestation(pubDress, findAttestation, walletChanged);
   const walletSeeds = useSeedsWallet(
     pubDress,
     seedsWallet,
-    `${activeDetail}:${xping.repairs}`,
+    `${activeDetail}:${xping.repairs}:${walletChanges}`,
   );
   const courierSuspended =
     guideActive ||
@@ -4484,6 +4500,8 @@ export function AuthenticatedMapHomeView({
                         first={detailState?.subject ?? "bond"}
                         together={avaiaProximity?.policy.level === "near"}
                         seeds={walletSeeds}
+                        verified={findAttestation}
+                        onWalletChange={walletChanged}
                       />
                     </>
                   ) : null}

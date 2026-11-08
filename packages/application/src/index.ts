@@ -306,6 +306,20 @@ export {
 } from "./courier";
 
 export {
+  hasFindAttestation,
+  parseAttestAnswer,
+  parseCraftAnswer,
+  parseSaleAnswer,
+  type AttestRefusal,
+  type AttestResult,
+  type CraftPaymentRefusal,
+  type CraftPaymentResult,
+  type FindAttestationPort,
+  type ReportedPickup,
+  type SaleResult,
+} from "./find-attestation";
+
+export {
   hasSeedsWalletAccess,
   parseSeedsWalletRead,
   type SeedsWalletAccessPort,
