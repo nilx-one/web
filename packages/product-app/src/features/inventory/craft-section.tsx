@@ -1,10 +1,15 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { CoreEconomyCatalog, CoreRecipe } from "@nilx-one/application";
+import type {
+  CoreEconomyCatalog,
+  CoreRecipe,
+  FindAttestationPort,
+} from "@nilx-one/application";
 import { useEffect, useState } from "react";
 
 import { useLocalization, type Translate } from "../../shell/localization";
+import { startPaidCraft } from "../finds/attested-finds";
 import { finishCraft, isFinished, startCraft, type CraftPlace } from "./craft";
 import type { InventoryModel, InventoryPort } from "./inventory";
 import { thingName } from "./thing-name";
@@ -51,6 +56,14 @@ export interface CraftSectionProps {
   readonly place?: CraftPlace;
   /** The workshop's name, when the Bond stands at one. */
   readonly workshopName?: string | undefined;
+  /**
+   * Identity, which pays a craft from the wallet and uses up attested
+   * things. Present, every craft goes through it; the device's own Seeds
+   * never pay.
+   */
+  readonly verified?: FindAttestationPort | undefined;
+  /** Called once Identity debited the wallet. */
+  readonly onPaid?: () => void;
 }
 
 /**
@@ -65,6 +78,8 @@ export function CraftSection({
   committed,
   place = "anywhere",
   workshopName,
+  verified,
+  onPaid,
 }: CraftSectionProps) {
   const { t } = useLocalization();
   const [confirming, setConfirming] = useState<CoreRecipe | undefined>();
@@ -91,6 +106,28 @@ export function CraftSection({
 
   async function start(recipe: CoreRecipe): Promise<void> {
     setConfirming(undefined);
+    if (verified !== undefined) {
+      const paid = await startPaidCraft(
+        owner,
+        verified,
+        core,
+        recipe,
+        place,
+      ).catch(() => ({ kind: "unavailable" as const }));
+      if (paid.kind === "started") {
+        onPaid?.();
+        setNote(undefined);
+        return;
+      }
+      setNote(
+        paid.kind === "unverified"
+          ? t("craft.error.unverified")
+          : paid.kind === "refused"
+            ? errorText(t, paid.reason)
+            : t("inventory.error.generic"),
+      );
+      return;
+    }
     const answer = await startCraft(owner, core, recipe, place).catch(() => ({
       ok: false as const,
       error: "generic",

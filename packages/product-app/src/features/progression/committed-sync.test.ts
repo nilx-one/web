@@ -153,6 +153,7 @@ function snapshot(): CommittedJournalSnapshot {
     history: [],
     leads: [],
     inventory: { state: "", pickedUp: new Set() },
+    finds: { located: [], attested: [] },
   };
 }
 

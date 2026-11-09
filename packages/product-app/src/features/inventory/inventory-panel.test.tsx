@@ -71,6 +71,15 @@ vi.mock("./inventory", () => ({
   })),
 }));
 
+const sellAttested = vi.fn(async () => ({
+  kind: "sold" as const,
+  seeds: 5n,
+}));
+vi.mock("../finds/attested-finds", () => ({
+  sellAttested,
+  startPaidCraft: vi.fn(),
+}));
+
 const { InventoryPanel } = await import("./inventory-panel");
 const { useInventory } = await import("./inventory");
 
@@ -327,25 +336,40 @@ describe("InventoryPanel", () => {
     );
   });
 
-  it("sells what the Bond carries and hands the Avaia's across", async () => {
+  it("sells through Identity and hands the Avaia's across", async () => {
+    const verified = {
+      attestFind: vi.fn(),
+      sellFind: vi.fn(),
+      payCraft: vi.fn(),
+    };
+    const onWalletChange = vi.fn();
     render(
       <InventoryPanel
         owner="0x0sky"
         core={core}
         committed
         together
-        shopAndCraft
+        verified={verified}
+        onWalletChange={onWalletChange}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Bottle" }));
     fireEvent.click(screen.getByRole("button", { name: "Sell for 5 ₴€£" }));
     await waitFor(() =>
-      expect(applyInventory).toHaveBeenCalledWith("0x0sky", core, {
-        op: "sell",
-        id: "bottle",
-        count: 1,
-      }),
+      expect(sellAttested).toHaveBeenCalledWith(
+        "0x0sky",
+        verified,
+        core,
+        "bottle",
+      ),
+    );
+    expect(onWalletChange).toHaveBeenCalledOnce();
+    // The local sale is never run directly: Identity credits the wallet.
+    expect(applyInventory).not.toHaveBeenCalledWith(
+      "0x0sky",
+      core,
+      expect.objectContaining({ op: "sell" }),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Flyer" }));

@@ -293,6 +293,15 @@ export type CoreInventoryCommand =
       readonly recipe: string;
       readonly place: "anywhere" | "repair_workshop";
     }
+  /**
+   * The same craft with its Seeds already debited from the Identity wallet:
+   * only after Identity answered that it paid (`docs/find-attestation.md`).
+   */
+  | {
+      readonly op: "start_paid_craft";
+      readonly recipe: string;
+      readonly place: "anywhere" | "repair_workshop";
+    }
   | { readonly op: "finish_craft" }
   | { readonly op: "finish_paid" }
   | {

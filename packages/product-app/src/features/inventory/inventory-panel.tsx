@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { PaidSpecialItem } from "../courier/market-dock";
-import type { CoreEconomyCatalog, CoreHolder } from "@nilx-one/application";
+import type {
+  CoreEconomyCatalog,
+  CoreHolder,
+  FindAttestationPort,
+} from "@nilx-one/application";
+import { sellAttested } from "../finds/attested-finds";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 
 import { useLocalization } from "../../shell/localization";
@@ -26,6 +31,13 @@ export interface InventoryPanelProps {
    * presented as spendable seeds.
    */
   readonly seeds?: SeedsWalletView | undefined;
+  /**
+   * Identity's attested finds. Present, the Bond sells attested things and
+   * crafts through Identity, which credits and debits the wallet.
+   */
+  readonly verified?: FindAttestationPort | undefined;
+  /** Called after Identity credited or debited the wallet. */
+  readonly onWalletChange?: () => void;
   readonly specialItems?: readonly PaidSpecialItem[];
   readonly onActivateSpecial?: (id: string) => void;
   readonly activatingSpecial?: boolean;
@@ -36,10 +48,9 @@ export interface InventoryPanelProps {
   /** The repair workshop this device stands at, if any. */
   readonly workshop?: { readonly name?: string | undefined } | undefined;
   /**
-   * Buying carries, crafting and selling finds: everything priced in the
-   * browser inventory's local seeds. Off: Identity's wallet is the only seeds
-   * balance (#567), so local seeds are neither issued nor spent until these
-   * go through Identity. Carries will change only at home.
+   * Buying carries, priced in the browser inventory's retired local seeds.
+   * Off: Identity's wallet is the only seeds balance (#567), and carries will
+   * change only at home. Selling and crafting go through `verified`.
    */
   readonly shopAndCraft?: boolean;
   /** Whose grid is shown, and first: the one the screen was opened for. */
@@ -105,6 +116,8 @@ export function InventoryPanel({
   onActivateSpecial,
   activatingSpecial = false,
   seeds,
+  verified,
+  onWalletChange,
 }: InventoryPanelProps) {
   const { t, resolved } = useLocalization();
   const plural = new Intl.PluralRules(resolved);
@@ -154,6 +167,24 @@ export function InventoryPanel({
           : answer.error === "not_enough_seeds"
             ? t("craft.error.not_enough_seeds")
             : t("inventory.error.generic"),
+    );
+  }
+
+  async function sell(itemId: string): Promise<void> {
+    if (verified === undefined) return;
+    const answer = await sellAttested(owner, verified, core, itemId).catch(
+      () => ({ kind: "unavailable" as const }),
+    );
+    setSelected(undefined);
+    if (answer.kind === "sold") {
+      onWalletChange?.();
+      setNote(t("inventory.sold").replace("{amount}", String(answer.seeds)));
+      return;
+    }
+    setNote(
+      answer.kind === "unverified"
+        ? t("inventory.error.unverified")
+        : t("inventory.error.generic"),
     );
   }
 
@@ -389,17 +420,11 @@ export function InventoryPanel({
           </button>
         </div>
         <div className="inventory__actions">
-          {selected.holder === "bond" && shopAndCraft ? (
+          {selected.holder === "bond" && verified !== undefined ? (
             typeof price === "number" ? (
               <button
                 type="button"
-                onClick={() =>
-                  void run(
-                    { op: "sell", id: selected.thing.id, count: 1 },
-                    (gained) =>
-                      t("inventory.sold").replace("{amount}", String(gained)),
-                  )
-                }
+                onClick={() => void sell(selected.thing.id)}
               >
                 {t("inventory.sell").replace("{price}", String(price))}
               </button>
@@ -466,8 +491,10 @@ export function InventoryPanel({
           {note}
         </p>
       )}
-      {shopAndCraft ? (
+      {verified !== undefined ? (
         <CraftSection
+          verified={verified}
+          {...(onWalletChange === undefined ? {} : { onPaid: onWalletChange })}
           owner={owner}
           core={core}
           model={model}
