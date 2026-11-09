@@ -5,10 +5,9 @@ name: Package Identity Service
 
 on:
   push:
+    # Every master head: infra delivers only the image tagged with exactly the
+    # branch head, so a head that only touched the clients needs one too.
     branches: [master]
-    paths:
-      - "services/identity/**"
-      - ".github/workflows/package-identity-service.yml"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +25,11 @@ jobs:
   package:
     name: Package immutable image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - id: contract
@@ -43,12 +47,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish immutable runtime
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: services/identity/Dockerfile
           push: true
-          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          # `<full SHA>` is the tag infra's automatic delivery resolves
+          # (aiaiaiai-org/infra docs/automatic-delivery.md); `sha-` stays for
+          # the legacy identity dependency workflow.
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -57,3 +67,100 @@ jobs:
           sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Attest the commit image
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+  # The 0x1 API's secret envelope for infra's automatic delivery of
+  # nilxone-identity. It runs only once the owner set the repository variable
+  # API_DELIVERY=enabled after filling the production Environment, so master
+  # never depends on production secrets before then. This repository holds no
+  # infra credential; infra holds none of these values.
+  envelope:
+    name: Publish the production secret envelope
+    needs: package
+    if: github.ref == 'refs/heads/master' && vars.API_DELIVERY == 'enabled'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Seal the 0x1 API credentials to the edge-prod-1 recipient
+        env:
+          # Generated once on the production host and never rotated by a deploy:
+          # PASSWORD_PEPPER hashes every password, NATIVE_AUTH_SECRET signs every
+          # session, GITHUB_EVIDENCE_ENCRYPTION_KEY encrypts stored GitHub tokens.
+          # They must be the host's existing values, copied by the owner.
+          NATIVE_AUTH_SECRET: ${{ secrets.NATIVE_AUTH_SECRET }}
+          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
+          GITHUB_EVIDENCE_ENCRYPTION_KEY: ${{ secrets.GITHUB_EVIDENCE_ENCRYPTION_KEY }}
+          TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          NILX_BROWSER_HANDOFF_TOKEN: ${{ secrets.NILX_BROWSER_HANDOFF_TOKEN }}
+          TELEGRAM_OIDC_CLIENT_ID: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
+          DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          names=(NATIVE_AUTH_SECRET PASSWORD_PEPPER GITHUB_EVIDENCE_ENCRYPTION_KEY
+                 TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
+                 DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN)
+          for name in "${names[@]}"; do
+            value="$(printenv "$name")"
+            test -n "$value" || { echo "::error::Missing production value $name." >&2; exit 1; }
+            [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || { echo "::error::Invalid multiline value for $name." >&2; exit 1; }
+          done
+          # Refuse anything that is not an existing host key: a new value would
+          # lock every password out, end every session and lose stored tokens.
+          (( ${#NATIVE_AUTH_SECRET} >= 32 && ${#PASSWORD_PEPPER} >= 32 )) || { echo "::error::Native authentication secrets must be at least 32 characters." >&2; exit 1; }
+          [[ "$NATIVE_AUTH_SECRET" != "$PASSWORD_PEPPER" ]] || { echo "::error::NATIVE_AUTH_SECRET and PASSWORD_PEPPER must differ." >&2; exit 1; }
+          [[ "$GITHUB_EVIDENCE_ENCRYPTION_KEY" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "::error::GITHUB_EVIDENCE_ENCRYPTION_KEY must be 64 hex characters." >&2; exit 1; }
+          (( $(printf %s "$NILX_BROWSER_HANDOFF_TOKEN" | wc -c) >= 32 )) || { echo "::error::NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 bytes." >&2; exit 1; }
+          # The envelope carries exactly the names nilxone-identity maps.
+          contract="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/services/nilxone-identity.yaml)"
+          mapped="$( { sed -n 's/^      - [A-Z0-9_]*=\([A-Z0-9_]*\)$/\1/p' <<<"$(sed -n '/^    secrets:/,/^    [a-z]/p' <<<"$contract")"
+                       sed -n 's/^      - \([A-Z0-9_]*\)$/\1/p' <<<"$(sed -n '/^    producerEnvironment:/,/^    [a-z]/p' <<<"$contract")"; } | sort)"
+          test "$mapped" = "$(printf '%s\n' "${names[@]}" | sort)" || {
+            echo "::error::nilxone-identity maps different names than this envelope carries." >&2
+            exit 1
+          }
+          server="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/servers/edge-prod-1.yaml)"
+          recipient="$(sed -n 's/^  encryptionRecipient: //p' <<<"$server")"
+          [[ "$recipient" =~ ^ssh-ed25519\ [A-Za-z0-9+/]{68}$ ]] || { echo "::error::edge-prod-1 publishes no valid encryptionRecipient." >&2; exit 1; }
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age
+          mkdir -p "$RUNNER_TEMP/envelope"
+          for name in "${names[@]}"; do printf '%s=%s\n' "$name" "$(printenv "$name")"; done |
+            age --recipient "$recipient" --output "$RUNNER_TEMP/envelope/secrets.age"
+          test -s "$RUNNER_TEMP/envelope/secrets.age"
+          printf 'FROM scratch\nCOPY secrets.age /secrets.age\n' > "$RUNNER_TEMP/envelope/Dockerfile"
+          echo "ENVELOPE_CONTEXT=$RUNNER_TEMP/envelope" >> "$GITHUB_ENV"
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the secret envelope
+        id: envelope
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.ENVELOPE_CONTEXT }}
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ env.IMAGE }}:${{ github.sha }}.secrets
+      - name: Attest the secret envelope
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.envelope.outputs.digest }}
+          push-to-registry: true
