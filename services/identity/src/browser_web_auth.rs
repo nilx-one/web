@@ -23,7 +23,6 @@ use url::Url;
 use crate::{
     IdentityProvider, IdentityRecord, IdentityRepository, NativeAuthConfig, ProviderIdentity,
     ProviderLinkOutcome, ProviderLinkRepository, PubDress, SecretDigester, TokenFactory,
-    aiaiaiai_sign_in::{Callback, SignInFlow, TRANSACTION_COOKIE as AIAIAIAI_TRANSACTION_COOKIE},
 };
 
 const TELEGRAM_AUTHORIZE_URL: &str = "https://oauth.telegram.org/auth";
@@ -69,7 +68,6 @@ pub struct BrowserOAuthConfig {
     telegram: Option<OAuthClientCredentials>,
     discord: Option<OAuthClientCredentials>,
     github: Option<OAuthClientCredentials>,
-    aiaiaiai: Option<SignInFlow>,
 }
 
 impl BrowserOAuthConfig {
@@ -84,16 +82,7 @@ impl BrowserOAuthConfig {
             telegram,
             discord,
             github,
-            aiaiaiai: None,
         }
-    }
-
-    /// Lets the 0x1 site sign people in through aiaiaiai Identity. The flow
-    /// is Core's; this host only forwards requests to it and applies what it
-    /// answers.
-    pub fn with_aiaiaiai_sign_in(mut self, flow: SignInFlow) -> Self {
-        self.aiaiaiai = Some(flow);
-        self
     }
 
     fn callback_url(&self, provider: BrowserProvider) -> Url {
@@ -144,9 +133,6 @@ pub fn router(
             get(read_provider_context),
         )
         .route("/api/v1/auth/discord/handoff", get(read_discord_handoff))
-        .route("/api/v1/auth/aiaiaiai/config", get(aiaiaiai_config))
-        .route("/api/v1/auth/aiaiaiai/start", get(start_aiaiaiai_sign_in))
-        .route("/api/v1/auth/aiaiaiai/callback", get(aiaiaiai_callback))
         .route(
             "/api/v1/auth/browser/provider/link",
             post(link_pending_provider),
@@ -964,7 +950,6 @@ async fn issue_native_session_to(
         [
             clear_cookie(OAUTH_TRANSACTION_COOKIE),
             clear_cookie(PENDING_PROVIDER_COOKIE),
-            clear_cookie(AIAIAIAI_TRANSACTION_COOKIE),
             secure_cookie(
                 SESSION_COOKIE,
                 &token,
@@ -1390,7 +1375,10 @@ pub(crate) fn append_cookie(response: &mut Response, cookie: String) {
     response.headers_mut().append(SET_COOKIE, value);
 }
 
-fn redirect_with_cookies<const N: usize>(location: &str, cookies: [String; N]) -> Response {
+pub(crate) fn redirect_with_cookies<const N: usize>(
+    location: &str,
+    cookies: [String; N],
+) -> Response {
     let mut response = StatusCode::SEE_OTHER.into_response();
     let location = HeaderValue::from_str(location).expect("redirect URL must be a valid header");
     response.headers_mut().insert(LOCATION, location);
@@ -1440,7 +1428,11 @@ struct ApiError {
     message: &'static str,
 }
 
-fn no_store_error(status: StatusCode, code: &'static str, message: &'static str) -> Response {
+pub(crate) fn no_store_error(
+    status: StatusCode,
+    code: &'static str,
+    message: &'static str,
+) -> Response {
     no_store_json(
         status,
         ErrorEnvelope {
@@ -1449,7 +1441,7 @@ fn no_store_error(status: StatusCode, code: &'static str, message: &'static str)
     )
 }
 
-fn no_store_json<T: Serialize>(status: StatusCode, body: T) -> Response {
+pub(crate) fn no_store_json<T: Serialize>(status: StatusCode, body: T) -> Response {
     let mut response = (status, Json(body)).into_response();
     response
         .headers_mut()
@@ -1598,84 +1590,5 @@ mod tests {
             config.callback_url(BrowserProvider::Github).as_str(),
             "https://nilx.one/api/v1/auth/browser/github/callback"
         );
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Sign-in through aiaiaiai Identity (docs/unified-auth.md). Core's
-// `SignInFlow` forms the request, holds the transaction cookie and decides;
-// these routes only forward to it.
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-struct AiaiaiaiStartQuery {
-    #[serde(rename = "return")]
-    return_path: Option<String>,
-}
-
-async fn aiaiaiai_config(State(state): State<BrowserAuthState>) -> Response {
-    let mut response = Json(serde_json::json!({
-        "enabled": state.config.aiaiaiai.is_some(),
-        "issuer": state.config.aiaiaiai.as_ref().map(SignInFlow::issuer),
-    }))
-    .into_response();
-    response
-        .headers_mut()
-        .insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    response
-}
-
-async fn start_aiaiaiai_sign_in(
-    State(state): State<BrowserAuthState>,
-    Query(query): Query<AiaiaiaiStartQuery>,
-) -> Response {
-    let Some(flow) = state.config.aiaiaiai.as_ref() else {
-        return provider_unavailable("aiaiaiai_sign_in_not_configured");
-    };
-    let Some(now) = now_unix_seconds() else {
-        return service_unavailable();
-    };
-    match flow.start(query.return_path.as_deref(), now) {
-        Ok(started) => redirect_with_cookies(started.location.as_str(), [started.set_cookie]),
-        Err(_) => service_unavailable(),
-    }
-}
-
-async fn aiaiaiai_callback(
-    State(state): State<BrowserAuthState>,
-    headers: HeaderMap,
-    Query(query): Query<OAuthCallbackQuery>,
-) -> Response {
-    let Some(flow) = state.config.aiaiaiai.as_ref() else {
-        return provider_unavailable("aiaiaiai_sign_in_not_configured");
-    };
-    let Some(now) = now_unix_seconds() else {
-        return service_unavailable();
-    };
-    let cookie_header = headers.get(COOKIE).and_then(|value| value.to_str().ok());
-    let callback = Callback {
-        code: query.code.as_deref(),
-        state: query.state.as_deref(),
-        error: query.error.as_deref(),
-    };
-    let finished = flow
-        .finish(&state.repository, cookie_header, callback, now)
-        .await;
-    match finished.outcome {
-        // The session cookie list already clears the transaction.
-        Ok(signed_in) => {
-            issue_native_session_to(
-                &state,
-                &headers,
-                IdentityRecord::unresolved(signed_in.pub_dress.as_str().to_owned()),
-                now,
-                &signed_in.return_path,
-            )
-            .await
-        }
-        Err(failure) => redirect_with_cookies(
-            &format!("/?auth_error={}", failure.as_str()),
-            [finished.clear_cookie],
-        ),
     }
 }

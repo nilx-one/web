@@ -98,31 +98,56 @@ Settings, all three or none: `AIAIAIAI_ISSUER` (https origin),
 and `AIAIAIAI_ISSUER_CLIENTS` (a JSON array of `client_id`, `name`, exact
 `redirect_uris`, `secret_sha256`, and `pub_dress` to allow that scope).
 
-### The 0x1 site as a client
+### The 0x1 site as a client of AIS
 
-0x1 reaches the issuer only through Core: `SignInFlow` in `nilx-one/core`
-(`docs/aiaiaiai-sign-in.md`) forms the request, holds the signed
-`__Host-0x1_aiaiaiai` transaction cookie, checks `state` and the return path,
-exchanges the code, verifies the token, resolves the Bond from 0x1's own
-`aiaiaiai_accounts` table and names any failure. These routes only forward
-the query and `Cookie` header to it and apply the redirect and `Set-Cookie`
-values it answers:
+Contract 19. 0x1 signs people in through AIS (`aiaiaiai-org/4x-ais`, at
+`auth.aiaiaiai.org`) and reaches it only through Core: `PublicInfoService`
+in `nilx-one/core` (`docs/ais-public-info.md`) forms the request, holds the
+signed `__Host-0x1_aiaiaiai` transaction cookie, checks `state` and the
+return path, exchanges the code, verifies the token, and attaches the 0x1
+profile by the pairwise subject AIS issued to client `nilx-one`. The profile
+and its sessions live in a separate product database, not in the identity
+database. `src/product_sign_in.rs` only forwards the query and `Cookie`
+header, applies the redirect and `Set-Cookie` values, and adds CSRF and rate
+limits:
 
 - `GET /api/v1/auth/aiaiaiai/config` answers `{ "enabled", "issuer" }`.
-- `GET /api/v1/auth/aiaiaiai/start?return=/path` → `SignInFlow::start`.
-- `GET /api/v1/auth/aiaiaiai/callback` → `SignInFlow::finish`; a sign-in
-  opens the ordinary `__Host-0x1_session` and returns to the path Core
-  approved, a failure returns to `/?auth_error=` with Core's code.
+- `GET /api/v1/auth/aiaiaiai/start?return=/path` redirects to AIS.
+- `GET /api/v1/auth/aiaiaiai/callback` opens the product session
+  `__Host-0x1_product` and returns to the path Core approved; a failure
+  returns to `/?auth_error=` with Core's code. The transaction cookie is
+  cleared either way.
+- `GET /api/v1/product/session` answers `{ "profile" }` for the session's
+  owner, or `401 product_session_required`.
+- `POST /api/v1/product/session/sign-out` ends the session (CSRF).
+- `POST /api/v1/product/experience` publishes the owner-asserted
+  `{ "bond_xp", "avaia_xp" }` carry (CSRF, session). It awards nothing.
+- `GET /api/v1/product/profiles/{profile_id}` is the public projection.
+
+Every answer is `no-store`, and the only profile shape that leaves the
+service is Core's allowlist: `profile_id`, `pub_dress` and `experience`.
+The pairwise subject and issuer never do.
+
+**An AIS sign-in does not open a native session.** `__Host-0x1_session`
+names a Bond in the identity database, and matching a public address to one
+would let whoever holds that name in AIS take the Bond. The routes that
+still authenticate by the native session (wallet, awards, finds, Avaia,
+Market visits) therefore do not yet accept a product session; they move
+behind the product profile in later changes (`docs/identity-boundary.md`).
+The earlier first-sight link through `aiaiaiai_accounts` is no longer
+reachable from any route.
 
 Settings, both or neither: `AIAIAIAI_SIGN_IN_ISSUER` and
-`AIAIAIAI_SIGN_IN_CLIENT_SECRET`; optional `AIAIAIAI_SIGN_IN_CLIENT_ID`
-(default `nilx-one`) and `AIAIAIAI_SIGN_IN_BACKCHANNEL` for reaching `/token`
-and the keys inside the deployment. The callback is `PUBLIC_ORIGIN` +
-`/api/v1/auth/aiaiaiai/callback`.
+`AIAIAIAI_SIGN_IN_CLIENT_SECRET`. With them `PRODUCT_DATABASE_URL` is
+required and must not be the identity `DATABASE_URL`; `compose.yaml` sets it
+to `sqlite:///data/product.db`. `AIAIAIAI_SIGN_IN_BACKCHANNEL` is only for
+reaching `/token` and the keys somewhere other than the issuer origin. The
+client id is always `nilx-one`: Core's product service accepts no other. The
+callback is `PUBLIC_ORIGIN` + `/api/v1/auth/aiaiaiai/callback`.
 
-Both are off until configured. The runtime environment file, the public
-route for `auth.aiaiaiai.org` and the site's "Sign in" button are separate
-steps.
+Both are off until configured. Carrying the sign-in settings into the runtime
+environment file, registering the client secret's digest in AIS, and the
+site's "Sign in" button are separate steps.
 
 ## Bond roles and location modes
 

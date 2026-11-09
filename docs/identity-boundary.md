@@ -40,8 +40,8 @@ first-sight address link until their adapter is explicitly moved. A new host
 must use the product service and its own checked session binding, not mint a
 legacy native session by matching a public address.
 
-`4x-ais/master` has a placeholder, styles and image publisher; the actual
-identity runtime is still missing. Its prepared `auth.aiaiaiai.org` route is
+`4x-ais/master` has the identity runtime (4x-ais#6): the OIDC issuer with
+both skins. It is not deployed. Its prepared `auth.aiaiaiai.org` route is
 on edge-prod-2. Existing 0x1 workloads remain on edge-prod-1. Core itself is
 a library, not an edge workload. The OIDC browser redirect and server-side
 code/JWKS calls use HTTPS and require no cross-server container route or tunnel.
@@ -50,6 +50,14 @@ Delivery proceeds through the Core slice, actual AIS runtime, thin HTTP and
 session adapter, then remaining product-state moves and authenticated ordered
 identity updates/deletion. End-to-end and deploy validation precede separately
 authorized activation. No current host is switched by the Core PR.
+
+The thin HTTP and session adapter is `services/identity/src/product_sign_in.rs`
+(identity contract 19): the `/api/v1/auth/aiaiaiai/*` routes now go through
+Core's `PublicInfoService` and open a product session, `__Host-0x1_product`,
+in a separate product database. They no longer mint a native session by
+matching a public address. It is off until the sign-in settings are carried
+into the runtime environment; routes that authenticate by the native session
+do not accept the product session until their state moves.
 
 The preserved safety contracts remain: the visit-bound issuer worker is the
 only seeds debit until its replacement is implemented; `gm` belongs to the
