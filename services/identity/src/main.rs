@@ -22,7 +22,7 @@ use identity_bot::{
     PendingLocationIntent, ProviderLinkRepository, ProviderSecretCipher, SelfDisconnectOutcome,
     TelegramInitDataVerifier, TelegramLocationIntents, aiaiaiai_sign_in, api, browser_web_auth,
     business_command, github_evidence, issuer, location_control_router, partner_account_router,
-    partner_lookup_router, provider_self_service_router, public_api,
+    partner_lookup_router, product_sign_in, provider_self_service_router, public_api, public_info,
     speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
 };
 use teloxide::{
@@ -363,13 +363,9 @@ async fn main() {
         discord_credentials,
         github_browser_oauth,
     );
-    let browser_oauth = match aiaiaiai_sign_in_from_environment(&public_origin) {
-        Some(client) => browser_oauth.with_aiaiaiai_sign_in(aiaiaiai_sign_in::SignInFlow::new(
-            client,
-            native_auth.secret_digester(),
-        )),
-        None => browser_oauth,
-    };
+    let product_api = product_sign_in::router(
+        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await,
+    );
     let provider_api = browser_web_auth::router(
         repository.clone(),
         provider_links.clone(),
@@ -447,6 +443,7 @@ async fn main() {
     .merge(pub_info_api)
     .merge(location_api)
     .merge(provider_api)
+    .merge(product_api)
     .merge(provider_self_service_api)
     .merge(session_activation_api)
     .merge(github_evidence_api)
@@ -560,38 +557,62 @@ fn issuer_from_environment() -> Option<issuer::IssuerConfig> {
     }
 }
 
-/// 0x1 as a client of aiaiaiai Identity, through Core's `aiaiaiai_sign_in`.
-fn aiaiaiai_sign_in_from_environment(
+/// 0x1 as a client of AIS, through Core's product service.
+async fn product_sign_in_from_environment(
     public_origin: &Url,
-) -> Option<aiaiaiai_sign_in::SignInClient> {
+    identity_database_url: &str,
+    native_auth: &NativeAuthConfig,
+) -> Option<product_sign_in::ProductSignIn> {
     let read = |key: &str| env::var(key).ok().filter(|value| !value.is_empty());
-    match (
+    let (issuer, secret) = match (
         read("AIAIAIAI_SIGN_IN_ISSUER"),
         read("AIAIAIAI_SIGN_IN_CLIENT_SECRET"),
     ) {
-        (Some(issuer), Some(secret)) => {
-            let client_id =
-                read("AIAIAIAI_SIGN_IN_CLIENT_ID").unwrap_or_else(|| "nilx-one".to_owned());
-            let redirect_uri = public_origin
-                .join("/api/v1/auth/aiaiaiai/callback")
-                .expect("the callback path stays on the public origin");
-            let backchannel = read("AIAIAIAI_SIGN_IN_BACKCHANNEL");
-            let config = aiaiaiai_sign_in::SignInClientConfig::new(
-                &issuer,
-                backchannel.as_deref(),
-                &client_id,
-                &secret,
-                redirect_uri.as_str(),
-            )
-            .unwrap_or_else(|error| panic!("aiaiaiai sign-in configuration: {error}"));
-            info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
-            Some(aiaiaiai_sign_in::SignInClient::new(config))
+        (Some(issuer), Some(secret)) => (issuer, secret),
+        (None, None) => {
+            info!("aiaiaiai sign-in is not configured");
+            return None;
         }
-        (None, None) => None,
         _ => panic!(
             "AIAIAIAI_SIGN_IN_ISSUER and AIAIAIAI_SIGN_IN_CLIENT_SECRET must be configured together"
         ),
-    }
+    };
+    // The deployment always names the product database, so it is read only
+    // once sign-in is on; without it a callback would have nowhere to attach
+    // the profile, and the service must not start.
+    let product_database_url = read("PRODUCT_DATABASE_URL")
+        .expect("PRODUCT_DATABASE_URL is required when aiaiaiai sign-in is configured");
+    // The product profile is 0x1's own data. Sharing a file with the legacy
+    // identity database would put it back next to the credentials it left.
+    assert!(
+        product_database_url != identity_database_url,
+        "PRODUCT_DATABASE_URL must not be the identity DATABASE_URL"
+    );
+    let redirect_uri = public_origin
+        .join("/api/v1/auth/aiaiaiai/callback")
+        .expect("the callback path stays on the public origin");
+    let backchannel = read("AIAIAIAI_SIGN_IN_BACKCHANNEL");
+    // Core's product service accepts only the `nilx-one` client, so the id
+    // is not a setting.
+    let config = aiaiaiai_sign_in::SignInClientConfig::new(
+        &issuer,
+        backchannel.as_deref(),
+        "nilx-one",
+        &secret,
+        redirect_uri.as_str(),
+    )
+    .unwrap_or_else(|error| panic!("aiaiaiai sign-in configuration: {error}"));
+    let flow = aiaiaiai_sign_in::SignInFlow::new(
+        aiaiaiai_sign_in::SignInClient::new(config),
+        native_auth.secret_digester(),
+    );
+    let repository = public_info::PublicInfoRepository::connect(&product_database_url)
+        .await
+        .expect("the 0x1 product database must initialize");
+    let service = public_info::PublicInfoService::new(flow, repository)
+        .expect("the product service accepts the nilx-one client");
+    info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
+    Some(product_sign_in::ProductSignIn::new(service, native_auth))
 }
 
 fn oauth_credentials_from_environment(

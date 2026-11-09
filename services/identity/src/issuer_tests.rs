@@ -13,10 +13,7 @@ use sha2::Sha256;
 use tower::ServiceExt as _;
 
 use super::*;
-use crate::{
-    BrowserOAuthConfig, ProviderLinkRepository,
-    aiaiaiai_sign_in::{SignInClient, SignInClientConfig, SignInError, SignInFlow},
-};
+use crate::aiaiaiai_sign_in::{SignInClient, SignInClientConfig, SignInError, SignInFlow};
 
 const ORIGIN: &str = "https://auth.aiaiaiai.org";
 const HOST_NAME: &str = "auth.aiaiaiai.org";
@@ -485,23 +482,28 @@ fn configuration_refuses_unsafe_clients() {
 }
 
 /// The whole 0x1 path: the site's start route, the issuer page, and the
-/// callback that resolves the Bond through Core and opens a 0x1 session.
+/// callback that attaches the 0x1 profile through Core and opens a product
+/// session. No native session is minted from the public address.
 #[tokio::test]
-async fn the_0x1_site_signs_in_through_the_issuer_and_gets_its_own_session() {
+async fn the_0x1_site_signs_in_through_the_issuer_and_gets_a_product_session() {
+    use crate::{
+        product_sign_in::{PRODUCT_SESSION_COOKIE, ProductSignIn},
+        public_info::{PublicInfoRepository, PublicInfoService},
+    };
+
     let fixture = fixture().await;
-    let links = ProviderLinkRepository::connect(&fixture.url)
-        .await
-        .expect("links");
-    let site = crate::browser_web_auth::router(
-        fixture.repository.clone(),
-        links,
-        native_auth(),
-        BrowserOAuthConfig::new(Url::parse("https://nilx.one").unwrap(), None, None, None)
-            .with_aiaiaiai_sign_in(SignInFlow::new(
-                fixture.client.clone(),
-                native_auth().secret_digester(),
-            )),
-    );
+    let product_database = tempfile::NamedTempFile::new().expect("product database");
+    let product =
+        PublicInfoRepository::connect(&format!("sqlite://{}", product_database.path().display()))
+            .await
+            .expect("product repository");
+    let service = PublicInfoService::new(
+        SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
+        product,
+    )
+    .expect("nilx-one client");
+    let site = crate::product_sign_in::router(Some(ProductSignIn::new(service, &native_auth())));
+
     let (status, _, body) = send(
         &site,
         Request::get("/api/v1/auth/aiaiaiai/config")
@@ -548,7 +550,97 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_its_own_session() {
     let (status, headers, body) = send(&site, callback).await;
     assert_eq!(status, StatusCode::SEE_OTHER, "{body}");
     assert_eq!(headers.get(header::LOCATION).unwrap(), "/map");
-    cookie_pair(&headers, "__Host-0x1_session");
+    let session = cookie_pair(&headers, PRODUCT_SESSION_COOKIE);
+    let cookies: Vec<&str> = headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    assert!(
+        !cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("__Host-0x1_session=")),
+        "an AIS sign-in must not open a native session: {cookies:?}"
+    );
+    assert!(
+        cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("__Host-0x1_aiaiaiai=;")),
+        "the transaction cookie is cleared: {cookies:?}"
+    );
+
+    // The session answers with Core's public DTO and nothing else.
+    let read = |cookie: &str| {
+        Request::get("/api/v1/product/session")
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (status, _, body) = send(&site, read(&session)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let profile: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(profile["profile"]["pub_dress"], "0x0sky");
+    let profile_id = profile["profile"]["profile_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        !body.contains("subject") && !body.contains("issuer"),
+        "{body}"
+    );
+
+    // The code was spent: replaying the callback opens nothing.
+    let replay = Request::get(path_and_query(&back))
+        .header(header::COOKIE, &transaction_cookie)
+        .body(Body::empty())
+        .unwrap();
+    let (_, headers, _) = send(&site, replay).await;
+    assert!(
+        headers
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("/?auth_error="),
+    );
+
+    // Mutations need the CSRF header and the session, in that order.
+    let publish = |cookie: Option<&str>, csrf: bool, body: &str| {
+        let mut request = Request::post("/api/v1/product/experience")
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        if csrf {
+            request = request.header("x-0x1-csrf", "1");
+        }
+        request.body(Body::from(body.to_owned())).unwrap()
+    };
+    let carry = r#"{"bond_xp":120,"avaia_xp":45}"#;
+    let (status, _, _) = send(&site, publish(Some(&session), false, carry)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _, _) = send(&site, publish(None, true, carry)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, _, body) = send(&site, publish(Some(&session), true, carry)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("\"bond_xp\":120"), "{body}");
+    let too_much = r#"{"bond_xp":1000000001,"avaia_xp":0}"#;
+    let (status, _, _) = send(&site, publish(Some(&session), true, too_much)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Anyone may read the public projection by product id, and only that.
+    let public = |id: &str| {
+        Request::get(format!("/api/v1/product/profiles/{id}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (status, _, body) = send(&site, public(&profile_id)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("\"bond_xp\":120"), "{body}");
+    let (status, _, _) = send(&site, public(&"0".repeat(32))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _, _) = send(&site, public("0x0sky")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "a public name is not a key");
 
     // A forged state never reaches the issuer's token endpoint.
     let mut forged = back.clone();
@@ -566,4 +658,49 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_its_own_session() {
         headers.get(header::LOCATION).unwrap(),
         "/?auth_error=aiaiaiai_sign_in_invalid"
     );
+
+    // Sign-out needs CSRF, ends the session on the server, and clears the cookie.
+    let sign_out = |csrf: bool| {
+        let mut request =
+            Request::post("/api/v1/product/session/sign-out").header(header::COOKIE, &session);
+        if csrf {
+            request = request.header("x-0x1-csrf", "1");
+        }
+        request.body(Body::empty()).unwrap()
+    };
+    let (status, _, _) = send(&site, sign_out(false)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _, _) = send(&site, read(&session)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "a refused sign-out leaves the session"
+    );
+    let (status, headers, _) = send(&site, sign_out(true)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        headers
+            .get(header::SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("__Host-0x1_product=;")
+    );
+    let (status, headers, _) = send(&site, read(&session)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(
+        headers.get(header::SET_COOKIE).is_some(),
+        "a dead cookie is cleared"
+    );
+
+    // The legacy identity database gained no link for this sign-in.
+    let links: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM aiaiaiai_accounts")
+        .fetch_one(
+            &sqlx::SqlitePool::connect(&fixture.url)
+                .await
+                .expect("identity database"),
+        )
+        .await
+        .expect("count");
+    assert_eq!(links, 0);
 }
