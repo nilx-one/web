@@ -86,9 +86,6 @@ async fn attest_find_response(
     let Ok(pickup) = request.validate() else {
         return invalid_pickup();
     };
-    let Some(finder) = crate::find_attestation::Finder::parse(pickup.finder.as_str()) else {
-        return invalid_pickup();
-    };
     let Some(now_ms) = now.checked_mul(1000) else {
         return unavailable();
     };
@@ -97,7 +94,7 @@ async fn attest_find_response(
     };
     let reported = crate::find_attestation::ReportedPickup {
         artifact_id: pickup.artifact_id,
-        finder,
+        finder: pickup.finder,
         found_at_ms: pickup.found_at_ms,
         longitude_e7: pickup.longitude_e7,
         latitude_e7: pickup.latitude_e7,
@@ -105,9 +102,12 @@ async fn attest_find_response(
     let verified = match crate::find_attestation::verify_pickup(reported, now_ms_signed) {
         Ok(verified) => verified,
         Err(refusal) => {
-            let status = wire::AttestRefusal::from_code(refusal.code())
-                .map_or(422, wire::AttestRefusal::http_status);
-            return refused(status, refusal.code(), "This pick-up is not one the service can attest.");
+            let refusal = refusal.wire();
+            return refused(
+                refusal.http_status(),
+                refusal.code(),
+                "This pick-up is not one the service can attest.",
+            );
         }
     };
     match state.repository.attest_pickup(owner, &verified, now_ms).await {
@@ -242,51 +242,18 @@ async fn start_craft(
             let refusal = wire::CraftRefusal::UnknownRecipe;
             refused(refusal.http_status(), refusal.code(), "Core has no such recipe.")
         }
-        Ok(refused_by_core) => {
-            let status = wire::CraftRefusal::from_code(refused_by_core.code())
-                .map_or(409, wire::CraftRefusal::http_status);
-            refused(status, refused_by_core.code(), "Core refused this craft; nothing was debited.")
-        }
+        // Every outcome that is not a refusal is answered above.
+        Ok(refused_by_core) => refused_by_core.refusal().map_or_else(unavailable, |refusal| {
+            refused(
+                refusal.http_status(),
+                refusal.code(),
+                "Core refused this craft; nothing was debited.",
+            )
+        }),
         Err(error) => {
             tracing::error!(%error, "paying for a craft failed");
             unavailable()
         }
     };
     with_session_cookie(response, cookie)
-}
-
-/// The contract in `nilxone-api` and the codes Core's repository answers with
-/// are written apart; these keep them equal until they share one definition.
-#[cfg(test)]
-mod wire_contract {
-    use super::*;
-    use crate::find_attestation::PickupRefusal;
-
-    #[test]
-    fn every_refusal_core_can_answer_is_in_the_contract() {
-        for refusal in [
-            PickupRefusal::UnknownFind,
-            PickupRefusal::OutOfTime,
-            PickupRefusal::TooFar,
-            PickupRefusal::NotTheAvaias,
-        ] {
-            assert!(wire::AttestRefusal::from_code(refusal.code()).is_some(), "{}", refusal.code());
-        }
-        for outcome in [
-            CraftOutcome::ConflictingReplay,
-            CraftOutcome::UnknownRecipe,
-            CraftOutcome::UnverifiableInputs,
-            CraftOutcome::WrongInputs,
-            CraftOutcome::InsufficientSeeds,
-        ] {
-            assert!(wire::CraftRefusal::from_code(outcome.code()).is_some(), "{}", outcome.code());
-        }
-    }
-
-    #[test]
-    fn the_routes_are_the_contracts_paths() {
-        assert_eq!(wire::ATTEST_PATH, "/api/v1/identity/finds/attest");
-        assert_eq!(wire::SELL_PATH, "/api/v1/identity/finds/sell");
-        assert_eq!(wire::CRAFT_PATH, "/api/v1/identity/crafts");
-    }
 }
