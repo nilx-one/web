@@ -68,9 +68,9 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/xping/engine",
             get(read_xping_engine).post(command_xping_engine),
         )
-        .route("/api/v1/identity/finds/attest", post(attest_find))
-        .route("/api/v1/identity/finds/sell", post(sell_find))
-        .route("/api/v1/identity/crafts", post(start_craft))
+        .route(nilxone_api::finds::ATTEST_PATH, post(attest_find))
+        .route(nilxone_api::finds::SELL_PATH, post(sell_find))
+        .route(nilxone_api::finds::CRAFT_PATH, post(start_craft))
         .layer(DefaultBodyLimit::max(PUB_INFO_MAX_BYTES))
         .with_state(state)
 }

@@ -1109,6 +1109,7 @@ dependencies = [
  "h3o",
  "hmac",
  "jsonwebtoken",
+ "nilxone-api",
  "nilxone-contracts",
  "nilxone-identity",
  "reqwest",
@@ -1439,9 +1440,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nilxone-api"
+version = "0.1.0"
+source = "git+https://github.com/nilx-one/core?rev=5983ea9c0c99be7a59f1a97b140f96c013aaf756#5983ea9c0c99be7a59f1a97b140f96c013aaf756"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "nilxone-contracts"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=364e41547cc839a651a9cb547af45ca84a3fd404#364e41547cc839a651a9cb547af45ca84a3fd404"
+source = "git+https://github.com/nilx-one/core?rev=5983ea9c0c99be7a59f1a97b140f96c013aaf756#5983ea9c0c99be7a59f1a97b140f96c013aaf756"
 dependencies = [
  "chrono",
  "idna",
@@ -1458,7 +1467,7 @@ dependencies = [
 [[package]]
 name = "nilxone-identity"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=364e41547cc839a651a9cb547af45ca84a3fd404#364e41547cc839a651a9cb547af45ca84a3fd404"
+source = "git+https://github.com/nilx-one/core?rev=5983ea9c0c99be7a59f1a97b140f96c013aaf756#5983ea9c0c99be7a59f1a97b140f96c013aaf756"
 dependencies = [
  "argon2",
  "base64 0.22.1",
