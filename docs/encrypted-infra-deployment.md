@@ -41,6 +41,22 @@ workflow, then use an explicitly manual production deployment. Do not
 delete old infra credentials until the first encrypted activation and
 rollback have passed. No production deployment is automatic.
 
+## Identity envelope (automatic delivery)
+
+`Package Identity Service` publishes the 0x1 API image and, once the repository
+variable `API_DELIVERY=enabled` is set, an age-encrypted `<sha>.secrets`
+envelope that `aiaiaiai-org/infra` delivers on its own. The envelope carries
+exactly the names `nilxone-identity` lists under `delivery.envelope` in infra:
+`TELOXIDE_TOKEN`, `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`,
+`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `NILX_BROWSER_HANDOFF_TOKEN`.
+The job refuses to publish when the two lists differ.
+
+`NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER` and `GITHUB_EVIDENCE_ENCRYPTION_KEY`
+are never in the envelope and never in a GitHub Environment. The production host
+owns them; `services/identity/deploy/prepare-runtime-env.sh` keeps their existing
+values and refuses an override. A wrong copy would lock out every password, end
+every session and lose every stored GitHub token.
+
 ## Market browser handoff credential
 
 Store `NILX_BROWSER_HANDOFF_TOKEN` in this repository's GitHub
