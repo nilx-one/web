@@ -56,7 +56,7 @@ fn pub_info_router_with_clock(
             "/api/v1/identity/pub-info",
             get(read_pub_info).post(publish_pub_info),
         )
-        .route("/api/v1/identity/seeds", get(read_seeds_balance))
+        .route(nilxone_api::wallet::SEEDS_PATH, get(read_seeds_balance))
         .route("/api/v1/identity/pub-info/awards", post(commit_awards))
         .route("/api/v1/identity/finds/claims", get(read_claims))
         .route(
@@ -97,10 +97,7 @@ async fn read_seeds_balance(State(state): State<ApiState>, headers: HeaderMap) -
     };
     let now_ms = now.saturating_mul(1000);
     let mut response = match state.repository.read_seeds_balance_with_starter(&owner, now_ms).await {
-        Ok(balance) => no_store_json(StatusCode::OK, serde_json::json!({
-            "balance": balance.to_string(), "denomination": "seeds",
-            "symbol": "₴€£", "authority": "identity"
-        })),
+        Ok(balance) => no_store_json(StatusCode::OK, nilxone_api::wallet::SeedsWallet::of(balance)),
         Err(error) => {
             tracing::error!(%error, "authoritative seeds read failed");
             unavailable()
