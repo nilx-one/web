@@ -94,13 +94,11 @@ jobs:
     steps:
       - name: Seal the 0x1 API credentials to the edge-prod-1 recipient
         env:
-          # Generated once on the production host and never rotated by a deploy:
-          # PASSWORD_PEPPER hashes every password, NATIVE_AUTH_SECRET signs every
-          # session, GITHUB_EVIDENCE_ENCRYPTION_KEY encrypts stored GitHub tokens.
-          # They must be the host's existing values, copied by the owner.
-          NATIVE_AUTH_SECRET: ${{ secrets.NATIVE_AUTH_SECRET }}
-          PASSWORD_PEPPER: ${{ secrets.PASSWORD_PEPPER }}
-          GITHUB_EVIDENCE_ENCRYPTION_KEY: ${{ secrets.GITHUB_EVIDENCE_ENCRYPTION_KEY }}
+          # NATIVE_AUTH_SECRET, PASSWORD_PEPPER and GITHUB_EVIDENCE_ENCRYPTION_KEY are
+          # not here on purpose: the production host owns them. prepare-runtime-env.sh
+          # keeps its existing values and refuses an override, and infra's contract
+          # refuses them in an envelope. A copy in GitHub could lock out every password,
+          # end every session and lose every stored GitHub token.
           TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
           TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
@@ -110,26 +108,21 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          names=(NATIVE_AUTH_SECRET PASSWORD_PEPPER GITHUB_EVIDENCE_ENCRYPTION_KEY
-                 TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
+          names=(TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
                  DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN)
           for name in "${names[@]}"; do
             value="$(printenv "$name")"
             test -n "$value" || { echo "::error::Missing production value $name." >&2; exit 1; }
             [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || { echo "::error::Invalid multiline value for $name." >&2; exit 1; }
           done
-          # Refuse anything that is not an existing host key: a new value would
-          # lock every password out, end every session and lose stored tokens.
-          (( ${#NATIVE_AUTH_SECRET} >= 32 && ${#PASSWORD_PEPPER} >= 32 )) || { echo "::error::Native authentication secrets must be at least 32 characters." >&2; exit 1; }
-          [[ "$NATIVE_AUTH_SECRET" != "$PASSWORD_PEPPER" ]] || { echo "::error::NATIVE_AUTH_SECRET and PASSWORD_PEPPER must differ." >&2; exit 1; }
-          [[ "$GITHUB_EVIDENCE_ENCRYPTION_KEY" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "::error::GITHUB_EVIDENCE_ENCRYPTION_KEY must be 64 hex characters." >&2; exit 1; }
           (( $(printf %s "$NILX_BROWSER_HANDOFF_TOKEN" | wc -c) >= 32 )) || { echo "::error::NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 bytes." >&2; exit 1; }
-          # The envelope carries exactly the names nilxone-identity maps.
+          # The envelope carries exactly the names nilxone-identity's contract lists under
+          # delivery.envelope (aiaiaiai-org/infra docs/automatic-delivery.md).
           contract="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/services/nilxone-identity.yaml)"
-          mapped="$( { sed -n 's/^      - [A-Z0-9_]*=\([A-Z0-9_]*\)$/\1/p' <<<"$(sed -n '/^    secrets:/,/^    [a-z]/p' <<<"$contract")"
-                       sed -n 's/^      - \([A-Z0-9_]*\)$/\1/p' <<<"$(sed -n '/^    producerEnvironment:/,/^    [a-z]/p' <<<"$contract")"; } | sort)"
+          mapped="$(awk '/^    envelope:/ { in_list = 1; next } in_list && /^      - [A-Z][A-Z0-9_]*$/ { sub(/^      - /, ""); print; next } in_list { exit }' <<<"$contract" | sort)"
+          test -n "$mapped" || { echo "::error::nilxone-identity lists no delivery.envelope in infra." >&2; exit 1; }
           test "$mapped" = "$(printf '%s\n' "${names[@]}" | sort)" || {
-            echo "::error::nilxone-identity maps different names than this envelope carries." >&2
+            echo "::error::nilxone-identity lists different envelope names than this job carries." >&2
             exit 1
           }
           server="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/servers/edge-prod-1.yaml)"
