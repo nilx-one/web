@@ -120,8 +120,8 @@ fn router_with_clock(
 
     Router::new()
         .route("/health", get(health))
-        .route("/api/v1/identity/market-visit", post(create_market_visit))
-        .route("/api/v1/identity/market-return", get(read_market_return))
+        .route(nilxone_api::market::VISIT_PATH, post(create_market_visit))
+        .route(nilxone_api::market::RETURN_PATH, get(read_market_return))
         .route("/api/v1/identity/subscription", get(read_subscription))
         .route("/api/v1/identity/special-items", get(read_special_items))
         .route("/api/v1/identity/special-inventory", post(change_special_inventory))

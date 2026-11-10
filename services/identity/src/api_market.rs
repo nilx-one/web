@@ -1,32 +1,33 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct MarketVisitRequest {
-    point: String,
-    #[serde(default)]
-    pickup_order_id: Option<String>,
-    // Legacy client inventory hint; ignored for all economy authority.
-    #[serde(default, rename = "seeds")]
-    _untrusted_seeds: Option<String>,
-    avaia: MarketVisitPosition,
-    /// The host page the buyer returns to, e.g. `/telegram/`. Never a URL.
-    #[serde(default)]
-    return_path: Option<String>,
+// The bodies, error codes and shape rules of the visit and return routes are
+// nilx-one/core's `nilxone-api`; this adapter authenticates, talks to Market
+// and answers with the contract's types.
+use nilxone_api::market::{
+    HandoffCode, ReturnAnswer, ReturnQuery, ReturnRefusal, VisitAnswer, VisitRefusal, VisitRequest,
+};
+
+fn visit_refused(refusal: VisitRefusal, message: &'static str) -> Response {
+    api_error(
+        StatusCode::from_u16(refusal.http_status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY),
+        refusal.code(),
+        message,
+    )
 }
 
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct MarketVisitPosition {
-    longitude: f64,
-    latitude: f64,
+fn return_refused(refusal: ReturnRefusal, message: &'static str) -> Response {
+    api_error(
+        StatusCode::from_u16(refusal.http_status()).unwrap_or(StatusCode::NOT_FOUND),
+        refusal.code(),
+        message,
+    )
 }
 
 async fn create_market_visit(
     State(state): State<ApiState>,
     headers: HeaderMap,
-    Json(request): Json<MarketVisitRequest>,
+    Json(request): Json<VisitRequest>,
 ) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) {
         return response;
@@ -42,19 +43,12 @@ async fn create_market_visit(
     if !active {
         return with_session_cookie(session_inactive(), cookie);
     }
-    if request.point.is_empty() || request.point.chars().count() > 64
-        || !request.point.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-        || !(-180.0..=180.0).contains(&request.avaia.longitude)
-        || !(-90.0..=90.0).contains(&request.avaia.latitude)
-    {
-        return api_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_market_context", "Invalid market visit context.");
-    }
-    let return_path = request.return_path.unwrap_or_else(|| "/".to_owned());
-    if !crate::market_visit::is_market_return_path(&return_path) {
-        return api_error(StatusCode::UNPROCESSABLE_ENTITY, "invalid_market_context", "Invalid market visit context.");
-    }
+    let return_path = match request.validate() {
+        Ok(path) => path.to_owned(),
+        Err(refusal) => return visit_refused(refusal, "Invalid market visit context."),
+    };
     if state.limiter.consume(format!("market-visit:{}", identity.pub_dress), now, 10, 60).is_err() {
-        return api_error(StatusCode::TOO_MANY_REQUESTS, "market_visit_limit", "Please retry later.");
+        return visit_refused(VisitRefusal::MarketVisitLimit, "Please retry later.");
     }
     let owner = match PubDress::from_str(&identity.pub_dress) {
         Ok(owner) => owner,
@@ -65,7 +59,7 @@ async fn create_market_visit(
             Ok(items) => items, Err(_) => return unavailable(),
         };
         if !items.iter().any(|item| item.order_id == *id && item.state == "paid") {
-            return api_error(StatusCode::CONFLICT, "item_not_available", "Paid item is not available for pickup.");
+            return visit_refused(VisitRefusal::ItemNotAvailable, "Paid item is not available for pickup.");
         }
     }
     // Read exactly the same server-owned wallet the issuer debits.
@@ -94,6 +88,7 @@ async fn create_market_visit(
     }
     // A purchase needs the session that confirms it. A provider login whose
     // session could not be minted still browses, but cannot buy on this visit.
+    let mut bound_visit = None;
     if session_hash.len() == 32 {
         let Ok(visit_id) = crate::market_visit::new_market_visit_id() else {
             return unavailable();
@@ -105,7 +100,8 @@ async fn create_market_visit(
             tracing::error!(%error, "market visit binding failed");
             return unavailable();
         }
-        handoff["visit_id"] = serde_json::Value::String(visit_id);
+        handoff["visit_id"] = serde_json::Value::String(visit_id.clone());
+        bound_visit = Some(visit_id);
         handoff["recipient"] = serde_json::Value::String(owner.as_str().to_owned());
         handoff["return_path"] = serde_json::Value::String(return_path);
     }
@@ -127,32 +123,41 @@ async fn create_market_visit(
         Ok(body) => body,
         Err(_) => return unavailable(),
     };
-    let Some(code) = body.get("code").and_then(|v| v.as_str()) else { return unavailable(); };
-    if code.len() != 43 || !code.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-') {
+    // A code Market answered with that is not shaped as the contract says is a
+    // fault upstream, not something to hand to a browser.
+    let Some(Ok(code)) = body
+        .get("code")
+        .and_then(|v| v.as_str())
+        .map(|code| HandoffCode::try_from(code.to_owned()))
+    else {
         return unavailable();
-    }
-    with_session_cookie(no_store_json(StatusCode::CREATED, serde_json::json!({
-        "code": code, "visit_id": handoff.get("visit_id"), "owner": owner.as_str(), "action": "https://0xda-market.nilx.one/nilx-browser/exchange"
-    })), cookie)
+    };
+    with_session_cookie(
+        no_store_json(
+            StatusCode::CREATED,
+            VisitAnswer {
+                code,
+                visit_id: bound_visit,
+                owner: owner.as_str().to_owned(),
+                action: "https://0xda-market.nilx.one/nilx-browser/exchange".to_owned(),
+            },
+        ),
+        cookie,
+    )
 }
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct MarketReturnQuery { visit_id: String, order_id: String }
 
 /// A navigation hint is never payment proof. Check both the committed Identity
 /// receipt and the authenticated Market fulfilment, tied to this owner's visit.
 async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
-    Query(query): Query<MarketReturnQuery>) -> Response {
+    Query(query): Query<ReturnQuery>) -> Response {
     use crate::market_issuer::{HttpMarketIssuer, MarketIssuerConfig};
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
     let (identity, _, _, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
     };
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
-    let missing = || api_error(StatusCode::NOT_FOUND, "purchase_not_confirmed", "Purchase is not confirmed.");
-    if !crate::market_visit::is_market_visit_id(&query.visit_id)
-        || !crate::market_visit::is_market_order_id(&query.order_id) { return missing(); }
+    let missing = || return_refused(ReturnRefusal::PurchaseNotConfirmed, "Purchase is not confirmed.");
+    if query.validate().is_err() { return missing(); }
     let visit = match state.repository.find_market_visit(&query.visit_id).await {
         Ok(Some(visit)) if visit.owner == owner => visit,
         Ok(_) => return missing(), Err(_) => return unavailable(),
@@ -162,7 +167,7 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
         Ok(_) => return missing(), Err(_) => return unavailable(),
     };
     if state.limiter.consume(format!("market-return:{}", owner.as_str()), now, 30, 60).is_err() {
-        return api_error(StatusCode::TOO_MANY_REQUESTS, "market_return_limit", "Please retry later.");
+        return return_refused(ReturnRefusal::MarketReturnLimit, "Please retry later.");
     }
     let Some(Ok(config)) = MarketIssuerConfig::from_environment() else { return unavailable(); };
     let market = match HttpMarketIssuer::new(config) { Ok(client) => client, Err(_) => return unavailable() };
@@ -171,10 +176,13 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
     };
     let claim = crate::market_visit::MarketReturn { visit_id: &query.visit_id, order_id: &query.order_id };
     if !crate::market_visit::market_return_confirmed(claim, &visit, &receipt, &order) { return missing(); }
-    with_session_cookie(no_store_json(StatusCode::OK, serde_json::json!({
-        "confirmed": true, "visit_id": query.visit_id, "order_id": query.order_id,
-        "owner": owner.as_str(), "item_delivery": receipt.duration_ms == 0
-    })), cookie)
+    with_session_cookie(no_store_json(StatusCode::OK, ReturnAnswer {
+        confirmed: true,
+        visit_id: query.visit_id,
+        order_id: query.order_id,
+        owner: owner.as_str().to_owned(),
+        item_delivery: receipt.duration_ms == 0,
+    }), cookie)
 }
 
 async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) -> Response {
