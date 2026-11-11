@@ -557,10 +557,12 @@ fn issuer_from_environment() -> Option<issuer::IssuerConfig> {
     }
 }
 
-/// 0x1 as a client of AIS, through Core's product service.
+/// 0x1 as a client of AIS, through Core's product service. 0x1 has one
+/// database: the product profile and its sessions are tables in the same
+/// `DATABASE_URL` as the rest of 0x1's state, never in AIS's.
 async fn product_sign_in_from_environment(
     public_origin: &Url,
-    identity_database_url: &str,
+    database_url: &str,
     native_auth: &NativeAuthConfig,
 ) -> Option<product_sign_in::ProductSignIn> {
     let read = |key: &str| env::var(key).ok().filter(|value| !value.is_empty());
@@ -577,17 +579,6 @@ async fn product_sign_in_from_environment(
             "AIAIAIAI_SIGN_IN_ISSUER and AIAIAIAI_SIGN_IN_CLIENT_SECRET must be configured together"
         ),
     };
-    // The deployment always names the product database, so it is read only
-    // once sign-in is on; without it a callback would have nowhere to attach
-    // the profile, and the service must not start.
-    let product_database_url = read("PRODUCT_DATABASE_URL")
-        .expect("PRODUCT_DATABASE_URL is required when aiaiaiai sign-in is configured");
-    // The product profile is 0x1's own data. Sharing a file with the legacy
-    // identity database would put it back next to the credentials it left.
-    assert!(
-        product_database_url != identity_database_url,
-        "PRODUCT_DATABASE_URL must not be the identity DATABASE_URL"
-    );
     let redirect_uri = public_origin
         .join("/api/v1/auth/aiaiaiai/callback")
         .expect("the callback path stays on the public origin");
@@ -606,9 +597,9 @@ async fn product_sign_in_from_environment(
         aiaiaiai_sign_in::SignInClient::new(config),
         native_auth.secret_digester(),
     );
-    let repository = public_info::PublicInfoRepository::connect(&product_database_url)
+    let repository = public_info::PublicInfoRepository::connect(database_url)
         .await
-        .expect("the 0x1 product database must initialize");
+        .expect("the 0x1 product tables must initialize");
     let service = public_info::PublicInfoService::new(flow, repository)
         .expect("the product service accepts the nilx-one client");
     info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");

@@ -492,11 +492,11 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_a_product_session() {
     };
 
     let fixture = fixture().await;
-    let product_database = tempfile::NamedTempFile::new().expect("product database");
-    let product =
-        PublicInfoRepository::connect(&format!("sqlite://{}", product_database.path().display()))
-            .await
-            .expect("product repository");
+    // 0x1 has one database: the product tables open in the same file as the
+    // rest of its state.
+    let product = PublicInfoRepository::connect(&fixture.url)
+        .await
+        .expect("product repository");
     let service = PublicInfoService::new(
         SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
         product,
@@ -693,13 +693,30 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_a_product_session() {
         "a dead cookie is cleared"
     );
 
-    // The legacy identity database gained no link for this sign-in.
+    // One file holds both the legacy tables and the product tables, and this
+    // sign-in left no link in the legacy ones.
+    let database = sqlx::SqlitePool::connect(&fixture.url)
+        .await
+        .expect("0x1 database");
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM sqlite_master WHERE type = 'table' \
+         AND name IN ('public_profiles', 'product_sessions', 'aiaiaiai_accounts', 'native_credentials') \
+         ORDER BY name",
+    )
+    .fetch_all(&database)
+    .await
+    .expect("tables");
+    assert_eq!(
+        tables,
+        [
+            "aiaiaiai_accounts",
+            "native_credentials",
+            "product_sessions",
+            "public_profiles"
+        ]
+    );
     let links: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM aiaiaiai_accounts")
-        .fetch_one(
-            &sqlx::SqlitePool::connect(&fixture.url)
-                .await
-                .expect("identity database"),
-        )
+        .fetch_one(&database)
         .await
         .expect("count");
     assert_eq!(links, 0);

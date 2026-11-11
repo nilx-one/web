@@ -12,9 +12,6 @@ services:
       - ${IDENTITY_ENV_FILE:?IDENTITY_ENV_FILE is required}
     environment:
       DATABASE_URL: sqlite:///data/identity.db
-      # 0x1's own product data, apart from the identity database. Opened only
-      # when aiaiaiai sign-in is configured.
-      PRODUCT_DATABASE_URL: sqlite:///data/product.db
       HTTP_BIND: 0.0.0.0:1927
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
     labels:

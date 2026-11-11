@@ -105,26 +105,52 @@ jobs:
           NILX_BROWSER_HANDOFF_TOKEN: ${{ secrets.NILX_BROWSER_HANDOFF_TOKEN }}
           TELEGRAM_OIDC_CLIENT_ID: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
           DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+          # Sign-in through AIS (auth.aiaiaiai.org), both or neither. The secret is
+          # AIS's client secret for `nilx-one`; AIS holds only its SHA-256.
+          AIAIAIAI_SIGN_IN_ISSUER: ${{ vars.AIAIAIAI_SIGN_IN_ISSUER }}
+          AIAIAIAI_SIGN_IN_CLIENT_SECRET: ${{ secrets.AIAIAIAI_SIGN_IN_CLIENT_SECRET }}
         run: |
           set -Eeuo pipefail
           umask 077
-          names=(TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
-                 DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN)
+          base=(TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
+                DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN)
+          optional=(AIAIAIAI_SIGN_IN_ISSUER AIAIAIAI_SIGN_IN_CLIENT_SECRET)
+          names=("${base[@]}")
+          # The AIS sign-in pair travels only when both are set. Half of it would make
+          # the service refuse to start, so it fails here instead.
+          optional_set=0
+          for name in "${optional[@]}"; do
+            [[ -z "$(printenv "$name")" ]] || optional_set=$((optional_set + 1))
+          done
+          (( optional_set != 1 )) || { echo "::error::Set both AIAIAIAI_SIGN_IN_ISSUER and AIAIAIAI_SIGN_IN_CLIENT_SECRET, or neither." >&2; exit 1; }
+          if (( optional_set == 2 )); then
+            names+=("${optional[@]}")
+            [[ "$AIAIAIAI_SIGN_IN_ISSUER" == https://* ]] || { echo "::error::AIAIAIAI_SIGN_IN_ISSUER must be an https origin." >&2; exit 1; }
+            (( ${#AIAIAIAI_SIGN_IN_CLIENT_SECRET} >= 32 )) || { echo "::error::AIAIAIAI_SIGN_IN_CLIENT_SECRET must contain at least 32 bytes." >&2; exit 1; }
+          fi
           for name in "${names[@]}"; do
             value="$(printenv "$name")"
             test -n "$value" || { echo "::error::Missing production value $name." >&2; exit 1; }
             [[ "$value" != *$'\n'* && "$value" != *$'\r'* ]] || { echo "::error::Invalid multiline value for $name." >&2; exit 1; }
           done
           (( $(printf %s "$NILX_BROWSER_HANDOFF_TOKEN" | wc -c) >= 32 )) || { echo "::error::NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 bytes." >&2; exit 1; }
-          # The envelope carries exactly the names nilxone-identity's contract lists under
-          # delivery.envelope (aiaiaiai-org/infra docs/automatic-delivery.md).
+          # The envelope carries names nilxone-identity's contract lists under
+          # delivery.envelope (aiaiaiai-org/infra docs/automatic-delivery.md): the base
+          # names, and the AIS sign-in pair once infra lists it. The contract may list
+          # either set, so neither repository has to merge first.
           contract="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/services/nilxone-identity.yaml)"
           mapped="$(awk '/^    envelope:/ { in_list = 1; next } in_list && /^      - [A-Z][A-Z0-9_]*$/ { sub(/^      - /, ""); print; next } in_list { exit }' <<<"$contract" | sort)"
           test -n "$mapped" || { echo "::error::nilxone-identity lists no delivery.envelope in infra." >&2; exit 1; }
-          test "$mapped" = "$(printf '%s\n' "${names[@]}" | sort)" || {
-            echo "::error::nilxone-identity lists different envelope names than this job carries." >&2
+          base_listed="$(printf '%s\n' "${base[@]}" | sort)"
+          all_listed="$(printf '%s\n' "${base[@]}" "${optional[@]}" | sort)"
+          [[ "$mapped" == "$base_listed" || "$mapped" == "$all_listed" ]] || {
+            echo "::error::nilxone-identity lists different envelope names than this job can carry." >&2
             exit 1
           }
+          if (( optional_set == 2 )) && [[ "$mapped" != "$all_listed" ]]; then
+            echo "::error::AIS sign-in is configured, but infra's nilxone-identity contract does not list its envelope names yet." >&2
+            exit 1
+          fi
           server="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/servers/edge-prod-1.yaml)"
           recipient="$(sed -n 's/^  encryptionRecipient: //p' <<<"$server")"
           [[ "$recipient" =~ ^ssh-ed25519\ [A-Za-z0-9+/]{68}$ ]] || { echo "::error::edge-prod-1 publishes no valid encryptionRecipient." >&2; exit 1; }
