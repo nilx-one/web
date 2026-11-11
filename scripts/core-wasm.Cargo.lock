@@ -1120,9 +1120,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nilxone-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nilxone-bindings-uniffi"
 version = "0.1.0"
 dependencies = [
+ "nilxone-api",
  "nilxone-contracts",
  "nilxone-kernel",
  "uniffi",
@@ -1132,6 +1141,7 @@ dependencies = [
 name = "nilxone-bindings-wasm"
 version = "0.1.0"
 dependencies = [
+ "nilxone-api",
  "nilxone-contracts",
  "nilxone-kernel",
  "wasm-bindgen",
@@ -1145,6 +1155,7 @@ dependencies = [
  "idna",
  "idna_adapter",
  "idna_mapping",
+ "libm",
  "serde",
  "serde_json",
  "unicode-bidi",
@@ -1164,6 +1175,7 @@ dependencies = [
  "getrandom 0.3.4",
  "h3o",
  "hmac",
+ "nilxone-api",
  "nilxone-contracts",
  "reqwest",
  "serde",
@@ -1177,6 +1189,15 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "url",
+]
+
+[[package]]
+name = "nilxone-identity-operator"
+version = "0.1.0"
+dependencies = [
+ "nilxone-identity",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
