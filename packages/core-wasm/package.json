@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@nilx-one/application": "workspace:*"
+    "@nilx-one/application": "workspace:*",
+    "@nilx-one/walk-graph": "workspace:*"
   }
 }

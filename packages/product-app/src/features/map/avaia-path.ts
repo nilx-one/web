@@ -10,7 +10,7 @@ import {
 } from "@nilx-one/map-contract";
 import {
   buildWalkGraph,
-  GRASS_WEIGHT,
+  grassWeight,
   routeOnGraph,
   snapToGraph,
   type GraphPosition,
@@ -30,7 +30,7 @@ import { walkGround } from "./walk-ground";
  * whenever there are any, and steps onto open ground for the rest: from where
  * it stands to the nearest line, and from the line to where it is going. Open
  * ground is planned around buildings and water exactly as before
- * (`planRoute`); it is allowed, only dearer, at `GRASS_WEIGHT` a metre.
+ * (`planRoute`); it is allowed, only dearer, at Core's grass weight a metre.
  *
  * Who chose the destination decides how dear:
  *
@@ -152,7 +152,7 @@ export function planWalk({
   const acrossMeters = pathMeters(across.path);
   const cut =
     chooser === "tap"
-      ? acrossMeters * GRASS_WEIGHT < along.cost
+      ? acrossMeters * grassWeight() < along.cost
       : acrossMeters <= SHORTCUT_MAX_METERS &&
         acrossMeters <= (1 - SHORTCUT_GAIN) * along.meters;
   return cut ? across : along.route;
@@ -212,7 +212,7 @@ function alongPaths(
       maxLocomotion: routeLocomotion(graph, start, end, route, grassMeters),
     },
     meters: route.lengthM + grassMeters,
-    cost: route.cost + grassMeters * GRASS_WEIGHT,
+    cost: route.cost + grassMeters * grassWeight(),
   };
 }
 

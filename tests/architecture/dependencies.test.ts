@@ -13,7 +13,9 @@ const ALLOWED_INTERNAL_IMPORTS: Readonly<Record<string, readonly string[]>> = {
   application: [],
   "auth-view": [],
   "artifact-contract": [],
-  "core-wasm": ["@nilx-one/application"],
+  // The Core Wasm adapter implements the ports Core answers through:
+  // application's runtime port and the walking graph's.
+  "core-wasm": ["@nilx-one/application", "@nilx-one/walk-graph"],
   graphics: [],
   "identity-http": ["@nilx-one/application"],
   "host-browser": ["@nilx-one/host-contract"],

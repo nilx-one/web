@@ -28,6 +28,7 @@
     "@nilx-one/host-contract": "workspace:*",
     "@nilx-one/map-contract": "workspace:*",
     "@nilx-one/product-app": "workspace:*",
+    "@nilx-one/walk-graph": "workspace:*",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.6",

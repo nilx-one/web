@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { installWalkGraphCore } from "@nilx-one/walk-graph";
 import {
   CORE_RUNTIME_BASE_URL,
   createCoreWasmClient,
@@ -109,6 +110,11 @@ async function main(): Promise<void> {
     loadBindings: () =>
       loadGeneratedCoreWasmBindings({ baseUrl: coreRuntimeBaseUrl }),
   });
+  // Core walks the Avaia: until its walking graph is installed, nothing does.
+  void core
+    .walkGraphCore()
+    .then((walk) => walk && installWalkGraphCore(walk))
+    .catch(() => undefined);
   const identity = createIdentityHttpAdapter({
     core,
     fetch: session.fetch,

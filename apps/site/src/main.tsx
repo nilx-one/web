@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { installWalkGraphCore } from "@nilx-one/walk-graph";
 import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import {
   createCoreWasmClient,
@@ -173,6 +174,11 @@ if (window.location.hostname === "0xda-market.nilx.one") {
   const core = createCoreWasmClient({
     loadBindings: loadGeneratedCoreWasmBindings,
   });
+  // Core walks the Avaia: until its walking graph is installed, nothing does.
+  void core
+    .walkGraphCore()
+    .then((walk) => walk && installWalkGraphCore(walk))
+    .catch(() => undefined);
   // probe() caches the binding load, so this root-level health check shares the
   // one load ProductApp also awaits rather than forcing a second.
   void core.probe().then((status) => reportCoreRuntimeStatus(reporter, status));

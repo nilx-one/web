@@ -26,6 +26,9 @@ importers:
       '@nilx-one/product-app':
         specifier: workspace:*
         version: link:packages/product-app
+      '@nilx-one/walk-graph':
+        specifier: workspace:*
+        version: link:packages/walk-graph
       '@testing-library/jest-dom':
         specifier: ^7.0.1
         version: 7.0.1(@testing-library/dom@10.4.1)(vitest@4.1.11(@types/node@24.13.3)(jsdom@30.0.1)(vite@8.2.2(@types/node@24.13.3)))
@@ -125,6 +128,9 @@ importers:
       '@nilx-one/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@nilx-one/walk-graph':
+        specifier: workspace:*
+        version: link:../../packages/walk-graph
       maplibre-gl:
         specifier: ^6.6.0
         version: 6.6.0
@@ -182,6 +188,9 @@ importers:
       '@nilx-one/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@nilx-one/walk-graph':
+        specifier: workspace:*
+        version: link:../../packages/walk-graph
       maplibre-gl:
         specifier: ^6.6.0
         version: 6.6.0
@@ -227,6 +236,9 @@ importers:
       '@nilx-one/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@nilx-one/walk-graph':
+        specifier: workspace:*
+        version: link:../../packages/walk-graph
       maplibre-gl:
         specifier: ^6.6.0
         version: 6.6.0
@@ -252,6 +264,9 @@ importers:
       '@nilx-one/application':
         specifier: workspace:*
         version: link:../application
+      '@nilx-one/walk-graph':
+        specifier: workspace:*
+        version: link:../walk-graph
 
   packages/graphics:
     dependencies:

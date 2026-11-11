@@ -68,6 +68,8 @@ pnpm dev:site
 
 `pnpm check` runs repository policy, formatting, lint, strict TypeScript, contract tests, integration tests, and production builds for every host. Identity-service changes additionally run their dedicated Rust CI and runtime-package validation. CI does not deploy.
 
+Core is the head: the walking graph and the readings of the service's answers are Core's, never a copy in Web. Tests therefore run against the verified Core Wasm runtime. Prepare it once from a checkout of the pinned `nilx-one/core` revision (in `scripts/prepare_core_wasm_runtime.sh`) with `./scripts/prepare_core_wasm_runtime.sh <path-to-core>`; CI does the same before the tests.
+
 ## Contributing
 
 Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), [CLA.md](CLA.md), and [TRADEMARKS.md](TRADEMARKS.md) before submitting substantial work.
