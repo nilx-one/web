@@ -8,6 +8,9 @@ import {
   CORE_FIXTURE_CORPUS_DIGEST,
   CORE_FIXTURE_CORPUS_VERSION,
   createCoreWasmClient,
+  decodeCraftPaymentReading,
+  decodeFindAttestationReading,
+  decodeFindSaleReading,
   decodeOrbWorld,
   loadGeneratedCoreWasmBindings,
   type GeneratedCoreWasmModule,
@@ -913,5 +916,94 @@ describe("decodeOrbWorld rarity", () => {
     expect(decodeOrbWorld(wire("exclusive")).orbs[0]?.rarity).toBe("exclusive");
     expect(decodeOrbWorld(wire(undefined)).orbs[0]?.rarity).toBeUndefined();
     expect(() => decodeOrbWorld(wire("legendary"))).toThrow();
+  });
+});
+
+// The readings Core answers (`nilxone-api`, `read_*_wire`): Core decides what an
+// answer means; Web only renames the fields.
+describe("Core's readings of Identity answers", () => {
+  const id = "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b";
+
+  it("decodes every kind Core answers", () => {
+    expect(
+      decodeFindAttestationReading(
+        `{"kind":"attested","outcome":"already_yours","attestation_id":"${id}","item_id":"seed_pouch","seeds_credited":"18446744073709551615"}`,
+      ),
+    ).toEqual({
+      kind: "attested",
+      attestationId: id,
+      itemId: "seed_pouch",
+      seedsCredited: 18446744073709551615n,
+    });
+    expect(
+      decodeFindAttestationReading('{"kind":"refused","reason":"too_far"}'),
+    ).toEqual({ kind: "refused", reason: "too_far" });
+    expect(decodeFindAttestationReading('{"kind":"unavailable"}')).toEqual({
+      kind: "unavailable",
+    });
+    expect(
+      decodeFindSaleReading(
+        '{"kind":"sold","outcome":"sold","seeds_credited":"40"}',
+      ),
+    ).toEqual({ kind: "sold", seedsCredited: 40n });
+    expect(
+      decodeFindSaleReading('{"kind":"refused","reason":"used_up"}'),
+    ).toEqual({ kind: "refused", reason: "used_up" });
+    expect(
+      decodeCraftPaymentReading(
+        '{"kind":"paid","outcome":"started","seeds_debited":"120"}',
+      ),
+    ).toEqual({ kind: "paid", seedsDebited: 120n });
+    expect(decodeCraftPaymentReading('{"kind":"inactive"}')).toEqual({
+      kind: "refused",
+      reason: "inactive",
+    });
+    expect(
+      decodeCraftPaymentReading('{"kind":"refused","reason":"invalid_craft"}'),
+    ).toEqual({ kind: "refused", reason: "invalid_craft" });
+  });
+
+  it("refuses a reading Core never answers", () => {
+    for (const reading of [
+      "not json",
+      "[]",
+      '{"kind":"refused","reason":"rate_limited"}',
+      '{"kind":"attested","attestation_id":"x","item_id":"y","seeds_credited":"01"}',
+      '{"kind":"sold","seeds_credited":40}',
+      '{"kind":"paid"}',
+    ]) {
+      expect(() => decodeFindAttestationReading(reading)).toThrow();
+    }
+    expect(() =>
+      decodeFindSaleReading('{"kind":"refused","reason":"taken"}'),
+    ).toThrow();
+    expect(() =>
+      decodeCraftPaymentReading('{"kind":"refused","reason":"used_up"}'),
+    ).toThrow();
+  });
+
+  it("binds the readings when the runtime exports them", async () => {
+    const without = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () => generatedRuntime(),
+    });
+    expect(without.readFindAttestation).toBeUndefined();
+    const read = vi.fn(() => '{"kind":"refused","reason":"taken"}');
+    const bindings = await loadGeneratedCoreWasmBindings({
+      importRuntime: async () =>
+        generatedRuntime({ read_find_attestation: read }),
+    });
+    expect(
+      bindings.readFindAttestation?.(false, '{"error":{"code":"taken"}}'),
+    ).toEqual({
+      kind: "refused",
+      reason: "taken",
+    });
+    expect(read).toHaveBeenCalledWith(false, '{"error":{"code":"taken"}}');
+    const client = createCoreWasmClient({ loadBindings: async () => bindings });
+    await expect(client.readFindAttestation?.(true, "{}")).resolves.toEqual({
+      kind: "refused",
+      reason: "taken",
+    });
+    await expect(client.readFindSale?.(true, "{}")).rejects.toThrow(/missing/);
   });
 });

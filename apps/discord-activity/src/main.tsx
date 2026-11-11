@@ -110,6 +110,7 @@ async function main(): Promise<void> {
       loadGeneratedCoreWasmBindings({ baseUrl: coreRuntimeBaseUrl }),
   });
   const identity = createIdentityHttpAdapter({
+    core,
     fetch: session.fetch,
     getAuthorization: () => session.authorization,
   });

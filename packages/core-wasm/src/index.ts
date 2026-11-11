@@ -14,6 +14,11 @@ import {
 } from "@nilx-one/application";
 
 import type {
+  AttestRefusal,
+  AttestResult,
+  CraftPaymentRefusal,
+  CraftPaymentResult,
+  SaleResult,
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
   AvaiaDriveInput,
@@ -64,6 +69,103 @@ const PUB_DRESS_LABEL_ERROR_CODES = new Set<CorePubDressLabelErrorCode>([
   "too_long",
   "suffix_too_long",
 ]);
+
+const ATTEST_REFUSALS = new Set<AttestRefusal>([
+  "taken",
+  "unknown_find",
+  "out_of_time",
+  "too_far",
+  "not_the_avaias",
+  "invalid_pickup",
+]);
+const SALE_REFUSALS = new Set([
+  "unknown_attestation",
+  "not_for_sale",
+  "used_up",
+]);
+const CRAFT_REFUSALS = new Set<CraftPaymentRefusal>([
+  "invalid_craft",
+  "not_enough_seeds",
+  "wrong_inputs",
+  "unverifiable_inputs",
+  "conflicting_replay",
+  "unknown_recipe",
+]);
+const CORE_SEEDS = /^(0|[1-9]\d{0,19})$/;
+
+function coreSeeds(value: unknown): bigint {
+  if (typeof value !== "string" || !CORE_SEEDS.test(value))
+    throw new Error("0x1 Core returned an invalid seeds amount");
+  return BigInt(value);
+}
+
+function coreReading(value: string): Record<string, unknown> {
+  const reading = JSON.parse(value) as unknown;
+  if (typeof reading !== "object" || reading === null || Array.isArray(reading))
+    throw new Error("0x1 Core returned an invalid reading");
+  return reading as Record<string, unknown>;
+}
+
+/**
+ * Core's reading of an attestation answer. Core decides what the answer
+ * means; this only renames its fields. Anything else Core never answers.
+ */
+export function decodeFindAttestationReading(value: string): AttestResult {
+  const reading = coreReading(value);
+  if (reading.kind === "unavailable") return { kind: "unavailable" };
+  if (
+    reading.kind === "refused" &&
+    ATTEST_REFUSALS.has(reading.reason as AttestRefusal)
+  )
+    return { kind: "refused", reason: reading.reason as AttestRefusal };
+  if (
+    reading.kind === "attested" &&
+    typeof reading.attestation_id === "string" &&
+    typeof reading.item_id === "string"
+  )
+    return {
+      kind: "attested",
+      attestationId: reading.attestation_id,
+      itemId: reading.item_id,
+      seedsCredited: coreSeeds(reading.seeds_credited),
+    };
+  throw new Error("0x1 Core returned an invalid attestation reading");
+}
+
+/** Core's reading of a sale answer. */
+export function decodeFindSaleReading(value: string): SaleResult {
+  const reading = coreReading(value);
+  if (reading.kind === "unavailable") return { kind: "unavailable" };
+  if (
+    reading.kind === "refused" &&
+    typeof reading.reason === "string" &&
+    SALE_REFUSALS.has(reading.reason)
+  )
+    return {
+      kind: "refused",
+      reason: reading.reason as
+        "unknown_attestation" | "not_for_sale" | "used_up",
+    };
+  if (reading.kind === "sold")
+    return { kind: "sold", seedsCredited: coreSeeds(reading.seeds_credited) };
+  throw new Error("0x1 Core returned an invalid sale reading");
+}
+
+/** Core's reading of a paid craft answer. */
+export function decodeCraftPaymentReading(value: string): CraftPaymentResult {
+  const reading = coreReading(value);
+  if (reading.kind === "unavailable") return { kind: "unavailable" };
+  if (reading.kind === "inactive")
+    return { kind: "refused", reason: "inactive" };
+  if (
+    reading.kind === "refused" &&
+    CRAFT_REFUSALS.has(reading.reason as CraftPaymentRefusal)
+  )
+    return { kind: "refused", reason: reading.reason as CraftPaymentRefusal };
+  if (reading.kind === "paid")
+    return { kind: "paid", seedsDebited: coreSeeds(reading.seeds_debited) };
+  throw new Error("0x1 Core returned an invalid craft reading");
+}
 
 function decodeMarketReturnTrip(value: string): boolean {
   const answer = JSON.parse(value) as { ok?: unknown; error?: unknown };
@@ -804,6 +906,9 @@ export interface CoreWasmBindings {
   ): BusinessPoint;
   marketReturnTrip?(trip: unknown): boolean;
   marketReturnPolicy?(): CoreMarketReturnPolicy;
+  readFindAttestation?(ok: boolean, body: string): AttestResult;
+  readFindSale?(ok: boolean, body: string): SaleResult;
+  readCraftPayment?(ok: boolean, body: string): CraftPaymentResult;
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
@@ -854,6 +959,10 @@ export interface GeneratedCoreWasmModule {
   /** Absent from a runtime built before Core's Market return trip. */
   market_return_trip?(trip: string): string;
   market_return_policy?(): string;
+  /** Absent from a runtime built before Core's answer readings. */
+  read_find_attestation?(ok: boolean, body: string): string;
+  read_find_sale?(ok: boolean, body: string): string;
+  read_craft_payment?(ok: boolean, body: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -1101,6 +1210,26 @@ export async function loadGeneratedCoreWasmBindings(
           marketReturnPolicy: () =>
             decodeMarketReturnPolicy(runtime.market_return_policy!()),
         }),
+    ...(runtime.read_find_attestation === undefined
+      ? {}
+      : {
+          readFindAttestation: (ok: boolean, body: string) =>
+            decodeFindAttestationReading(
+              runtime.read_find_attestation!(ok, body),
+            ),
+        }),
+    ...(runtime.read_find_sale === undefined
+      ? {}
+      : {
+          readFindSale: (ok: boolean, body: string) =>
+            decodeFindSaleReading(runtime.read_find_sale!(ok, body)),
+        }),
+    ...(runtime.read_craft_payment === undefined
+      ? {}
+      : {
+          readCraftPayment: (ok: boolean, body: string) =>
+            decodeCraftPaymentReading(runtime.read_craft_payment!(ok, body)),
+        }),
     ...(runtime.landmark_map_view === undefined
       ? {}
       : {
@@ -1333,6 +1462,33 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.marketReturnPolicy === undefined)
       throw new Error("0x1 Core Wasm market return binding is missing");
     return bindings.marketReturnPolicy();
+  }
+
+  public async readFindAttestation(
+    ok: boolean,
+    body: string,
+  ): Promise<AttestResult> {
+    const bindings = await this.loadBindings();
+    if (bindings.readFindAttestation === undefined)
+      throw new Error("0x1 Core Wasm find attestation reading is missing");
+    return bindings.readFindAttestation(ok, body);
+  }
+
+  public async readFindSale(ok: boolean, body: string): Promise<SaleResult> {
+    const bindings = await this.loadBindings();
+    if (bindings.readFindSale === undefined)
+      throw new Error("0x1 Core Wasm find sale reading is missing");
+    return bindings.readFindSale(ok, body);
+  }
+
+  public async readCraftPayment(
+    ok: boolean,
+    body: string,
+  ): Promise<CraftPaymentResult> {
+    const bindings = await this.loadBindings();
+    if (bindings.readCraftPayment === undefined)
+      throw new Error("0x1 Core Wasm craft payment reading is missing");
+    return bindings.readCraftPayment(ok, body);
   }
 
   public async subscriptionStatus(

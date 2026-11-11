@@ -307,9 +307,6 @@ export {
 
 export {
   hasFindAttestation,
-  parseAttestAnswer,
-  parseCraftAnswer,
-  parseSaleAnswer,
   type AttestRefusal,
   type AttestResult,
   type CraftPaymentRefusal,

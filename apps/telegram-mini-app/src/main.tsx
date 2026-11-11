@@ -111,6 +111,7 @@ async function bootstrap(): Promise<void> {
     loadBindings: loadGeneratedCoreWasmBindings,
   });
   const identity = createIdentityHttpAdapter({
+    core,
     getAuthorization: () => telegramAuthorization(host),
   });
   const localPresence = createLocalPresenceJournal().catch(() => null);

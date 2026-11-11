@@ -184,6 +184,7 @@ if (window.location.hostname === "0xda-market.nilx.one") {
     (await readDiscordHandoff(globalThis.fetch.bind(globalThis)));
   if (!discordHandoff) forgetDiscordHandoffLanding();
   const identity = createIdentityHttpAdapter({
+    core,
     getAuthorization: () =>
       discordHandoff ? DISCORD_HANDOFF_AUTHORIZATION : undefined,
   });
