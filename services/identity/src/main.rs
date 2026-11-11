@@ -566,33 +566,15 @@ async fn product_sign_in_from_environment(
     native_auth: &NativeAuthConfig,
 ) -> Option<product_sign_in::ProductSignIn> {
     let read = |key: &str| env::var(key).ok().filter(|value| !value.is_empty());
-    let (issuer, secret) = match (
-        read("AIAIAIAI_SIGN_IN_ISSUER"),
-        read("AIAIAIAI_SIGN_IN_CLIENT_SECRET"),
-    ) {
-        (Some(issuer), Some(secret)) => (issuer, secret),
-        (None, None) => {
-            info!("aiaiaiai sign-in is not configured");
-            return None;
-        }
-        _ => panic!(
-            "AIAIAIAI_SIGN_IN_ISSUER and AIAIAIAI_SIGN_IN_CLIENT_SECRET must be configured together"
-        ),
+    // The issuer's address is the one setting, and it is not a secret: 0x1 is a
+    // public client of AIS, so there is nothing to generate, store or carry.
+    let Some(issuer) = read("AIAIAIAI_SIGN_IN_ISSUER") else {
+        info!("aiaiaiai sign-in is not configured");
+        return None;
     };
-    let redirect_uri = public_origin
-        .join("/api/v1/auth/aiaiaiai/callback")
-        .expect("the callback path stays on the public origin");
     let backchannel = read("AIAIAIAI_SIGN_IN_BACKCHANNEL");
-    // Core's product service accepts only the `nilx-one` client, so the id
-    // is not a setting.
-    let config = aiaiaiai_sign_in::SignInClientConfig::new(
-        &issuer,
-        backchannel.as_deref(),
-        "nilx-one",
-        &secret,
-        redirect_uri.as_str(),
-    )
-    .unwrap_or_else(|error| panic!("aiaiaiai sign-in configuration: {error}"));
+    let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
+        .unwrap_or_else(|error| panic!("aiaiaiai sign-in configuration: {error}"));
     let flow = aiaiaiai_sign_in::SignInFlow::new(
         aiaiaiai_sign_in::SignInClient::new(config),
         native_auth.secret_digester(),
@@ -604,6 +586,25 @@ async fn product_sign_in_from_environment(
         .expect("the product service accepts the nilx-one client");
     info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
     Some(product_sign_in::ProductSignIn::new(service, native_auth))
+}
+
+/// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.
+/// Core's product service accepts only the `nilx-one` client, so the id is not
+/// a setting.
+fn product_sign_in_client(
+    issuer: &str,
+    backchannel: Option<&str>,
+    public_origin: &Url,
+) -> Result<aiaiaiai_sign_in::SignInClientConfig, aiaiaiai_sign_in::SignInConfigError> {
+    let redirect_uri = public_origin
+        .join("/api/v1/auth/aiaiaiai/callback")
+        .expect("the callback path stays on the public origin");
+    aiaiaiai_sign_in::SignInClientConfig::public(
+        issuer,
+        backchannel,
+        "nilx-one",
+        redirect_uri.as_str(),
+    )
 }
 
 fn oauth_credentials_from_environment(
@@ -1753,8 +1754,22 @@ mod tests {
     use super::{
         CURRENT_POSITION_BUTTON, CommandMenu, LocationModeRefusal, MINI_APP_URL,
         PendingUnlinkConfirmations, SET_POSITION_BUTTON, bot_commands, command_of,
-        control_keyboard, help_text, registration_keyboard, resolve_location_mode, shared_point,
+        control_keyboard, help_text, product_sign_in_client, registration_keyboard,
+        resolve_location_mode, shared_point,
     };
+    use url::Url;
+
+    #[test]
+    fn the_0x1_site_is_a_public_client_of_ais_on_its_own_callback() {
+        let origin = Url::parse("https://nilx.one").unwrap();
+        let config = product_sign_in_client("https://auth.aiaiaiai.org", None, &origin).unwrap();
+        assert_eq!(config.client_id(), "nilx-one");
+        assert_eq!(config.issuer(), "https://auth.aiaiaiai.org");
+        // No secret exists to leak, log or carry.
+        assert!(format!("{config:?}").contains("client_secret: None"));
+        // The issuer must still be an https origin.
+        assert!(product_sign_in_client("http://auth.aiaiaiai.org", None, &origin).is_err());
+    }
 
     #[test]
     fn open_is_first_for_guests_and_registered_bonds() {

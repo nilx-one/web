@@ -137,30 +137,28 @@ behind the product profile in later changes (`docs/identity-boundary.md`).
 The earlier first-sight link through `aiaiaiai_accounts` is no longer
 reachable from any route.
 
-Settings, both or neither: `AIAIAIAI_SIGN_IN_ISSUER` and
-`AIAIAIAI_SIGN_IN_CLIENT_SECRET`. 0x1 has one database, so the product
-tables open in the same `DATABASE_URL`; no other setting names a database.
-`AIAIAIAI_SIGN_IN_BACKCHANNEL` is only for
-reaching `/token` and the keys somewhere other than the issuer origin. The
-client id is always `nilx-one`: Core's product service accepts no other. The
-callback is `PUBLIC_ORIGIN` + `/api/v1/auth/aiaiaiai/callback`.
+Settings: `AIAIAIAI_SIGN_IN_ISSUER`, an https origin, is the one setting and
+it turns sign-in on. It is not a secret: 0x1 is a **public client** of AIS
+(`SignInClientConfig::public`), so there is no client secret to generate,
+store, seal or register. What binds a code to the client is PKCE and the exact
+callback, `PUBLIC_ORIGIN` + `/api/v1/auth/aiaiaiai/callback`. 0x1 has one
+database, so the product tables open in the same `DATABASE_URL`; no other
+setting names a database. `AIAIAIAI_SIGN_IN_BACKCHANNEL` is only for reaching
+`/token` and the keys somewhere other than the issuer origin. The client id
+is always `nilx-one`: Core's product service accepts no other.
 
-Both are off until configured. To turn sign-in on for production:
+It is off until `AIAIAIAI_SIGN_IN_ISSUER` is set. To turn sign-in on for
+production:
 
-1. Generate a client secret of at least 32 random bytes.
-2. In this repository's `production` Environment, set the secret
-   `AIAIAIAI_SIGN_IN_CLIENT_SECRET` and the variable
-   `AIAIAIAI_SIGN_IN_ISSUER` (`https://auth.aiaiaiai.org`). Both or neither;
-   the envelope job in `package-identity-service.yml` refuses half. They
-   travel in the sealed envelope, after infra's `nilxone-identity` contract
-   lists them under `delivery.envelope`, and `prepare-runtime-env.sh` checks
-   the pair again on the host.
-3. Give AIS the secret's SHA-256 as `secret_sha256` of client `nilx-one` (with
+1. Register client `nilx-one` in AIS without `secret_sha256`, with
    `https://nilx.one/api/v1/auth/aiaiaiai/callback` as its redirect URI and
-   `pub_dress` allowed). AIS never holds the secret itself.
+   `pub_dress` allowed (`aiaiaiai-org/4x-ais` `docs/runtime.md`).
+2. Add `AIAIAIAI_SIGN_IN_ISSUER=https://auth.aiaiaiai.org` to the
+   `nilxone-identity` contract's `runtime.environment` in
+   `aiaiaiai-org/infra`. That is a reviewed, public setting, and the one
+   switch.
 
-Registering the client in AIS, deploying AIS and the site's "Sign in" button
-are separate steps.
+Deploying AIS and the site's "Sign in" button are separate steps.
 
 ## Bond roles and location modes
 
@@ -376,7 +374,7 @@ wallets and activating the Market catalog are separate, authorized steps.
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `AIAIAIAI_ISSUER_SIGNING_KEY`,
-`AIAIAIAI_SIGN_IN_CLIENT_SECRET`, `TELOXIDE_TOKEN`,
+`TELOXIDE_TOKEN`,
 `DISCORD_CLIENT_SECRET`, `SPEECH_INGEST_TOKEN`, and `PARTNER_LOOKUP_TOKEN` are server-only runtime secrets. The native authentication
 secret and password pepper must be independent values of at least 32 bytes. None
 may be exposed through Vite, browser configuration, repository files, build

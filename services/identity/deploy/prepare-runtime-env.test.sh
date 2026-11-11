@@ -84,33 +84,6 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=aiaiaiai-sign-in-on'
-  printf '%s\n' 'AIAIAIAI_SIGN_IN_ISSUER=https://auth.aiaiaiai.org'
-  printf '%s\n' 'AIAIAIAI_SIGN_IN_CLIENT_SECRET=0123456789abcdef0123456789abcdef'
-} >"$provider"
-sh "$prepare" "$runtime" "$provider"
-[ "$(value_of AIAIAIAI_SIGN_IN_ISSUER "$runtime")" = https://auth.aiaiaiai.org ]
-[ "$(value_of AIAIAIAI_SIGN_IN_CLIENT_SECRET "$runtime")" = 0123456789abcdef0123456789abcdef ]
-
-# Half of it, a plain-http issuer and a short secret each stop the deploy.
-for entries in \
-  'AIAIAIAI_SIGN_IN_ISSUER=https://auth.aiaiaiai.org' \
-  'AIAIAIAI_SIGN_IN_CLIENT_SECRET=0123456789abcdef0123456789abcdef' \
-  'AIAIAIAI_SIGN_IN_ISSUER=http://auth.aiaiaiai.org
-AIAIAIAI_SIGN_IN_CLIENT_SECRET=0123456789abcdef0123456789abcdef' \
-  'AIAIAIAI_SIGN_IN_ISSUER=https://auth.aiaiaiai.org
-AIAIAIAI_SIGN_IN_CLIENT_SECRET=too-short'; do
-  {
-    printf '%s\n' 'TELOXIDE_TOKEN=aiaiaiai-sign-in-bad'
-    printf '%s\n' "$entries"
-  } >"$provider"
-  if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
-    echo "invalid aiaiaiai sign-in settings unexpectedly succeeded: $entries" >&2
-    exit 1
-  fi
-done
-
-{
   printf '%s\n' 'TELOXIDE_TOKEN=github-evidence-missing-pair'
   printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client'
 } >"$provider"

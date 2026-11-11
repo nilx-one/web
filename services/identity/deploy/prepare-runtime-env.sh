@@ -133,26 +133,6 @@ if [ -n "$github_auth_client_id" ] && [ -n "$github_evidence_client_id" ] && [ "
   exit 1
 fi
 
-# Sign-in through AIS (auth.aiaiaiai.org). Both or neither: the service refuses
-# to start with half of it, and a deploy should fail here, before the container.
-# The values stay in the provider file and reach the runtime file with it.
-aiaiaiai_sign_in_issuer="$(read_provider_value AIAIAIAI_SIGN_IN_ISSUER)"
-aiaiaiai_sign_in_secret="$(read_provider_value AIAIAIAI_SIGN_IN_CLIENT_SECRET)"
-validate_pair "aiaiaiai sign-in" "$aiaiaiai_sign_in_issuer" "$aiaiaiai_sign_in_secret"
-if [ -n "$aiaiaiai_sign_in_issuer" ]; then
-  case "$aiaiaiai_sign_in_issuer" in
-    https://*) ;;
-    *)
-      echo "AIAIAIAI_SIGN_IN_ISSUER must use https" >&2
-      exit 1
-      ;;
-  esac
-  if [ "${#aiaiaiai_sign_in_secret}" -lt 32 ]; then
-    echo "AIAIAIAI_SIGN_IN_CLIENT_SECRET must contain at least 32 bytes" >&2
-    exit 1
-  fi
-fi
-
 next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
 trap 'rm -f "$next_env"' EXIT HUP INT TERM
 
