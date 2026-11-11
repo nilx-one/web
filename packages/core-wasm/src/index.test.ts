@@ -12,6 +12,7 @@ import {
   decodeFindAttestationReading,
   decodeFindSaleReading,
   decodeOrbWorld,
+  decodeSeedsWalletReading,
   loadGeneratedCoreWasmBindings,
   type GeneratedCoreWasmModule,
 } from "./index";
@@ -1005,5 +1006,30 @@ describe("Core's readings of Identity answers", () => {
       reason: "taken",
     });
     await expect(client.readFindSale?.(true, "{}")).rejects.toThrow(/missing/);
+  });
+});
+
+describe("Core's reading of the seeds wallet", () => {
+  it("decodes every kind Core answers and refuses anything else", () => {
+    expect(
+      decodeSeedsWalletReading('{"kind":"read","balance":"9360"}'),
+    ).toEqual({ kind: "read", balance: 9360n });
+    expect(
+      decodeSeedsWalletReading('{"kind":"authentication_required"}'),
+    ).toEqual({ kind: "rejected", reason: "authentication-required" });
+    expect(decodeSeedsWalletReading('{"kind":"inactive"}')).toEqual({
+      kind: "rejected",
+      reason: "inactive",
+    });
+    expect(decodeSeedsWalletReading('{"kind":"unavailable"}')).toEqual({
+      kind: "service-unavailable",
+    });
+    for (const reading of [
+      '{"kind":"read"}',
+      '{"kind":"read","balance":9360}',
+      '{"kind":"rejected"}',
+      "null",
+    ])
+      expect(() => decodeSeedsWalletReading(reading)).toThrow();
   });
 });

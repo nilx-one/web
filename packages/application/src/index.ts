@@ -318,7 +318,6 @@ export {
 
 export {
   hasSeedsWalletAccess,
-  parseSeedsWalletRead,
   type SeedsWalletAccessPort,
   type SeedsWalletRead,
   type SeedsWalletRejection,

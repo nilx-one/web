@@ -20,6 +20,7 @@ import type {
   CraftPaymentResult,
   SaleResult,
 } from "./find-attestation";
+import type { SeedsWalletResult } from "./seeds-wallet";
 
 /** Archive subjects only; the publisher, not Web or Core Wasm, authenticates them. */
 export interface CoreLandmarkMapRequest {
@@ -196,6 +197,8 @@ export interface CoreRuntimePort {
   readFindSale?(ok: boolean, body: string): Promise<SaleResult>;
   /** Core `read_craft_payment`: what an answer to `POST .../crafts` means. */
   readCraftPayment?(ok: boolean, body: string): Promise<CraftPaymentResult>;
+  /** Core `read_seeds_wallet`: what an answer to `GET .../seeds` means. */
+  readSeedsWalletAnswer?(ok: boolean, body: string): Promise<SeedsWalletResult>;
   probe(): Promise<CoreRuntimeStatus>;
   derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(

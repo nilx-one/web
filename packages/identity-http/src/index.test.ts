@@ -1359,7 +1359,21 @@ describe("Telegram self-disconnect transport", () => {
         response(200, { balance: "9360", denomination: "seeds" }),
       )
       .mockRejectedValueOnce(new TypeError("offline"));
+    // Core reads the answers; the transport hands each one over as it came.
+    const core = {
+      readSeedsWalletAnswer: vi.fn<
+        NonNullable<IdentityAnswerReader["readSeedsWalletAnswer"]>
+      >(async (ok, body) => {
+        const answer = JSON.parse(body) as Record<string, unknown>;
+        if (ok && answer.authority === "identity")
+          return { kind: "read", balance: BigInt(String(answer.balance)) };
+        return ok
+          ? { kind: "service-unavailable" }
+          : { kind: "rejected", reason: "authentication-required" };
+      }),
+    };
     const adapter = createIdentityHttpAdapter({
+      core,
       fetch,
       getAuthorization: () => "tma abc",
     });
@@ -1378,10 +1392,28 @@ describe("Telegram self-disconnect transport", () => {
       kind: "rejected",
       reason: "authentication-required",
     });
+    expect(core.readSeedsWalletAnswer).toHaveBeenNthCalledWith(
+      2,
+      false,
+      JSON.stringify({
+        error: { code: "provider_authentication_required", message: "" },
+      }),
+    );
     await expect(adapter.readSeedsWallet()).resolves.toEqual({
       kind: "service-unavailable",
     });
+    // Offline: nothing to read, and Core is not asked.
     await expect(adapter.readSeedsWallet()).resolves.toEqual({
+      kind: "service-unavailable",
+    });
+    expect(core.readSeedsWalletAnswer).toHaveBeenCalledTimes(3);
+    const withoutCore = createIdentityHttpAdapter({
+      fetch: vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValue(response(200, { balance: "1" })),
+      getAuthorization: () => undefined,
+    });
+    await expect(withoutCore.readSeedsWallet()).resolves.toEqual({
       kind: "service-unavailable",
     });
   });
