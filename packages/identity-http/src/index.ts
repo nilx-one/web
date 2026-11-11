@@ -8,7 +8,6 @@ import {
   type FindAttestationPort,
   type ReportedPickup,
   type SaleResult,
-  parseSeedsWalletRead,
   type SeedsWalletAccessPort,
   type SeedsWalletResult,
   parseXpingEngineRead,
@@ -83,15 +82,19 @@ export * from "./bond-location-control";
 /** The part of the Core runtime that reads the service's answers. */
 export type IdentityAnswerReader = Pick<
   CoreRuntimePort,
-  "readFindAttestation" | "readFindSale" | "readCraftPayment"
+  | "readFindAttestation"
+  | "readFindSale"
+  | "readCraftPayment"
+  | "readSeedsWalletAnswer"
 >;
 
 interface IdentityHttpAdapterOptions {
   fetch?: typeof globalThis.fetch;
   getAuthorization(): string | undefined;
   /**
-   * Core reads what the finds answers mean. Without it, or when the runtime
-   * cannot, those routes answer `unavailable`: the device tries again later.
+   * Core reads what the finds and wallet answers mean. Without it, or when
+   * the runtime cannot, those routes answer unavailable: the device tries
+   * again later.
    */
   core?: IdentityAnswerReader;
 }
@@ -1572,19 +1575,14 @@ class IdentityHttpAdapter
     } catch {
       return { kind: "service-unavailable" };
     }
-    const body: unknown = await response.json().catch(() => undefined);
-    if (response.ok) {
-      const read = parseSeedsWalletRead(body);
-      return read === undefined
-        ? { kind: "service-unavailable" }
-        : { kind: "read", ...read };
+    const body = await response.text().catch(() => "");
+    const read = this.options.core?.readSeedsWalletAnswer;
+    if (read === undefined) return { kind: "service-unavailable" };
+    try {
+      return await read(response.ok, body);
+    } catch {
+      return { kind: "service-unavailable" };
     }
-    const refusal = pubInfoRefusal(body);
-    return refusal.kind === "rejected" &&
-      (refusal.reason === "authentication-required" ||
-        refusal.reason === "inactive")
-      ? { kind: "rejected", reason: refusal.reason }
-      : { kind: "service-unavailable" };
   }
 
   public async readXpingEngine(): Promise<XpingEngineResult> {

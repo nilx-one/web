@@ -19,6 +19,7 @@ import type {
   CraftPaymentRefusal,
   CraftPaymentResult,
   SaleResult,
+  SeedsWalletResult,
   AvaiaDriveAnswer,
   AvaiaDriveCommand,
   AvaiaDriveInput,
@@ -165,6 +166,19 @@ export function decodeCraftPaymentReading(value: string): CraftPaymentResult {
   if (reading.kind === "paid")
     return { kind: "paid", seedsDebited: coreSeeds(reading.seeds_debited) };
   throw new Error("0x1 Core returned an invalid craft reading");
+}
+
+/** Core's reading of the seeds wallet answer. */
+export function decodeSeedsWalletReading(value: string): SeedsWalletResult {
+  const reading = coreReading(value);
+  if (reading.kind === "unavailable") return { kind: "service-unavailable" };
+  if (reading.kind === "authentication_required")
+    return { kind: "rejected", reason: "authentication-required" };
+  if (reading.kind === "inactive")
+    return { kind: "rejected", reason: "inactive" };
+  if (reading.kind === "read")
+    return { kind: "read", balance: coreSeeds(reading.balance) };
+  throw new Error("0x1 Core returned an invalid wallet reading");
 }
 
 function decodeMarketReturnTrip(value: string): boolean {
@@ -909,6 +923,7 @@ export interface CoreWasmBindings {
   readFindAttestation?(ok: boolean, body: string): AttestResult;
   readFindSale?(ok: boolean, body: string): SaleResult;
   readCraftPayment?(ok: boolean, body: string): CraftPaymentResult;
+  readSeedsWalletAnswer?(ok: boolean, body: string): SeedsWalletResult;
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
@@ -963,6 +978,7 @@ export interface GeneratedCoreWasmModule {
   read_find_attestation?(ok: boolean, body: string): string;
   read_find_sale?(ok: boolean, body: string): string;
   read_craft_payment?(ok: boolean, body: string): string;
+  read_seeds_wallet?(ok: boolean, body: string): string;
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -1230,6 +1246,12 @@ export async function loadGeneratedCoreWasmBindings(
           readCraftPayment: (ok: boolean, body: string) =>
             decodeCraftPaymentReading(runtime.read_craft_payment!(ok, body)),
         }),
+    ...(runtime.read_seeds_wallet === undefined
+      ? {}
+      : {
+          readSeedsWalletAnswer: (ok: boolean, body: string) =>
+            decodeSeedsWalletReading(runtime.read_seeds_wallet!(ok, body)),
+        }),
     ...(runtime.landmark_map_view === undefined
       ? {}
       : {
@@ -1489,6 +1511,16 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.readCraftPayment === undefined)
       throw new Error("0x1 Core Wasm craft payment reading is missing");
     return bindings.readCraftPayment(ok, body);
+  }
+
+  public async readSeedsWalletAnswer(
+    ok: boolean,
+    body: string,
+  ): Promise<SeedsWalletResult> {
+    const bindings = await this.loadBindings();
+    if (bindings.readSeedsWalletAnswer === undefined)
+      throw new Error("0x1 Core Wasm seeds wallet reading is missing");
+    return bindings.readSeedsWalletAnswer(ok, body);
   }
 
   public async subscriptionStatus(

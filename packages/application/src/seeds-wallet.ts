@@ -6,6 +6,9 @@
  * (`GET /api/v1/identity/seeds`). Identity alone credits and debits it: Market
  * purchases, xPing repair and the once-only starter credit. A browser
  * inventory amount is never a balance anyone may spend or be shown as one.
+ *
+ * Core reads the service's answer (`nilxone-api`, through the runtime's
+ * `readSeedsWalletAnswer`); no parser of it lives in Web.
  */
 export interface SeedsWalletRead {
   /** Whole seeds, exact as a decimal string from the service. */
@@ -32,23 +35,4 @@ export function hasSeedsWalletAccess(
     typeof (value as Partial<SeedsWalletAccessPort>).readSeedsWallet ===
       "function"
   );
-}
-
-const DECIMAL = /^(0|[1-9]\d{0,38})$/;
-
-/** Reads a service answer strictly; anything unexpected is `undefined`. */
-export function parseSeedsWalletRead(
-  body: unknown,
-): SeedsWalletRead | undefined {
-  if (typeof body !== "object" || body === null || Array.isArray(body))
-    return undefined;
-  const record = body as Record<string, unknown>;
-  if (
-    record.authority !== "identity" ||
-    record.denomination !== "seeds" ||
-    typeof record.balance !== "string" ||
-    !DECIMAL.test(record.balance)
-  )
-    return undefined;
-  return { balance: BigInt(record.balance) };
 }
