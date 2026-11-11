@@ -9,9 +9,9 @@ import {
   edgeCost,
   projectOnSegment,
   reachFrom,
+  maxSurfaceWeight,
+  snapDistanceM,
   snapToGraph,
-  SNAP_DISTANCE_M,
-  SURFACE_WEIGHT,
   type CanEnter,
   type LonLat,
   type WalkGraph,
@@ -80,9 +80,9 @@ export interface OutingMenu {
 }
 
 /** How far an anchor may lie from what it stands for. */
-export const ANCHOR_REACH_METERS = SNAP_DISTANCE_M;
-
-const MAX_SURFACE_WEIGHT = Math.max(...Object.values(SURFACE_WEIGHT));
+export function anchorReachMeters(): number {
+  return snapDistanceM();
+}
 
 /** Most targets one menu offers: with stay and wander, at most six options. */
 export const MENU_TARGETS = 4;
@@ -122,7 +122,7 @@ export function outingMenu(input: OutingMenuInput): OutingMenu {
   // Nothing whose cheapest way is within the budget in metres costs more than
   // the budget on the dearest surface, so the pass stops there.
   const reach = reachFrom(graph, start, {
-    maxCost: budgetMeters * MAX_SURFACE_WEIGHT,
+    maxCost: budgetMeters * maxSurfaceWeight(),
     ...(open ? { canEnter: open } : {}),
   });
 
@@ -265,7 +265,7 @@ function arrive(
 ): { readonly anchor: LonLat; readonly meters: number } | undefined {
   if (geometry.type === "point") {
     const at = snapToGraph(graph, geometry.point, {
-      maxDistanceM: ANCHOR_REACH_METERS,
+      maxDistanceM: anchorReachMeters(),
       ...(open ? { canEnter: open } : {}),
     });
     if (at === null || !clear(at.point)) return undefined;
@@ -295,14 +295,14 @@ function arrive(
   if (!inside && !shore) return undefined;
   let best: { node: number; cost: number } | undefined;
   for (const rings of geometry.polygons) {
-    const box = paddedBox(rings[0] ?? [], ANCHOR_REACH_METERS);
+    const box = paddedBox(rings[0] ?? [], anchorReachMeters());
     graph.nodes.forEach((node, index) => {
       const cost = reached.cost[index]!;
       if (!Number.isFinite(cost)) return;
       if (best !== undefined && cost >= best.cost) return;
       if (!inBox(node, box)) return;
       const within = insideRings(node, rings);
-      const near = edgeDistance(node, rings) <= ANCHOR_REACH_METERS;
+      const near = edgeDistance(node, rings) <= anchorReachMeters();
       const fits = inside ? within || near : !within && near;
       if (fits && clear(node)) best = { node: index, cost };
     });

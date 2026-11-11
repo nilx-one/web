@@ -49,6 +49,8 @@ import type {
   OrbWorldView,
 } from "@nilx-one/application";
 
+import type { WalkGraphCore } from "@nilx-one/walk-graph";
+
 export const CORE_CONTRACT_VERSION = "0.1.0";
 export const CORE_FIXTURE_CORPUS_VERSION = "0.1.0";
 export const CORE_FIXTURE_CORPUS_DIGEST =
@@ -924,6 +926,8 @@ export interface CoreWasmBindings {
   readFindSale?(ok: boolean, body: string): SaleResult;
   readCraftPayment?(ok: boolean, body: string): CraftPaymentResult;
   readSeedsWalletAnswer?(ok: boolean, body: string): SeedsWalletResult;
+  /** Core's walking graph, when the runtime exports it. */
+  walkGraph?: WalkGraphCore;
   contractVersion(): string;
   findItem?(artifactId: string, tier: number): CoreFindItemResult;
   picksUp?(rarities: string, tier: number): boolean;
@@ -979,6 +983,12 @@ export interface GeneratedCoreWasmModule {
   read_find_sale?(ok: boolean, body: string): string;
   read_craft_payment?(ok: boolean, body: string): string;
   read_seeds_wallet?(ok: boolean, body: string): string;
+  /** Absent from a runtime built before Core's walking graph binding. */
+  WalkGraph?: WalkGraphCore["WalkGraph"];
+  walk_surface_of?: WalkGraphCore["walk_surface_of"];
+  walk_surface_weights?: WalkGraphCore["walk_surface_weights"];
+  walk_grass_weight?: WalkGraphCore["walk_grass_weight"];
+  walk_snap_distance_m?: WalkGraphCore["walk_snap_distance_m"];
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -1245,6 +1255,21 @@ export async function loadGeneratedCoreWasmBindings(
       : {
           readCraftPayment: (ok: boolean, body: string) =>
             decodeCraftPaymentReading(runtime.read_craft_payment!(ok, body)),
+        }),
+    ...(runtime.WalkGraph === undefined ||
+    runtime.walk_surface_of === undefined ||
+    runtime.walk_surface_weights === undefined ||
+    runtime.walk_grass_weight === undefined ||
+    runtime.walk_snap_distance_m === undefined
+      ? {}
+      : {
+          walkGraph: {
+            WalkGraph: runtime.WalkGraph,
+            walk_surface_of: runtime.walk_surface_of,
+            walk_surface_weights: runtime.walk_surface_weights,
+            walk_grass_weight: runtime.walk_grass_weight,
+            walk_snap_distance_m: runtime.walk_snap_distance_m,
+          },
         }),
     ...(runtime.read_seeds_wallet === undefined
       ? {}
@@ -1513,6 +1538,15 @@ class CoreWasmClient implements CoreRuntimePort {
     return bindings.readCraftPayment(ok, body);
   }
 
+  /**
+   * Core's walking graph, once the runtime has loaded; `undefined` from a
+   * runtime without it. A host installs it into `@nilx-one/walk-graph`.
+   */
+  public async walkGraphCore(): Promise<WalkGraphCore | undefined> {
+    const bindings = await this.loadBindings();
+    return bindings.walkGraph;
+  }
+
   public async readSeedsWalletAnswer(
     ok: boolean,
     body: string,
@@ -1579,6 +1613,8 @@ class CoreWasmClient implements CoreRuntimePort {
 
 export function createCoreWasmClient(
   options: CoreWasmClientOptions = {},
-): CoreRuntimePort {
+): CoreRuntimePort & {
+  walkGraphCore(): Promise<WalkGraphCore | undefined>;
+} {
   return new CoreWasmClient(options);
 }

@@ -110,8 +110,6 @@ jobs:
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
-      - name: Test contracts and integration
-        run: pnpm test
       - id: core-runtime-cache
         name: Restore pinned Core Wasm runtime
         uses: actions/cache@v4
@@ -155,6 +153,9 @@ jobs:
               and .wasm_sha256 == $digest
             ' "$runtime/provenance.json" >/dev/null
           done
+      # After the runtime: Web's tests walk with Core's own walking graph.
+      - name: Test contracts and integration
+        run: pnpm test
       - name: Build every Web host
         run: pnpm build
       - name: Verify Core runtime in every host artifact

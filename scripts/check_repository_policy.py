@@ -17,8 +17,15 @@ EXCLUDED_FILENAMES = {"Cargo.lock", "Gemfile.lock", "package-lock.json", "pnpm-l
 COPYRIGHT = re.compile(r"© 20\d{2}(?:–20\d{2})? aiaiaiai · aiaiaiai\.org")
 
 
+def generated_core_runtime(parts: tuple[str, ...]) -> bool:
+    # apps/<host>/public/core: the verified Core Wasm runtime that
+    # scripts/prepare_core_wasm_runtime.sh generates; Core authors it.
+    return len(parts) > 4 and parts[0] == "apps" and parts[2:4] == ("public", "core")
+
+
 def authored_file(path: Path) -> bool:
-    if path.name in EXCLUDED_FILENAMES or any(part in EXCLUDED_DIRS for part in path.relative_to(ROOT).parts):
+    parts = path.relative_to(ROOT).parts
+    if path.name in EXCLUDED_FILENAMES or any(part in EXCLUDED_DIRS for part in parts) or generated_core_runtime(parts):
         return False
     return path.name in AUTHORED_FILENAMES or path.suffix.lower() in AUTHORED_EXTENSIONS
 
