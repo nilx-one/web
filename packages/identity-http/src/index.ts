@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import {
-  parseAttestAnswer,
-  parseCraftAnswer,
-  parseSaleAnswer,
   type AttestResult,
+  type CoreRuntimePort,
   type CraftPaymentResult,
   type FindAttestationPort,
   type ReportedPickup,
@@ -82,9 +80,20 @@ import {
 
 export * from "./bond-location-control";
 
+/** The part of the Core runtime that reads the service's answers. */
+export type IdentityAnswerReader = Pick<
+  CoreRuntimePort,
+  "readFindAttestation" | "readFindSale" | "readCraftPayment"
+>;
+
 interface IdentityHttpAdapterOptions {
   fetch?: typeof globalThis.fetch;
   getAuthorization(): string | undefined;
+  /**
+   * Core reads what the finds answers mean. Without it, or when the runtime
+   * cannot, those routes answer `unavailable`: the device tries again later.
+   */
+  core?: IdentityAnswerReader;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1474,9 +1483,9 @@ class IdentityHttpAdapter
       longitude: pickup.longitude,
       latitude: pickup.latitude,
     });
-    return answer === undefined
-      ? { kind: "unavailable" }
-      : parseAttestAnswer(answer.ok, answer.body);
+    return this.readAnswer(answer, (core, ok, body) =>
+      core.readFindAttestation?.(ok, body),
+    );
   }
 
   /** Sells an attested thing by its id alone, for Core's price. */
@@ -1484,9 +1493,9 @@ class IdentityHttpAdapter
     const answer = await this.findsPost("/api/v1/identity/finds/sell", {
       attestation_id: attestationId,
     });
-    return answer === undefined
-      ? { kind: "unavailable" }
-      : parseSaleAnswer(answer.ok, answer.body);
+    return this.readAnswer(answer, (core, ok, body) =>
+      core.readFindSale?.(ok, body),
+    );
   }
 
   /** Pays a craft from the wallet and uses its attested inputs up. */
@@ -1500,15 +1509,36 @@ class IdentityHttpAdapter
       recipe,
       inputs,
     });
-    return answer === undefined
-      ? { kind: "unavailable" }
-      : parseCraftAnswer(answer.ok, answer.body);
+    return this.readAnswer(answer, (core, ok, body) =>
+      core.readCraftPayment?.(ok, body),
+    );
+  }
+
+  /** Core reads the answer; an answer Core cannot read is `unavailable`. */
+  private async readAnswer<T>(
+    answer: { ok: boolean; body: string } | undefined,
+    read: (
+      core: IdentityAnswerReader,
+      ok: boolean,
+      body: string,
+    ) => Promise<T> | undefined,
+  ): Promise<T | { kind: "unavailable" }> {
+    const core = this.options.core;
+    if (answer === undefined || core === undefined)
+      return { kind: "unavailable" };
+    try {
+      return (
+        (await read(core, answer.ok, answer.body)) ?? { kind: "unavailable" }
+      );
+    } catch {
+      return { kind: "unavailable" };
+    }
   }
 
   private async findsPost(
     path: string,
     body: unknown,
-  ): Promise<{ ok: boolean; body: unknown } | undefined> {
+  ): Promise<{ ok: boolean; body: string } | undefined> {
     const authorization = this.authorization();
     try {
       const response = await this.fetch(path, {
@@ -1522,10 +1552,7 @@ class IdentityHttpAdapter
         },
         body: JSON.stringify(body),
       });
-      return {
-        ok: response.ok,
-        body: await response.json().catch(() => undefined),
-      };
+      return { ok: response.ok, body: await response.text().catch(() => "") };
     } catch {
       return undefined;
     }

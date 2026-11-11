@@ -15,6 +15,11 @@ import type {
   AvaiaLifeCommand,
   AvaiaProximityPolicy,
 } from "./avaia-drive";
+import type {
+  AttestResult,
+  CraftPaymentResult,
+  SaleResult,
+} from "./find-attestation";
 
 /** Archive subjects only; the publisher, not Web or Core Wasm, authenticates them. */
 export interface CoreLandmarkMapRequest {
@@ -181,6 +186,16 @@ export interface CoreRuntimePort {
   marketReturnTrip?(trip: unknown): Promise<boolean>;
   /** Core `market_return_policy`: how long and how often to ask again. */
   marketReturnPolicy?(): Promise<CoreMarketReturnPolicy>;
+  /**
+   * Core `read_find_attestation`: what an answer to `POST
+   * /api/v1/identity/finds/attest` means. `ok` is whether the HTTP status was a
+   * success and `body` the response text.
+   */
+  readFindAttestation?(ok: boolean, body: string): Promise<AttestResult>;
+  /** Core `read_find_sale`: what an answer to `POST .../finds/sell` means. */
+  readFindSale?(ok: boolean, body: string): Promise<SaleResult>;
+  /** Core `read_craft_payment`: what an answer to `POST .../crafts` means. */
+  readCraftPayment?(ok: boolean, body: string): Promise<CraftPaymentResult>;
   probe(): Promise<CoreRuntimeStatus>;
   derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(

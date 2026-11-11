@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { createIdentityHttpAdapter } from "./index";
+import { createIdentityHttpAdapter, type IdentityAnswerReader } from "./index";
 
 function response(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -1386,18 +1386,17 @@ describe("Telegram self-disconnect transport", () => {
     });
   });
 
-  it("attests, sells and pays crafts by ids alone, with CSRF", async () => {
+  it("attests, sells and pays crafts by ids alone, with CSRF, and lets Core read the answers", async () => {
     const id = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    const attested = JSON.stringify({
+      outcome: "attested",
+      attestation_id: id,
+      item_id: "bottle",
+      seeds_credited: "0",
+    });
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(
-        response(200, {
-          outcome: "attested",
-          attestation_id: id,
-          item_id: "bottle",
-          seeds_credited: "0",
-        }),
-      )
+      .mockResolvedValueOnce(new Response(attested, { status: 200 }))
       .mockResolvedValueOnce(
         response(200, { outcome: "sold", seeds_credited: "5" }),
       )
@@ -1405,7 +1404,31 @@ describe("Telegram self-disconnect transport", () => {
         response(409, { error: { code: "wrong_inputs", message: "" } }),
       )
       .mockRejectedValueOnce(new TypeError("offline"));
+    // Core reads the answers; the transport hands each one over as it came.
+    const core = {
+      readFindAttestation: vi.fn<
+        NonNullable<IdentityAnswerReader["readFindAttestation"]>
+      >(async () => ({
+        kind: "attested" as const,
+        attestationId: id,
+        itemId: "bottle",
+        seedsCredited: 0n,
+      })),
+      readFindSale: vi.fn<NonNullable<IdentityAnswerReader["readFindSale"]>>(
+        async () => ({
+          kind: "sold" as const,
+          seedsCredited: 5n,
+        }),
+      ),
+      readCraftPayment: vi.fn<
+        NonNullable<IdentityAnswerReader["readCraftPayment"]>
+      >(async () => ({
+        kind: "refused" as const,
+        reason: "wrong_inputs" as const,
+      })),
+    };
     const adapter = createIdentityHttpAdapter({
+      core,
       fetch,
       getAuthorization: () => undefined,
     });
@@ -1422,6 +1445,7 @@ describe("Telegram self-disconnect transport", () => {
       itemId: "bottle",
       seedsCredited: 0n,
     });
+    expect(core.readFindAttestation).toHaveBeenCalledWith(true, attested);
     expect(fetch).toHaveBeenNthCalledWith(1, "/api/v1/identity/finds/attest", {
       method: "POST",
       cache: "no-store",
@@ -1448,7 +1472,49 @@ describe("Telegram self-disconnect transport", () => {
       kind: "refused",
       reason: "wrong_inputs",
     });
+    const [ok, body] = core.readCraftPayment.mock.calls[0]!;
+    expect(ok).toBe(false);
+    expect(JSON.parse(body)).toEqual({
+      error: { code: "wrong_inputs", message: "" },
+    });
+    // Offline: nothing to read, and Core is not asked.
     await expect(adapter.sellFind(id)).resolves.toEqual({
+      kind: "unavailable",
+    });
+    expect(core.readFindSale).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers unavailable when Core cannot read the finds answers", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        response(200, { outcome: "sold", seeds_credited: "5" }),
+      );
+    const withoutCore = createIdentityHttpAdapter({
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    await expect(withoutCore.sellFind("x")).resolves.toEqual({
+      kind: "unavailable",
+    });
+    const failing = createIdentityHttpAdapter({
+      core: {
+        readFindSale: vi.fn(async () => {
+          throw new Error("0x1 Core Wasm find sale reading is missing");
+        }),
+      },
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    await expect(failing.sellFind("x")).resolves.toEqual({
+      kind: "unavailable",
+    });
+    const older = createIdentityHttpAdapter({
+      core: {},
+      fetch,
+      getAuthorization: () => undefined,
+    });
+    await expect(older.payCraft("craft-1", "r", [])).resolves.toEqual({
       kind: "unavailable",
     });
   });
