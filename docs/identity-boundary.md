@@ -24,7 +24,7 @@ below that Core should receive removal only.
 The product-side contract and first implementation are in
 [Core PR #95](https://github.com/nilx-one/core/pull/95), including
 `docs/ais-public-info.md`. `PublicInfoService` composes the existing OIDC
-verifier with a separate product database. Only a verified `(issuer, sub)`
+verifier with its own product tables. Only a verified `(issuer, sub)`
 for client `nilx-one` creates or resolves a profile. A public name never
 attaches a pre-existing Bond, and another product's pairwise subject cannot
 select a 0x1 row. A rename preserves the product id and its state.
@@ -54,7 +54,7 @@ authorized activation. No current host is switched by the Core PR.
 The thin HTTP and session adapter is `services/identity/src/product_sign_in.rs`
 (identity contract 19): the `/api/v1/auth/aiaiaiai/*` routes now go through
 Core's `PublicInfoService` and open a product session, `__Host-0x1_product`,
-in a separate product database. They no longer mint a native session by
+in 0x1's one database. They no longer mint a native session by
 matching a public address. It is off until the sign-in settings are carried
 into the runtime environment; routes that authenticate by the native session
 do not accept the product session until their state moves.

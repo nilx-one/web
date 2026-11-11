@@ -106,8 +106,8 @@ in `nilx-one/core` (`docs/ais-public-info.md`) forms the request, holds the
 signed `__Host-0x1_aiaiaiai` transaction cookie, checks `state` and the
 return path, exchanges the code, verifies the token, and attaches the 0x1
 profile by the pairwise subject AIS issued to client `nilx-one`. The profile
-and its sessions live in a separate product database, not in the identity
-database. `src/product_sign_in.rs` only forwards the query and `Cookie`
+and its sessions are tables in 0x1's one database (`DATABASE_URL`), never
+in AIS's. `src/product_sign_in.rs` only forwards the query and `Cookie`
 header, applies the redirect and `Set-Cookie` values, and adds CSRF and rate
 limits:
 
@@ -138,16 +138,29 @@ The earlier first-sight link through `aiaiaiai_accounts` is no longer
 reachable from any route.
 
 Settings, both or neither: `AIAIAIAI_SIGN_IN_ISSUER` and
-`AIAIAIAI_SIGN_IN_CLIENT_SECRET`. With them `PRODUCT_DATABASE_URL` is
-required and must not be the identity `DATABASE_URL`; `compose.yaml` sets it
-to `sqlite:///data/product.db`. `AIAIAIAI_SIGN_IN_BACKCHANNEL` is only for
+`AIAIAIAI_SIGN_IN_CLIENT_SECRET`. 0x1 has one database, so the product
+tables open in the same `DATABASE_URL`; no other setting names a database.
+`AIAIAIAI_SIGN_IN_BACKCHANNEL` is only for
 reaching `/token` and the keys somewhere other than the issuer origin. The
 client id is always `nilx-one`: Core's product service accepts no other. The
 callback is `PUBLIC_ORIGIN` + `/api/v1/auth/aiaiaiai/callback`.
 
-Both are off until configured. Carrying the sign-in settings into the runtime
-environment file, registering the client secret's digest in AIS, and the
-site's "Sign in" button are separate steps.
+Both are off until configured. To turn sign-in on for production:
+
+1. Generate a client secret of at least 32 random bytes.
+2. In this repository's `production` Environment, set the secret
+   `AIAIAIAI_SIGN_IN_CLIENT_SECRET` and the variable
+   `AIAIAIAI_SIGN_IN_ISSUER` (`https://auth.aiaiaiai.org`). Both or neither;
+   the envelope job in `package-identity-service.yml` refuses half. They
+   travel in the sealed envelope, after infra's `nilxone-identity` contract
+   lists them under `delivery.envelope`, and `prepare-runtime-env.sh` checks
+   the pair again on the host.
+3. Give AIS the secret's SHA-256 as `secret_sha256` of client `nilx-one` (with
+   `https://nilx.one/api/v1/auth/aiaiaiai/callback` as its redirect URI and
+   `pub_dress` allowed). AIS never holds the secret itself.
+
+Registering the client in AIS, deploying AIS and the site's "Sign in" button
+are separate steps.
 
 ## Bond roles and location modes
 

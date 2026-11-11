@@ -60,7 +60,7 @@ impl ProductSignIn {
         }
     }
 
-    /// Only this digest reaches the product database, never the token.
+    /// Only this digest reaches the database, never the token.
     fn token_hash(&self, token: &str) -> String {
         self.digester
             .digest(SESSION_DOMAIN, token)
