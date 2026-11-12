@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import { installWalkGraphCore } from "@nilx-one/walk-graph";
 import {
   CORE_RUNTIME_BASE_URL,
@@ -38,6 +39,13 @@ import "@nilx-one/ui/styles.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+
+const collectorEndpoint = import.meta.env.VITE_ERRORS_COLLECTOR_ENDPOINT;
+const reporter = createBrowserReporter({
+  project: "nilx-one/web",
+  source: "discord-activity",
+  ...(collectorEndpoint === undefined ? {} : { collectorEndpoint }),
+});
 
 const container = document.querySelector<HTMLElement>("#root");
 
@@ -148,6 +156,13 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
+  reporter.report({
+    errorId: "discord.bootstrap.failed",
+    severity: "error",
+    message: "Discord Activity bootstrap failed",
+    context: { phase: "bootstrap" },
+    tags: ["discord", "bootstrap"],
+  });
   console.error("Discord Activity bootstrap failed", error);
   reportBootstrapFailure(container, error);
 });

@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import { installWalkGraphCore } from "@nilx-one/walk-graph";
 import {
   createCoreWasmClient,
@@ -40,6 +41,13 @@ import {
   readTelegramLocationControl,
 } from "./location-control";
 import { createTelegramMarketCatalog, telegramAuthorization } from "./market";
+
+const collectorEndpoint = import.meta.env.VITE_ERRORS_COLLECTOR_ENDPOINT;
+const reporter = createBrowserReporter({
+  project: "nilx-one/web",
+  source: "telegram-mini-app",
+  ...(collectorEndpoint === undefined ? {} : { collectorEndpoint }),
+});
 
 const LOCATION_PERSIST_INTERVAL_MS = 15_000;
 
@@ -224,4 +232,13 @@ async function bootstrap(): Promise<void> {
   );
 }
 
-void bootstrap();
+void bootstrap().catch(() => {
+  // Do not export Telegram initData, auth headers, or raw error messages.
+  reporter.report({
+    errorId: "telegram.bootstrap.failed",
+    severity: "error",
+    message: "Telegram Mini App bootstrap failed",
+    context: { phase: "bootstrap" },
+    tags: ["telegram", "bootstrap"],
+  });
+});
