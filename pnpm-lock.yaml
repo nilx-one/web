@@ -95,6 +95,9 @@ importers:
 
   apps/discord-activity:
     dependencies:
+      '@aiaiaiai/4x-errors-browser':
+        specifier: 0.2.0
+        version: 0.2.0
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
@@ -203,6 +206,9 @@ importers:
 
   apps/telegram-mini-app:
     dependencies:
+      '@aiaiaiai/4x-errors-browser':
+        specifier: 0.2.0
+        version: 0.2.0
       '@nilx-one/core-wasm':
         specifier: workspace:*
         version: link:../../packages/core-wasm
