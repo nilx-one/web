@@ -21,6 +21,10 @@ import type {
   SaleResult,
 } from "./find-attestation";
 import type { SeedsWalletResult } from "./seeds-wallet";
+import type {
+  ActivationReading,
+  ActivationSyncPart,
+} from "./client-activation";
 
 /** Archive subjects only; the publisher, not Web or Core Wasm, authenticates them. */
 export interface CoreLandmarkMapRequest {
@@ -199,6 +203,18 @@ export interface CoreRuntimePort {
   readCraftPayment?(ok: boolean, body: string): Promise<CraftPaymentResult>;
   /** Core `read_seeds_wallet`: what an answer to `GET .../seeds` means. */
   readSeedsWalletAnswer?(ok: boolean, body: string): Promise<SeedsWalletResult>;
+  /**
+   * Core `read_activation_state`: what an answer to an activation route
+   * (`/api/v1/session/activation…`, all but the download) means.
+   */
+  readActivationState?(ok: boolean, body: string): Promise<ActivationReading>;
+  /** Core `activation_sync_part`: which bytes to send or fetch next. */
+  activationSyncPart?(
+    totalBytes: number,
+    offset: number,
+  ): Promise<ActivationSyncPart>;
+  /** Core `activation_sync_digest`: the digest that completes a handoff. */
+  activationSyncDigest?(data: Uint8Array): Promise<string>;
   probe(): Promise<CoreRuntimeStatus>;
   derivePubDressLabel?(pubDress: string): Promise<CorePubDressLabelResult>;
   composePubDressLabel?(

@@ -237,6 +237,16 @@ function normalizeKey(key: string): string {
   return withoutTrailingSeparator(key);
 }
 
+/**
+ * Writers whose keys are not literals, each of which writes only a key that
+ * `placedStateForKey` resolves to a placed record at run time. Their own
+ * tests hold them to that.
+ */
+const PLACEMENT_CHECKED_WRITERS: ReadonlySet<string> = new Set([
+  // Client activation applies only synchronizable transport records.
+  "packages/application/src/activation-payload.ts",
+]);
+
 function filesOf(files: readonly string[]): {
   readonly written: ReadonlySet<string>;
   readonly unresolved: readonly string[];
@@ -246,6 +256,7 @@ function filesOf(files: readonly string[]): {
   for (const file of files) {
     const writes = storageWrites(readFileSync(file, "utf8"));
     for (const key of writes.written) written.add(key);
+    if (PLACEMENT_CHECKED_WRITERS.has(relative(ROOT, file))) continue;
     for (const expression of writes.unresolved) {
       unresolved.push(`${relative(ROOT, file)}: ${expression}`);
     }

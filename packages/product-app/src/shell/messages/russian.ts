@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { TranslationKey } from "../localization";
+import { ACTIVATION_RU } from "./activation";
 import { FINDS_RU } from "./finds";
 import { GUIDE_RU } from "./guide";
 
@@ -623,4 +624,5 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "discord.unknownFailure": "Неизвестный сбой",
   ...GUIDE_RU,
   ...FINDS_RU,
+  ...ACTIVATION_RU,
 };
