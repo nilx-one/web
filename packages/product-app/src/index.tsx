@@ -105,6 +105,7 @@ import {
   createAvaiaSetupViewState,
 } from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
+import { ProductActivation } from "./features/activation/product-activation";
 import type { EmbeddedMarketCatalogPort } from "./features/courier/market-dock";
 import type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
@@ -1187,247 +1188,253 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     });
     const ownedAvaiaPubDress = viewModel.identity.avaiaPubDress;
     return (
-      <SubscriptionStatusProvider
-        previewCycle={
-          viewModel.identity.pubDress === "0x0sky" &&
-          !dependencies.subscriptions &&
-          !dependencies.marketCatalog?.subscriptions
-        }
-        owner={viewModel.identity.pubDress}
-        avaia={ownedAvaiaPubDress}
+      <ProductActivation
+        identity={dependencies.identity}
         core={dependencies.core}
-        source={
-          dependencies.subscriptions ??
-          dependencies.marketCatalog?.subscriptions
-        }
+        owner={viewModel.identity.pubDress}
       >
-        <AuthenticatedMapHomeView
-          {...(business === undefined
-            ? {}
-            : {
-                contextualDock: (observation) => (
-                  <BusinessDock
-                    directory={business.directory}
-                    navigation={business.navigation}
-                    geolocation={dependencies.host.geolocation}
-                    {...(observation === undefined ? {} : { observation })}
-                  />
-                ),
-              })}
-          {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
-          {...(organizationsAccess === undefined
-            ? {}
-            : {
-                organizations: {
-                  loading: organizationsQuery.isPending,
-                  items:
-                    organizationsQuery.data?.kind === "available"
-                      ? organizationsQuery.data.organizations
-                      : [],
-                  error:
-                    organizationsQuery.data !== undefined &&
-                    organizationsQuery.data.kind !== "available"
-                      ? organizationsQuery.data.kind
-                      : undefined,
-                  busy: createOrganization.isPending,
-                  feedback:
-                    createOrganization.data?.kind === "created"
-                      ? "Organization created"
-                      : createOrganization.data?.kind === "already-created"
-                        ? "Organization already exists"
-                        : createOrganization.data?.kind === "rejected"
-                          ? createOrganization.data.reason
-                          : createOrganization.data?.kind ===
-                              "service-unavailable"
-                            ? "Service unavailable"
-                            : undefined,
-                  onCreate: (
-                    pubDress: string,
-                    role: "owner" | "maintainer",
-                  ) => {
-                    createOrganization.mutate({ pubDress, role });
+        <SubscriptionStatusProvider
+          previewCycle={
+            viewModel.identity.pubDress === "0x0sky" &&
+            !dependencies.subscriptions &&
+            !dependencies.marketCatalog?.subscriptions
+          }
+          owner={viewModel.identity.pubDress}
+          avaia={ownedAvaiaPubDress}
+          core={dependencies.core}
+          source={
+            dependencies.subscriptions ??
+            dependencies.marketCatalog?.subscriptions
+          }
+        >
+          <AuthenticatedMapHomeView
+            {...(business === undefined
+              ? {}
+              : {
+                  contextualDock: (observation) => (
+                    <BusinessDock
+                      directory={business.directory}
+                      navigation={business.navigation}
+                      geolocation={dependencies.host.geolocation}
+                      {...(observation === undefined ? {} : { observation })}
+                    />
+                  ),
+                })}
+            {...(adminRoleInbox === undefined ? {} : { adminRoleInbox })}
+            {...(organizationsAccess === undefined
+              ? {}
+              : {
+                  organizations: {
+                    loading: organizationsQuery.isPending,
+                    items:
+                      organizationsQuery.data?.kind === "available"
+                        ? organizationsQuery.data.organizations
+                        : [],
+                    error:
+                      organizationsQuery.data !== undefined &&
+                      organizationsQuery.data.kind !== "available"
+                        ? organizationsQuery.data.kind
+                        : undefined,
+                    busy: createOrganization.isPending,
+                    feedback:
+                      createOrganization.data?.kind === "created"
+                        ? "Organization created"
+                        : createOrganization.data?.kind === "already-created"
+                          ? "Organization already exists"
+                          : createOrganization.data?.kind === "rejected"
+                            ? createOrganization.data.reason
+                            : createOrganization.data?.kind ===
+                                "service-unavailable"
+                              ? "Service unavailable"
+                              : undefined,
+                    onCreate: (
+                      pubDress: string,
+                      role: "owner" | "maintainer",
+                    ) => {
+                      createOrganization.mutate({ pubDress, role });
+                    },
                   },
-                },
-              })}
-          hostLabel={viewModel.hostLabel}
-          key={viewModel.identity.pubDress}
-          pubDress={viewModel.identity.pubDress}
-          {...(viewModel.identity.pubDressUrl === undefined
-            ? {}
-            : { pubDressUrl: viewModel.identity.pubDressUrl })}
-          renderer={dependencies.mapRenderer}
-          geolocation={dependencies.host.geolocation}
-          {...(dependencies.onManualBondMove === undefined
-            ? {}
-            : { onManualBondMove: dependencies.onManualBondMove })}
-          feedback={dependencies.host}
-          sound={dependencies.host.sound}
-          runtime={viewModel.runtime}
-          safeArea={viewModel.safeArea}
-          section={section}
-          {...(dependencies.localModel === undefined
-            ? {}
-            : { localModel: dependencies.localModel })}
-          {...(hasPubInfoAccess(dependencies.identity)
-            ? { pubInfo: dependencies.identity }
-            : {})}
-          {...(hasCommittedAwardAccess(dependencies.identity)
-            ? { committedAwards: dependencies.identity }
-            : {})}
-          {...(hasXpingEngineAccess(dependencies.identity)
-            ? { xpingEngine: dependencies.identity }
-            : {})}
-          {...(hasSeedsWalletAccess(dependencies.identity)
-            ? { seedsWallet: dependencies.identity }
-            : {})}
-          {...(hasFindAttestation(dependencies.identity)
-            ? { findAttestation: dependencies.identity }
-            : {})}
-          findItems={dependencies.core}
-          {...(dependencies.marketCatalog === undefined
-            ? {}
-            : { marketCatalog: dependencies.marketCatalog })}
-          {...(dependencies.courierDirectory === undefined
-            ? {}
-            : { courierDirectory: dependencies.courierDirectory })}
-          {...(hasNearbySpeechAccess(dependencies.identity)
-            ? { nearbySpeech: dependencies.identity }
-            : {})}
-          {...(hasBusinessStationAccess(dependencies.identity)
-            ? { businessStations: dependencies.identity }
-            : {})}
-          {...(providerConnections === undefined
-            ? {}
-            : { connectedProviders: providerConnections })}
-          {...(providerConnections === undefined
-            ? {}
-            : browserHost
-              ? {
-                  onDisconnectProvider: (provider: BondProviderType) => {
-                    if (!browserProviderDisconnect.isPending) {
-                      browserProviderDisconnect.mutate(provider);
-                    }
-                  },
-                }
-              : host.kind === "telegram"
+                })}
+            hostLabel={viewModel.hostLabel}
+            key={viewModel.identity.pubDress}
+            pubDress={viewModel.identity.pubDress}
+            {...(viewModel.identity.pubDressUrl === undefined
+              ? {}
+              : { pubDressUrl: viewModel.identity.pubDressUrl })}
+            renderer={dependencies.mapRenderer}
+            geolocation={dependencies.host.geolocation}
+            {...(dependencies.onManualBondMove === undefined
+              ? {}
+              : { onManualBondMove: dependencies.onManualBondMove })}
+            feedback={dependencies.host}
+            sound={dependencies.host.sound}
+            runtime={viewModel.runtime}
+            safeArea={viewModel.safeArea}
+            section={section}
+            {...(dependencies.localModel === undefined
+              ? {}
+              : { localModel: dependencies.localModel })}
+            {...(hasPubInfoAccess(dependencies.identity)
+              ? { pubInfo: dependencies.identity }
+              : {})}
+            {...(hasCommittedAwardAccess(dependencies.identity)
+              ? { committedAwards: dependencies.identity }
+              : {})}
+            {...(hasXpingEngineAccess(dependencies.identity)
+              ? { xpingEngine: dependencies.identity }
+              : {})}
+            {...(hasSeedsWalletAccess(dependencies.identity)
+              ? { seedsWallet: dependencies.identity }
+              : {})}
+            {...(hasFindAttestation(dependencies.identity)
+              ? { findAttestation: dependencies.identity }
+              : {})}
+            findItems={dependencies.core}
+            {...(dependencies.marketCatalog === undefined
+              ? {}
+              : { marketCatalog: dependencies.marketCatalog })}
+            {...(dependencies.courierDirectory === undefined
+              ? {}
+              : { courierDirectory: dependencies.courierDirectory })}
+            {...(hasNearbySpeechAccess(dependencies.identity)
+              ? { nearbySpeech: dependencies.identity }
+              : {})}
+            {...(hasBusinessStationAccess(dependencies.identity)
+              ? { businessStations: dependencies.identity }
+              : {})}
+            {...(providerConnections === undefined
+              ? {}
+              : { connectedProviders: providerConnections })}
+            {...(providerConnections === undefined
+              ? {}
+              : browserHost
                 ? {
-                    // This host's own proof authenticated it as "telegram", so
-                    // there is exactly one row to disconnect and no `provider`
-                    // to forward — the service resolves it from that same proof.
-                    onDisconnectProvider: () => {
-                      if (!selfProviderDisconnect.isPending) {
-                        selfProviderDisconnect.mutate();
+                    onDisconnectProvider: (provider: BondProviderType) => {
+                      if (!browserProviderDisconnect.isPending) {
+                        browserProviderDisconnect.mutate(provider);
                       }
                     },
                   }
-                : {})}
-          // A host that is itself Telegram or Discord can follow that provider's
-          // URL scheme. Browser GitHub bindings intentionally have no deep link.
-          providerDeepLinks={providerDeepLinks}
-          onNavigate={(route: ShellRoute) => {
-            void navigate({ to: route });
-          }}
-          avaiaAvailability={deviceAvaiaAvailability}
-          slugEdit={createProfileSlugViewState(
-            viewModel.identity.pubDress,
-            slugDraft,
-            renameSlug.isPending,
-            renameSlug.data,
-          )}
-          {...(avaiaProfileAccess === undefined
-            ? {}
-            : {
-                avaiaSetup: createAvaiaSetupViewState({
-                  load: avaiaProfileQuery.data ?? { kind: "loading" },
-                  fallbackAddress: viewModel.identity.avaiaPubDress,
-                  draftSlugStem: avaiaProfileSlugStemDraft,
-                  pending: saveAvaiaProfile.isPending,
-                  result: saveAvaiaProfile.data,
-                }),
-                ...(avaiaProfileAccess.travelAvaiaToBond === undefined
-                  ? {}
-                  : {
-                      onBringAvaia: async (position: {
-                        longitude: number;
-                        latitude: number;
-                      }): Promise<AvaiaTravelResult> => {
-                        try {
-                          const result =
-                            await avaiaProfileAccess.travelAvaiaToBond!(
-                              position,
-                            );
-                          if (result.kind === "arrived") {
-                            queryClient.setQueryData(["avaia-profile"], {
-                              kind: "available",
-                              profile: result.profile,
-                            });
-                          }
-                          return result;
-                        } catch {
-                          return { kind: "service-unavailable" };
+                : host.kind === "telegram"
+                  ? {
+                      // This host's own proof authenticated it as "telegram", so
+                      // there is exactly one row to disconnect and no `provider`
+                      // to forward — the service resolves it from that same proof.
+                      onDisconnectProvider: () => {
+                        if (!selfProviderDisconnect.isPending) {
+                          selfProviderDisconnect.mutate();
                         }
                       },
-                    }),
-                onAvaiaSetupChange: (slugStem: string) => {
-                  saveAvaiaProfile.reset();
-                  setAvaiaProfileSlugStemDraft(slugStem);
-                },
-                // The surface waits for the service before it closes, so the
-                // answer it acts on is the one that was actually stored.
-                onAvaiaSetupSubmit: async () => {
-                  const currentAvaiaAddress =
-                    avaiaProfileQuery.data?.kind === "available"
-                      ? avaiaProfileQuery.data.profile.pubDress
-                      : ownedAvaiaPubDress;
-                  if (
-                    currentAvaiaAddress === undefined ||
-                    saveAvaiaProfile.isPending
-                  ) {
-                    return undefined;
-                  }
-                  // With no draft, the person accepted the address the Avaia
-                  // already holds — saving it is what configures the Avaia.
-                  const pubDress =
-                    avaiaProfileSlugStemDraft === undefined
-                      ? currentAvaiaAddress
-                      : composeAvaiaPubDress(
-                          currentAvaiaAddress,
-                          avaiaProfileSlugStemDraft,
-                        );
-                  if (pubDress === undefined) return undefined;
-                  return saveAvaiaProfile
-                    .mutateAsync(pubDress)
-                    .catch(() => undefined);
-                },
-              })}
-          onSlugChange={(next: string) => {
-            renameSlug.reset();
-            setSlugDraft(next);
-          }}
-          onSlugSubmit={() => {
-            if (slugDraft !== undefined && !renameSlug.isPending) {
-              renameSlug.mutate(slugDraft);
+                    }
+                  : {})}
+            // A host that is itself Telegram or Discord can follow that provider's
+            // URL scheme. Browser GitHub bindings intentionally have no deep link.
+            providerDeepLinks={providerDeepLinks}
+            onNavigate={(route: ShellRoute) => {
+              void navigate({ to: route });
+            }}
+            avaiaAvailability={deviceAvaiaAvailability}
+            slugEdit={createProfileSlugViewState(
+              viewModel.identity.pubDress,
+              slugDraft,
+              renameSlug.isPending,
+              renameSlug.data,
+            )}
+            {...(avaiaProfileAccess === undefined
+              ? {}
+              : {
+                  avaiaSetup: createAvaiaSetupViewState({
+                    load: avaiaProfileQuery.data ?? { kind: "loading" },
+                    fallbackAddress: viewModel.identity.avaiaPubDress,
+                    draftSlugStem: avaiaProfileSlugStemDraft,
+                    pending: saveAvaiaProfile.isPending,
+                    result: saveAvaiaProfile.data,
+                  }),
+                  ...(avaiaProfileAccess.travelAvaiaToBond === undefined
+                    ? {}
+                    : {
+                        onBringAvaia: async (position: {
+                          longitude: number;
+                          latitude: number;
+                        }): Promise<AvaiaTravelResult> => {
+                          try {
+                            const result =
+                              await avaiaProfileAccess.travelAvaiaToBond!(
+                                position,
+                              );
+                            if (result.kind === "arrived") {
+                              queryClient.setQueryData(["avaia-profile"], {
+                                kind: "available",
+                                profile: result.profile,
+                              });
+                            }
+                            return result;
+                          } catch {
+                            return { kind: "service-unavailable" };
+                          }
+                        },
+                      }),
+                  onAvaiaSetupChange: (slugStem: string) => {
+                    saveAvaiaProfile.reset();
+                    setAvaiaProfileSlugStemDraft(slugStem);
+                  },
+                  // The surface waits for the service before it closes, so the
+                  // answer it acts on is the one that was actually stored.
+                  onAvaiaSetupSubmit: async () => {
+                    const currentAvaiaAddress =
+                      avaiaProfileQuery.data?.kind === "available"
+                        ? avaiaProfileQuery.data.profile.pubDress
+                        : ownedAvaiaPubDress;
+                    if (
+                      currentAvaiaAddress === undefined ||
+                      saveAvaiaProfile.isPending
+                    ) {
+                      return undefined;
+                    }
+                    // With no draft, the person accepted the address the Avaia
+                    // already holds — saving it is what configures the Avaia.
+                    const pubDress =
+                      avaiaProfileSlugStemDraft === undefined
+                        ? currentAvaiaAddress
+                        : composeAvaiaPubDress(
+                            currentAvaiaAddress,
+                            avaiaProfileSlugStemDraft,
+                          );
+                    if (pubDress === undefined) return undefined;
+                    return saveAvaiaProfile
+                      .mutateAsync(pubDress)
+                      .catch(() => undefined);
+                  },
+                })}
+            onSlugChange={(next: string) => {
+              renameSlug.reset();
+              setSlugDraft(next);
+            }}
+            onSlugSubmit={() => {
+              if (slugDraft !== undefined && !renameSlug.isPending) {
+                renameSlug.mutate(slugDraft);
+              }
+            }}
+            onSlugReset={() => {
+              if (renameSlug.isPending) return;
+              renameSlug.reset();
+              setSlugDraft(undefined);
+            }}
+            avatarChoice={avatarChoice}
+            onAvatarChoice={async (model) =>
+              chooseAvatar.isPending
+                ? undefined
+                : chooseAvatar.mutateAsync(model).catch(() => undefined)
             }
-          }}
-          onSlugReset={() => {
-            if (renameSlug.isPending) return;
-            renameSlug.reset();
-            setSlugDraft(undefined);
-          }}
-          avatarChoice={avatarChoice}
-          onAvatarChoice={async (model) =>
-            chooseAvatar.isPending
-              ? undefined
-              : chooseAvatar.mutateAsync(model).catch(() => undefined)
-          }
-          {...(viewModel.identity.avaiaPubDress === undefined
-            ? {}
-            : { avaiaPubDress: viewModel.identity.avaiaPubDress })}
-          {...(viewModel.identity.native
-            ? { onLogout: () => logout.mutate() }
-            : {})}
-        />
-      </SubscriptionStatusProvider>
+            {...(viewModel.identity.avaiaPubDress === undefined
+              ? {}
+              : { avaiaPubDress: viewModel.identity.avaiaPubDress })}
+            {...(viewModel.identity.native
+              ? { onLogout: () => logout.mutate() }
+              : {})}
+          />
+        </SubscriptionStatusProvider>
+      </ProductActivation>
     );
   }
 

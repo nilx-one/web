@@ -14,6 +14,8 @@ import {
 } from "@nilx-one/application";
 
 import type {
+  ActivationReading,
+  ActivationSyncPart,
   AttestRefusal,
   AttestResult,
   CraftPaymentRefusal,
@@ -50,6 +52,16 @@ import type {
 } from "@nilx-one/application";
 
 import type { WalkGraphCore } from "@nilx-one/walk-graph";
+
+import {
+  decodeActivationReading,
+  decodeActivationSyncPart,
+} from "./activation";
+
+export {
+  decodeActivationReading,
+  decodeActivationSyncPart,
+} from "./activation";
 
 export const CORE_CONTRACT_VERSION = "0.1.0";
 export const CORE_FIXTURE_CORPUS_VERSION = "0.1.0";
@@ -926,6 +938,9 @@ export interface CoreWasmBindings {
   readFindSale?(ok: boolean, body: string): SaleResult;
   readCraftPayment?(ok: boolean, body: string): CraftPaymentResult;
   readSeedsWalletAnswer?(ok: boolean, body: string): SeedsWalletResult;
+  readActivationState?(ok: boolean, body: string): ActivationReading;
+  activationSyncPart?(totalBytes: number, offset: number): ActivationSyncPart;
+  activationSyncDigest?(data: Uint8Array): string;
   /** Core's walking graph, when the runtime exports it. */
   walkGraph?: WalkGraphCore;
   contractVersion(): string;
@@ -983,6 +998,10 @@ export interface GeneratedCoreWasmModule {
   read_find_sale?(ok: boolean, body: string): string;
   read_craft_payment?(ok: boolean, body: string): string;
   read_seeds_wallet?(ok: boolean, body: string): string;
+  /** Absent from a runtime built before Core's client activation. */
+  read_activation_state?(ok: boolean, body: string): string;
+  activation_sync_part?(total_bytes: string, offset: string): string;
+  activation_sync_digest?(data: Uint8Array): string;
   /** Absent from a runtime built before Core's walking graph binding. */
   WalkGraph?: WalkGraphCore["WalkGraph"];
   walk_surface_of?: WalkGraphCore["walk_surface_of"];
@@ -1277,6 +1296,20 @@ export async function loadGeneratedCoreWasmBindings(
           readSeedsWalletAnswer: (ok: boolean, body: string) =>
             decodeSeedsWalletReading(runtime.read_seeds_wallet!(ok, body)),
         }),
+    ...(runtime.read_activation_state === undefined ||
+    runtime.activation_sync_part === undefined ||
+    runtime.activation_sync_digest === undefined
+      ? {}
+      : {
+          readActivationState: (ok: boolean, body: string) =>
+            decodeActivationReading(runtime.read_activation_state!(ok, body)),
+          activationSyncPart: (totalBytes: number, offset: number) =>
+            decodeActivationSyncPart(
+              runtime.activation_sync_part!(String(totalBytes), String(offset)),
+            ),
+          activationSyncDigest: (data: Uint8Array) =>
+            runtime.activation_sync_digest!(data),
+        }),
     ...(runtime.landmark_map_view === undefined
       ? {}
       : {
@@ -1555,6 +1588,33 @@ class CoreWasmClient implements CoreRuntimePort {
     if (bindings.readSeedsWalletAnswer === undefined)
       throw new Error("0x1 Core Wasm seeds wallet reading is missing");
     return bindings.readSeedsWalletAnswer(ok, body);
+  }
+
+  public async readActivationState(
+    ok: boolean,
+    body: string,
+  ): Promise<ActivationReading> {
+    const bindings = await this.loadBindings();
+    if (bindings.readActivationState === undefined)
+      throw new Error("0x1 Core Wasm activation reading is missing");
+    return bindings.readActivationState(ok, body);
+  }
+
+  public async activationSyncPart(
+    totalBytes: number,
+    offset: number,
+  ): Promise<ActivationSyncPart> {
+    const bindings = await this.loadBindings();
+    if (bindings.activationSyncPart === undefined)
+      throw new Error("0x1 Core Wasm activation sync parts are missing");
+    return bindings.activationSyncPart(totalBytes, offset);
+  }
+
+  public async activationSyncDigest(data: Uint8Array): Promise<string> {
+    const bindings = await this.loadBindings();
+    if (bindings.activationSyncDigest === undefined)
+      throw new Error("0x1 Core Wasm activation sync digest is missing");
+    return bindings.activationSyncDigest(data);
   }
 
   public async subscriptionStatus(

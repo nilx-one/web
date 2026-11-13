@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { ACTIVATION_EN, ACTIVATION_UK } from "./messages/activation";
 import { GUIDE_EN, GUIDE_UK } from "./messages/guide";
 import { IDENTITY_EN, IDENTITY_UK } from "./messages/identity";
 import { RU_MESSAGES } from "./messages/russian";
@@ -338,6 +339,7 @@ const EN_MESSAGES = {
   ...WORLD_EN,
   ...GUIDE_EN,
   ...FINDS_EN,
+  ...ACTIVATION_EN,
 } as const;
 
 export type TranslationKey = keyof typeof EN_MESSAGES;
@@ -706,6 +708,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   ...WORLD_UK,
   ...GUIDE_UK,
   ...FINDS_UK,
+  ...ACTIVATION_UK,
 };
 
 const CATALOGS: Readonly<

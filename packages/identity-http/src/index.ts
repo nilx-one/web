@@ -9,6 +9,9 @@ import {
   type ReportedPickup,
   type SaleResult,
   type SeedsWalletAccessPort,
+  type ActivationDownload,
+  type ActivationReading,
+  type ClientActivationAccessPort,
   type SeedsWalletResult,
   parseXpingEngineRead,
   type XpingEngineAccessPort,
@@ -86,6 +89,7 @@ export type IdentityAnswerReader = Pick<
   | "readFindSale"
   | "readCraftPayment"
   | "readSeedsWalletAnswer"
+  | "readActivationState"
 >;
 
 interface IdentityHttpAdapterOptions {
@@ -97,6 +101,16 @@ interface IdentityHttpAdapterOptions {
    * again later.
    */
   core?: IdentityAnswerReader;
+}
+
+const ACTIVATION_STATE_PATH = "/api/v1/session/activation";
+const ACTIVATION_REQUESTS_PATH = `${ACTIVATION_STATE_PATH}/requests`;
+
+function activationRequestPath(
+  requestId: string,
+  action: "cancel" | "approve" | "decline" | "sync" | "complete",
+): string {
+  return `${ACTIVATION_REQUESTS_PATH}/${encodeURIComponent(requestId)}/${action}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -309,7 +323,8 @@ class IdentityHttpAdapter
     XpingEngineAccessPort,
     SeedsWalletAccessPort,
     FindAttestationPort,
-    OrganizationsAccessPort
+    OrganizationsAccessPort,
+    ClientActivationAccessPort
 {
   private readonly fetch: typeof globalThis.fetch;
 
@@ -1561,6 +1576,124 @@ class IdentityHttpAdapter
     }
   }
 
+  public readActivationState(): Promise<ActivationReading> {
+    return this.activation("GET", ACTIVATION_STATE_PATH);
+  }
+
+  public requestActivation(): Promise<ActivationReading> {
+    return this.activation("POST", ACTIVATION_REQUESTS_PATH);
+  }
+
+  public cancelActivation(requestId: string): Promise<ActivationReading> {
+    return this.activation("POST", activationRequestPath(requestId, "cancel"));
+  }
+
+  public approveActivation(requestId: string): Promise<ActivationReading> {
+    return this.activation("POST", activationRequestPath(requestId, "approve"));
+  }
+
+  public declineActivation(requestId: string): Promise<ActivationReading> {
+    return this.activation("POST", activationRequestPath(requestId, "decline"));
+  }
+
+  public uploadActivationSyncPart(
+    requestId: string,
+    offset: number,
+    totalBytes: number,
+    bytes: Uint8Array,
+  ): Promise<ActivationReading> {
+    const query = new URLSearchParams({
+      offset: String(offset),
+      total_bytes: String(totalBytes),
+    });
+    return this.activation(
+      "PUT",
+      `${activationRequestPath(requestId, "sync")}?${query}`,
+      { contentType: "application/octet-stream", body: bytes },
+    );
+  }
+
+  public async downloadActivationSyncPart(
+    requestId: string,
+    offset: number,
+  ): Promise<ActivationDownload> {
+    const query = new URLSearchParams({ offset: String(offset) });
+    const authorization = this.authorization();
+    try {
+      const response = await this.fetch(
+        `${activationRequestPath(requestId, "sync")}?${query}`,
+        {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: authorization === undefined ? {} : { authorization },
+        },
+      );
+      if (!response.ok) return { kind: "unavailable" };
+      return {
+        kind: "bytes",
+        bytes: new Uint8Array(await response.arrayBuffer()),
+      };
+    } catch {
+      return { kind: "unavailable" };
+    }
+  }
+
+  public completeActivation(
+    requestId: string,
+    digest: string,
+  ): Promise<ActivationReading> {
+    return this.activation(
+      "POST",
+      activationRequestPath(requestId, "complete"),
+      { contentType: "application/json", body: JSON.stringify({ digest }) },
+    );
+  }
+
+  private async activation(
+    method: "GET" | "POST" | "PUT",
+    path: string,
+    content?: {
+      readonly contentType: string;
+      readonly body: string | Uint8Array;
+    },
+  ): Promise<ActivationReading> {
+    const authorization = this.authorization();
+    let response: Response;
+    try {
+      response = await this.fetch(path, {
+        method,
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          ...(method === "GET" ? {} : { "x-0x1-csrf": "1" }),
+          ...(content === undefined
+            ? {}
+            : { "content-type": content.contentType }),
+        },
+        ...(content === undefined
+          ? {}
+          : {
+              body:
+                typeof content.body === "string"
+                  ? content.body
+                  : new Blob([content.body as Uint8Array<ArrayBuffer>]),
+            }),
+      });
+    } catch {
+      return { kind: "unavailable" };
+    }
+    const body = await response.text().catch(() => "");
+    const read = this.options.core?.readActivationState;
+    if (read === undefined) return { kind: "unavailable" };
+    try {
+      return await read(response.ok, body);
+    } catch {
+      return { kind: "unavailable" };
+    }
+  }
+
   /** The authoritative Identity seeds wallet; never a local inventory amount. */
   public async readSeedsWallet(): Promise<SeedsWalletResult> {
     const authorization = this.authorization();
@@ -1974,7 +2107,8 @@ export function createIdentityHttpAdapter(
   XpingEngineAccessPort &
   SeedsWalletAccessPort &
   FindAttestationPort &
-  OrganizationsAccessPort {
+  OrganizationsAccessPort &
+  ClientActivationAccessPort {
   return new IdentityHttpAdapter(options);
 }
 

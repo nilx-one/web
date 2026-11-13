@@ -1,0 +1,122 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+/**
+ * Client activation: the transfer card, the approval prompt, the inactive
+ * screens and the notices. Core decides every state these describe.
+ */
+export const ACTIVATION_EN = {
+  "activation.card.title": "Moving the game",
+  "activation.step.confirm": "Checking it’s you",
+  "activation.step.sync": "Syncing the 0x1 world",
+  "activation.step.switch": "Moving the active session…",
+  "activation.stepState.done": "done",
+  "activation.stepState.current": "in progress",
+  "activation.stepState.waiting": "waiting",
+  "activation.from": "Current session",
+  "activation.to": "New device",
+  "activation.progress": "Transfer progress",
+  "activation.announce": "{step}: {percent}%",
+  "activation.frozen": "The game is paused while it moves.",
+  "activation.cancel": "Cancel",
+  "activation.stop": "Stop transfer",
+  "activation.approval.title": "{device} asks to take over",
+  "activation.approval.detail":
+    "Approve to move the game there. You keep playing until the transfer starts.",
+  "activation.approve": "Approve",
+  "activation.decline": "Decline",
+  "activation.elsewhere.title": "Active on {device}",
+  "activation.elsewhere.detail": "A Bond plays on one device at a time.",
+  "activation.elsewhere.action": "Play here",
+  "activation.otherDevice": "another device",
+  "activation.signIn.title": "No device is active",
+  "activation.signIn.detail": "Sign in again to play here.",
+  "activation.signIn.action": "Sign in again",
+  "activation.notice.rejected": "The other device declined.",
+  "activation.notice.objected": "The other device stopped the transfer.",
+  "activation.notice.superseded": "Another device asked instead.",
+  "activation.notice.expired": "The request ran out of time.",
+  "activation.notice.interrupted": "The other device went away.",
+  "activation.askAgain": "Ask again",
+  "activation.dismiss": "Dismiss",
+  "activation.limit": "Too many requests. Try again later.",
+} as const;
+
+export const ACTIVATION_UK: Readonly<
+  Record<keyof typeof ACTIVATION_EN, string>
+> = {
+  "activation.card.title": "Перенесення гри",
+  "activation.step.confirm": "Перевіряємо, що це ти",
+  "activation.step.sync": "Синхронізуємо світ 0x1",
+  "activation.step.switch": "Переносимо активну сесію…",
+  "activation.stepState.done": "готово",
+  "activation.stepState.current": "триває",
+  "activation.stepState.waiting": "очікує",
+  "activation.from": "Поточна сесія",
+  "activation.to": "Новий пристрій",
+  "activation.progress": "Перебіг перенесення",
+  "activation.announce": "{step}: {percent}%",
+  "activation.frozen": "Гру призупинено, поки вона переноситься.",
+  "activation.cancel": "Скасувати",
+  "activation.stop": "Зупинити перенесення",
+  "activation.approval.title": "{device} просить перейняти гру",
+  "activation.approval.detail":
+    "Підтвердіть, щоб перенести гру туди. Ви граєте далі, доки перенесення не почнеться.",
+  "activation.approve": "Підтвердити",
+  "activation.decline": "Відхилити",
+  "activation.elsewhere.title": "Активна на {device}",
+  "activation.elsewhere.detail": "Bond грає на одному пристрої водночас.",
+  "activation.elsewhere.action": "Грати тут",
+  "activation.otherDevice": "іншому пристрої",
+  "activation.signIn.title": "Жоден пристрій не активний",
+  "activation.signIn.detail": "Увійдіть знову, щоб грати тут.",
+  "activation.signIn.action": "Увійти знову",
+  "activation.notice.rejected": "Інший пристрій відхилив запит.",
+  "activation.notice.objected": "Інший пристрій зупинив перенесення.",
+  "activation.notice.superseded": "Натомість запитав інший пристрій.",
+  "activation.notice.expired": "Час на запит вичерпано.",
+  "activation.notice.interrupted": "Інший пристрій зник.",
+  "activation.askAgain": "Запитати знову",
+  "activation.dismiss": "Закрити",
+  "activation.limit": "Забагато запитів. Спробуйте пізніше.",
+};
+
+export const ACTIVATION_RU: Readonly<
+  Record<keyof typeof ACTIVATION_EN, string>
+> = {
+  "activation.card.title": "Перенос игры",
+  "activation.step.confirm": "Проверяем, что это ты",
+  "activation.step.sync": "Синхронизируем мир 0x1",
+  "activation.step.switch": "Переносим активную сессию…",
+  "activation.stepState.done": "готово",
+  "activation.stepState.current": "идёт",
+  "activation.stepState.waiting": "ожидает",
+  "activation.from": "Текущая сессия",
+  "activation.to": "Новое устройство",
+  "activation.progress": "Ход переноса",
+  "activation.announce": "{step}: {percent}%",
+  "activation.frozen": "Игра приостановлена, пока она переносится.",
+  "activation.cancel": "Отменить",
+  "activation.stop": "Остановить перенос",
+  "activation.approval.title": "{device} просит перенять игру",
+  "activation.approval.detail":
+    "Подтвердите, чтобы перенести игру туда. Вы играете дальше, пока перенос не начнётся.",
+  "activation.approve": "Подтвердить",
+  "activation.decline": "Отклонить",
+  "activation.elsewhere.title": "Активна на {device}",
+  "activation.elsewhere.detail":
+    "Bond играет на одном устройстве одновременно.",
+  "activation.elsewhere.action": "Играть здесь",
+  "activation.otherDevice": "другом устройстве",
+  "activation.signIn.title": "Ни одно устройство не активно",
+  "activation.signIn.detail": "Войдите снова, чтобы играть здесь.",
+  "activation.signIn.action": "Войти снова",
+  "activation.notice.rejected": "Другое устройство отклонило запрос.",
+  "activation.notice.objected": "Другое устройство остановило перенос.",
+  "activation.notice.superseded": "Вместо этого запросило другое устройство.",
+  "activation.notice.expired": "Время на запрос истекло.",
+  "activation.notice.interrupted": "Другое устройство пропало.",
+  "activation.askAgain": "Запросить снова",
+  "activation.dismiss": "Закрыть",
+  "activation.limit": "Слишком много запросов. Попробуйте позже.",
+};
