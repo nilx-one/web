@@ -449,71 +449,6 @@
   gap: 0.6rem;
 }
 
-.bond-dock__block {
-  --glass-tint: var(--block-line);
-  min-width: 0;
-  padding: 1rem 1.15rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 1.5rem;
-  /* The body is frost over the world: blurred, a little brightened, tinted
-     towards the seat's colour from the bottom where its caustic pools. */
-  background:
-    linear-gradient(
-      200deg,
-      rgba(255, 255, 255, 0.05),
-      transparent 45%,
-      var(--block-body-tint, transparent)
-    ),
-    var(--map-glass-frost);
-  backdrop-filter: blur(14px) saturate(1.4) brightness(1.05);
-  /* Weight: a tight contact shadow under the slab, a soft ambient one far
-     below it, and the seat's light spilling around the active block. */
-  box-shadow:
-    0 0 2.2rem var(--block-glow, transparent),
-    0 0.15rem 0.3rem rgba(0, 0, 0, 0.22),
-    0 0.8rem 1.4rem -0.4rem rgba(0, 0, 0, 0.3),
-    0 2rem 3.6rem -1rem var(--map-shadow);
-  transition:
-    box-shadow 320ms ease,
-    background-color 320ms ease;
-}
-
-.authenticated-map-home[data-theme="dark"] .bond-dock__block {
-  --glass-grain: 0.07;
-  --glass-rim: rgba(255, 255, 255, 0.5);
-}
-
-.bond-dock__block[data-seat="avaia"] {
-  --block-line: rgba(155, 108, 250, 0.42);
-  --block-body-tint: rgba(155, 108, 250, 0.08);
-  --glass-tint-glow: rgba(155, 108, 250, 0.16);
-}
-
-.bond-dock__block[data-seat="bond"] {
-  --block-line: rgba(0, 191, 212, 0.4);
-  --block-body-tint: rgba(55, 215, 229, 0.07);
-  --glass-tint-glow: rgba(55, 215, 229, 0.14);
-}
-
-/* The block of whoever drives is lit from within in its own colour. */
-.bond-dock__block[data-seat="avaia"]:has(.bond-dock__bond--active) {
-  --block-line: rgba(176, 140, 255, 0.85);
-  --block-body-tint: rgba(155, 108, 250, 0.14);
-  --block-glow: rgba(155, 108, 250, 0.24);
-  --glass-tint-glow: rgba(155, 108, 250, 0.34);
-}
-
-.bond-dock__block[data-seat="bond"]:has(.bond-dock__bond--active) {
-  --block-line: rgba(80, 225, 238, 0.82);
-  --block-body-tint: rgba(55, 215, 229, 0.12);
-  --block-glow: rgba(55, 215, 229, 0.22);
-  --glass-tint-glow: rgba(55, 215, 229, 0.3);
-}
-
-.bond-dock__block > .bond-dock__bond {
-  width: 100%;
-}
-
 .bond-dock__bond {
   min-width: 0;
   display: grid;
@@ -981,20 +916,6 @@
 
 .authenticated-map-home[data-presentation="compact"] .bond-dock__pair {
   gap: 0.3rem;
-}
-
-.authenticated-map-home[data-presentation="compact"] .bond-dock__block {
-  padding: 0.6rem 0.65rem;
-  border-radius: 1.1rem;
-}
-
-.authenticated-map-home[data-presentation="compact"] .follow-arrows {
-  width: 2.4rem;
-}
-
-.authenticated-map-home[data-presentation="compact"] .follow-arrows__chevron {
-  width: 0.6rem;
-  height: 1rem;
 }
 
 .authenticated-map-home[data-presentation="compact"] .bond-dock__bond {

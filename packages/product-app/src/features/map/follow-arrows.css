@@ -6,8 +6,8 @@
   align-self: center;
   justify-self: center;
   place-items: center;
-  width: 4.2rem;
-  height: 2.5rem;
+  width: 4.4rem;
+  height: 2.8rem;
 }
 
 /* The turn itself: half a circle on a spring when the wheel changes hands.
@@ -24,27 +24,19 @@
   transform: rotate(180deg);
 }
 
+/* Amber, lit like the rims around them: the wheel is the warmest thing on
+   the Dock. */
 .follow-arrows__chevron {
-  width: 0.95rem;
-  height: 1.5rem;
+  width: 1.05rem;
+  height: 1.7rem;
   fill: none;
-  stroke: var(--follow-ink, #9b6cfa);
-  stroke-width: 2.6;
+  stroke: #ffb44d;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  filter: drop-shadow(
-    0 0 0.35rem var(--follow-glow, rgba(155, 108, 250, 0.55))
-  );
+  filter: drop-shadow(0 0 0.25rem rgba(255, 200, 120, 0.95))
+    drop-shadow(0 0 0.6rem rgba(255, 150, 50, 0.75));
   animation: follow-arrows-flow 1.4s ease-in-out infinite;
-}
-
-.follow-arrows[data-leader="bond"] {
-  --follow-ink: #37d7e5;
-  --follow-glow: rgba(55, 215, 229, 0.55);
-}
-
-.follow-arrows__chevron {
-  transition: stroke 400ms ease;
 }
 
 @keyframes follow-arrows-flow {

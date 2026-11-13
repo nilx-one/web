@@ -84,7 +84,7 @@ import {
   useCameraWeight,
   usePresence,
 } from "../../shell/weighted-block";
-import { FollowArrows } from "./follow-arrows";
+import { FollowArrows, LightTrails } from "./follow-arrows";
 import { LanguageSettings } from "../../shell/language-settings";
 import {
   useSoundCue,
@@ -163,6 +163,7 @@ import { withPublicBondMapState } from "../identity/public-bond-handoff";
 import { UnsavedPrompt } from "../identity/unsaved-prompt";
 import "./authenticated-map-home-view.css";
 import "./authenticated-map-settings.css";
+import "./dock-blocks.css";
 import "../identity/avatar-editor.css";
 // Hidden for now; see the commented render call in Settings below.
 // import { BondArtificialPositionSettings } from "./bond-artificial-position-settings";
@@ -3974,6 +3975,7 @@ export function AuthenticatedMapHomeView({
             ) : section === "world" && activeDetail === undefined ? (
               <div className="bond-dock__scroll">
                 <div className="bond-dock__pair">
+                  <LightTrails leader={dock.wheel} />
                   <WeightedBlock
                     className="bond-dock__block"
                     data-seat={dock.places[0].identity.seat}
