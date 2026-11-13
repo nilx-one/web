@@ -10,15 +10,15 @@ license = "MPL-2.0"
 repository = "https://github.com/nilx-one/web"
 
 [dependencies]
-nilxone-identity = { git = "https://github.com/nilx-one/core", rev = "09cab9d90f2d5f32d1c3b7e1cf0a12f3401e861d" }
+nilxone-identity = { git = "https://github.com/nilx-one/core", rev = "cac20b49d743c0d5ded881ab57ba8f76296c85c7" }
 axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
 ed25519-dalek = "2"
 getrandom = "0.3"
 hmac = "0.12"
 jsonwebtoken = "9"
-nilxone-api = { git = "https://github.com/nilx-one/core", rev = "09cab9d90f2d5f32d1c3b7e1cf0a12f3401e861d" }
-nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "09cab9d90f2d5f32d1c3b7e1cf0a12f3401e861d" }
+nilxone-api = { git = "https://github.com/nilx-one/core", rev = "cac20b49d743c0d5ded881ab57ba8f76296c85c7" }
+nilxone-contracts = { git = "https://github.com/nilx-one/core", rev = "cac20b49d743c0d5ded881ab57ba8f76296c85c7" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

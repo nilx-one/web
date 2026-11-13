@@ -122,7 +122,32 @@ limits:
 - `POST /api/v1/product/session/sign-out` ends the session (CSRF).
 - `POST /api/v1/product/experience` publishes the owner-asserted
   `{ "bond_xp", "avaia_xp" }` carry (CSRF, session). It awards nothing.
+  From a session that is not the active client it answers
+  `403 session_inactive`.
 - `GET /api/v1/product/profiles/{profile_id}` is the public projection.
+
+One product session per owner is the active client (Core
+`docs/client-activation.md`). The callback labels the session from the
+`User-Agent` with Core's `session_client_label` and passes the cookie the
+browser already held to Core, which replaces it in the same step; signing
+in again on the active client keeps it active. `src/product_activation.rs`
+serves the handoff, each route one `PublicInfoRepository` call with the
+session cookie's digest; Core decides every state, step, percentage,
+deadline and part:
+
+- `GET /api/v1/session/activation` answers the caller's state.
+- `POST /api/v1/session/activation/requests` asks to become active (`201`).
+- `POST …/requests/{id}/cancel`, `…/approve` and `…/decline`.
+- `PUT …/requests/{id}/sync?offset=&total_bytes=` takes one raw part of
+  up to 256 KiB, the only product route above 1 KiB.
+- `GET …/requests/{id}/sync?offset=` answers one part as
+  `application/octet-stream`.
+- `POST …/requests/{id}/complete` takes `{ "digest" }`.
+
+Writes need CSRF; a missing or unknown session answers
+`401 provider_authentication_required`, and Core's refusals carry their own
+code and status. The legacy `/api/v1/session/activation-requests…` routes
+for native sessions are unchanged.
 
 Every answer is `no-store`, and the only profile shape that leaves the
 service is Core's allowlist: `profile_id`, `pub_dress` and `experience`.

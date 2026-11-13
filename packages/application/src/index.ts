@@ -317,6 +317,36 @@ export {
 } from "./find-attestation";
 
 export {
+  downloadActivationPayload,
+  hasClientActivationAccess,
+  uploadActivationPayload,
+  type ActivationDownload,
+  type ActivationDownloadRun,
+  type ActivationPayloadPort,
+  type ActivationProgress,
+  type ActivationReading,
+  type ActivationRefusal,
+  type ActivationRequestStatus,
+  type ActivationRequestView,
+  type ActivationRole,
+  type ActivationStep,
+  type ActivationStepState,
+  type ActivationStepView,
+  type ActivationSyncCore,
+  type ActivationSyncPart,
+  type ActivationUpload,
+  type ClientActivationAccessPort,
+  type ClientActivationState,
+  type ClientActivationView,
+} from "./client-activation";
+export {
+  ACTIVATION_PAYLOAD_FORMAT,
+  ACTIVATION_PAYLOAD_VERSION,
+  createActivationPayload,
+  type ActivationPayloadStorage,
+} from "./activation-payload";
+
+export {
   hasSeedsWalletAccess,
   type SeedsWalletAccessPort,
   type SeedsWalletRead,
