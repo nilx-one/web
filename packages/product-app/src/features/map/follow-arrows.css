@@ -1,0 +1,64 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.follow-arrows {
+  display: grid;
+  align-self: center;
+  justify-self: center;
+  place-items: center;
+  width: 4.4rem;
+  height: 2.8rem;
+}
+
+/* The turn itself: half a circle on a spring when the wheel changes hands.
+   The chevrons are drawn pointing right, from the Avaia to the Bond. */
+.follow-arrows__track {
+  display: flex;
+  gap: 0.05rem;
+  align-items: center;
+  transition: transform 640ms cubic-bezier(0.34, 1.45, 0.5, 1);
+  transform: rotate(0deg);
+}
+
+.follow-arrows[data-leader="bond"] .follow-arrows__track {
+  transform: rotate(180deg);
+}
+
+/* Amber, lit like the rims around them: the wheel is the warmest thing on
+   the Dock. */
+.follow-arrows__chevron {
+  width: 1.05rem;
+  height: 1.7rem;
+  fill: none;
+  stroke: #ffb44d;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 0.25rem rgba(255, 200, 120, 0.95))
+    drop-shadow(0 0 0.6rem rgba(255, 150, 50, 0.75));
+  animation: follow-arrows-flow 1.4s ease-in-out infinite;
+}
+
+@keyframes follow-arrows-flow {
+  0%,
+  100% {
+    opacity: 0.4;
+    translate: -0.12rem 0;
+  }
+
+  45% {
+    opacity: 1;
+    translate: 0.12rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .follow-arrows__track {
+    transition-duration: 1ms;
+  }
+
+  .follow-arrows__chevron {
+    opacity: 0.85;
+    animation: none;
+  }
+}

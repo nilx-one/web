@@ -1,32 +1,10 @@
 /* © 2026 aiaiaiai · aiaiaiai.org */
 /* SPDX-License-Identifier: MPL-2.0 */
 
-.bond-dock__header,
-.bond-dock__detail-header {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.bond-dock__header {
-  margin-bottom: 1.1rem;
-}
-
-.bond-dock__header .bond-dock__kicker {
-  margin-bottom: 0;
-}
-
-.bond-dock__header-actions {
-  display: flex;
-  flex: none;
-  gap: 0.5rem;
-}
-
 /* Status and inventory in one glyph, in the driver's colour: the Bond cyan,
-   the Avaia violet. */
-.bond-dock__edit.bond-dock__status {
+   the Avaia violet. The pen beside it is the same round control. */
+.bond-dock__edit.bond-dock__status,
+.bond-dock__edit.bond-dock__edit--glyph {
   display: grid;
   place-items: center;
   width: 2.5rem;
@@ -108,6 +86,10 @@
 }
 
 .bond-dock__detail-header {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  gap: 1rem;
   align-items: flex-start;
   /* Stays inside the Dock's padding, above the scrolling body, so the back
      control keeps the card's top inset instead of sitting on the card's edge.
@@ -1055,10 +1037,6 @@ button.provider-control {
 .authenticated-map-home[data-theme="light"] .bond-profile__rows,
 .authenticated-map-home[data-theme="light"] .bond-profile__rows > div {
   border-color: rgba(28, 33, 50, 0.1);
-}
-
-.authenticated-map-home[data-presentation="compact"] .bond-dock__header {
-  margin-bottom: 0.8rem;
 }
 
 /* The way back is the control a phone reaches for most, so it keeps a full

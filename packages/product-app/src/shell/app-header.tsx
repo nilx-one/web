@@ -26,6 +26,7 @@ import {
   type ShellSection,
 } from "./routes";
 import type { ShellPresentation } from "./shell-presentation";
+import { WeightedBlock, usePresence } from "./weighted-block";
 
 export interface HeaderAction {
   readonly id: string;
@@ -47,6 +48,12 @@ export interface AppHeaderProps {
    * reaches Settings at this width, and on the menu item behind the overflow.
    */
   readonly settingsAttention?: boolean;
+  /**
+   * Session controls the surface lends the Header block, such as the
+   * backpack and the seat being edited. The header lays them out and owns
+   * none of their state.
+   */
+  readonly session?: ReactNode;
   onNavigate(route: ShellRoute): void;
 }
 
@@ -128,6 +135,7 @@ export function AppHeader({
   pubDress,
   actions = [],
   settingsAttention = false,
+  session,
   onNavigate,
 }: AppHeaderProps) {
   const { t } = useLocalization();
@@ -139,6 +147,7 @@ export function AppHeader({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const settingsInOverflow = presentation === "compact";
+  const menu = usePresence(menuOpen);
 
   const closeMenu = useCallback((restoreFocus: boolean) => {
     setMenuOpen(false);
@@ -183,7 +192,10 @@ export function AppHeader({
 
   return (
     <header className="app-header" data-presentation={presentation}>
-      <div className="app-header__zone app-header__zone--lead">
+      <WeightedBlock
+        className="app-header__zone app-header__zone--lead"
+        mass={1.3}
+      >
         <ShellLink
           className="app-header__brand"
           route={WORLD_ROUTE}
@@ -226,13 +238,19 @@ export function AppHeader({
             {pubDress}
           </ShellLink>
         )}
-      </div>
-
-      <div className="app-header__zone app-header__zone--trail">
         <span className="app-header__host">
           <i aria-hidden="true" />
           {translateFirst(t, hostLabel, HOST_LABEL_KEYS)}
         </span>
+        {session === undefined ? null : (
+          <div className="app-header__session">{session}</div>
+        )}
+      </WeightedBlock>
+
+      <WeightedBlock
+        className="app-header__zone app-header__zone--trail"
+        mass={0.8}
+      >
         {presentation === "regular" ? (
           <ShellLink
             className="app-header__settings"
@@ -268,13 +286,17 @@ export function AppHeader({
               />
             ) : null}
           </button>
-          {menuOpen ? (
+          {menu.rendered ? (
             <div
               className="app-header__menu"
               id={menuId}
               ref={menuRef}
               role="menu"
               aria-label={t("header.more")}
+              data-presence={menu.phase}
+              {...(menu.phase === "exiting"
+                ? { "aria-hidden": true as const, inert: true }
+                : {})}
             >
               {/* The host is already announced by the indicator beside the
                   trigger, so the menu repeats it visually only. */}
@@ -311,7 +333,7 @@ export function AppHeader({
             </div>
           ) : null}
         </div>
-      </div>
+      </WeightedBlock>
     </header>
   );
 }

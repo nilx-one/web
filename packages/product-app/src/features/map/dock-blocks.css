@@ -1,0 +1,315 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* The world screen's floating blocks: smoky, lit glass slabs with a warm rim,
+   a seat card each for the Avaia and the Bond, and ribbons of light flowing
+   around the pair. weighted-block.css draws the slab's layers (thickness,
+   grain, sheen, rim); this sheet gives them their material and their light.
+   Loaded after the world's own sheets, so equal selectors resolve here. */
+
+.authenticated-map-home {
+  /* The key light is warm, as late sun is: it catches every rim. */
+  --dock-light: rgba(255, 206, 140, 0.95);
+  --dock-light-soft: rgba(255, 176, 90, 0.5);
+  --dock-halo: rgba(255, 160, 70, 0.2);
+  --dock-smoke: rgba(255, 255, 255, 0.34);
+  --dock-smoke-edge: rgba(255, 255, 255, 0.16);
+  --dock-card-ink: #1d1a17;
+  --dock-card-ink-muted: rgba(29, 26, 23, 0.68);
+}
+
+.authenticated-map-home[data-theme="dark"] {
+  --dock-smoke: rgba(40, 42, 52, 0.46);
+  --dock-smoke-edge: rgba(255, 255, 255, 0.07);
+  --dock-card-ink: #fbf7f1;
+  --dock-card-ink-muted: rgba(251, 247, 241, 0.72);
+}
+
+/* The pair: two cards and the wheel between them, the ribbons behind. */
+.authenticated-map-home .bond-dock__pair {
+  position: relative;
+  isolation: isolate;
+  /* Near-square cards, as wide as a phone allows and no wider than reads as
+     a card on a desktop. */
+  grid-template-columns: minmax(0, 12.5rem) auto minmax(0, 12.5rem);
+  justify-content: start;
+  width: min(32rem, 100%);
+  gap: 0.9rem;
+  padding: 1.1rem 0.4rem 0.9rem;
+}
+
+.authenticated-map-home .bond-dock__block {
+  --glass-tint: var(--dock-light-soft);
+  --glass-tint-glow: var(--seat-caustic, rgba(255, 176, 90, 0.16));
+  --glass-rim: var(--dock-light);
+  --glass-grain: 0.1;
+  --glass-sheen: rgba(255, 255, 255, 0.2);
+
+  display: flex;
+  min-width: 0;
+  min-height: 11rem;
+  padding: 1.15rem 0.9rem 1rem;
+  border: 1px solid var(--dock-smoke-edge);
+  border-radius: 1.75rem;
+  background:
+    radial-gradient(
+      140% 90% at 30% -10%,
+      rgba(255, 255, 255, 0.22),
+      transparent 55%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.02) 45%,
+      var(--seat-body, transparent)
+    ),
+    var(--dock-smoke);
+  backdrop-filter: blur(20px) saturate(1.5) brightness(1.12);
+  /* A warm halo where the light wraps the rim, the seat's own glow when it
+     drives, and the weight: a contact shadow and a soft one far below. */
+  box-shadow:
+    0 0 0 1px rgba(255, 200, 130, 0.16),
+    0 0 1.6rem var(--dock-halo),
+    0 0 2.6rem var(--seat-glow-strong, transparent),
+    0 0.18rem 0.35rem rgba(0, 0, 0, 0.22),
+    0 1rem 1.6rem -0.5rem rgba(0, 0, 0, 0.3),
+    0 2.4rem 4rem -1.2rem rgba(0, 0, 0, 0.38);
+  transition:
+    box-shadow 360ms ease,
+    border-color 360ms ease;
+}
+
+.authenticated-map-home .bond-dock__block[data-seat="avaia"] {
+  --seat-caustic: rgba(155, 108, 250, 0.2);
+  --seat-body: rgba(155, 108, 250, 0.06);
+}
+
+.authenticated-map-home .bond-dock__block[data-seat="bond"] {
+  --seat-caustic: rgba(55, 215, 229, 0.18);
+  --seat-body: rgba(55, 215, 229, 0.05);
+}
+
+/* Whoever drives is lit from within in its own colour. */
+.authenticated-map-home
+  .bond-dock__block[data-seat="avaia"]:has(.bond-dock__bond--active) {
+  --seat-caustic: rgba(155, 108, 250, 0.42);
+  --seat-body: rgba(155, 108, 250, 0.12);
+  --seat-glow-strong: rgba(155, 108, 250, 0.3);
+  border-color: rgba(200, 170, 255, 0.34);
+}
+
+.authenticated-map-home
+  .bond-dock__block[data-seat="bond"]:has(.bond-dock__bond--active) {
+  --seat-caustic: rgba(55, 215, 229, 0.38);
+  --seat-body: rgba(55, 215, 229, 0.1);
+  --seat-glow-strong: rgba(55, 215, 229, 0.28);
+  border-color: rgba(150, 240, 248, 0.34);
+}
+
+/* A seat is a card: the tile on top, the name and the role under it. */
+.authenticated-map-home
+  .bond-dock__pair
+  > .bond-dock__block
+  > .bond-dock__bond {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-width: 0;
+  color: var(--dock-card-ink);
+  text-align: center;
+}
+
+.authenticated-map-home .bond-dock__block .bond-dock__glyph {
+  display: grid;
+  place-items: center;
+  width: 4.2rem;
+  height: 4.2rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 1.25rem;
+  color: var(--seat-ink-dark, #78e8ef);
+  background:
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.32),
+      rgba(255, 255, 255, 0.06) 55%
+    ),
+    rgba(12, 16, 22, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -0.6rem 1rem -0.6rem rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--seat-line, transparent),
+    0 0 1.4rem var(--seat-glow, transparent),
+    0 0.5rem 1rem -0.3rem rgba(0, 0, 0, 0.4);
+  font-size: 1.12rem;
+  text-shadow: 0 0 0.8rem var(--seat-line-strong, transparent);
+}
+
+.authenticated-map-home .bond-dock__block .bond-dock__bond strong {
+  max-width: 100%;
+  color: var(--dock-card-ink);
+  font-size: clamp(0.98rem, 2.4vw, 1.15rem);
+  text-shadow: 0 1px 0.6rem rgba(0, 0, 0, 0.28);
+}
+
+.authenticated-map-home
+  .bond-dock__block
+  .bond-dock__bond
+  strong
+  .subscription-identity {
+  align-items: center;
+}
+
+.authenticated-map-home .bond-dock__block .bond-dock__bond small {
+  justify-content: center;
+  color: var(--dock-card-ink-muted);
+  font-size: 0.72rem;
+}
+
+/* The header's blocks catch the same light. */
+.authenticated-map-home .app-header .app-header__zone {
+  --glass-rim: var(--dock-light);
+  --glass-tint: var(--dock-light-soft);
+  --glass-tint-glow: rgba(255, 176, 90, 0.12);
+  --glass-sheen: rgba(255, 255, 255, 0.18);
+  border-color: var(--dock-smoke-edge);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 60%),
+    var(--dock-smoke);
+  backdrop-filter: blur(20px) saturate(1.5) brightness(1.12);
+  box-shadow:
+    0 0 0 1px rgba(255, 200, 130, 0.14),
+    0 0 1.4rem var(--dock-halo),
+    0 0.15rem 0.3rem rgba(0, 0, 0, 0.2),
+    0 1.6rem 3rem -1rem rgba(0, 0, 0, 0.34);
+}
+
+/* A phone's Header block keeps the session; the host label gives way. */
+.authenticated-map-home[data-presentation="compact"]
+  .app-header__zone--lead:has(.app-header__session)
+  .app-header__host {
+  display: none;
+}
+
+/* Ribbons of light around the pair. Each is a faint trail with a bright
+   spark running along it in the wheel's direction. */
+.light-trails {
+  position: absolute;
+  z-index: -1;
+  inset: -0.4rem -1.2rem -0.9rem;
+  width: calc(100% + 2.4rem);
+  height: calc(100% + 1.3rem);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.light-trails path {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.light-trails__ribbon--gold {
+  stroke: url(#light-trails-gold);
+  stroke-width: 3;
+  opacity: 0.7;
+  filter: drop-shadow(0 0 6px rgba(255, 170, 70, 0.9));
+}
+
+.light-trails__ribbon--cyan {
+  stroke: url(#light-trails-cyan);
+  stroke-width: 1.6;
+  opacity: 0.55;
+  filter: drop-shadow(0 0 5px rgba(95, 230, 255, 0.9));
+}
+
+.light-trails__spark {
+  stroke-dasharray: 14 86;
+  stroke-dashoffset: 100;
+  opacity: 0;
+}
+
+.light-trails__spark--gold {
+  stroke: #fff1d2;
+  stroke-width: 3.6;
+  filter: drop-shadow(0 0 8px rgba(255, 190, 90, 1));
+}
+
+.light-trails__spark--cyan {
+  stroke: #e9fdff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(120, 240, 255, 1));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .light-trails__spark {
+    opacity: 1;
+    animation: light-trails-run 3.2s linear infinite;
+  }
+
+  .light-trails__spark--cyan {
+    animation-duration: 4.4s;
+    animation-delay: -1.6s;
+  }
+
+  .light-trails[data-leader="bond"] .light-trails__spark {
+    animation-direction: reverse;
+  }
+}
+
+@keyframes light-trails-run {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.authenticated-map-home[data-presentation="compact"] .bond-dock__pair {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  width: 100%;
+  gap: 0.45rem;
+  padding-inline: 0;
+}
+
+.authenticated-map-home[data-presentation="compact"] .bond-dock__block {
+  min-height: 9.4rem;
+  padding: 0.95rem 0.6rem 0.85rem;
+  border-radius: 1.45rem;
+}
+
+.authenticated-map-home[data-presentation="compact"]
+  .bond-dock__block
+  .bond-dock__glyph {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1.05rem;
+  font-size: 0.95rem;
+}
+
+.authenticated-map-home[data-presentation="compact"]
+  .bond-dock__block
+  .bond-dock__bond
+  strong {
+  font-size: clamp(0.86rem, 4.2vw, 1rem);
+}
+
+.authenticated-map-home[data-presentation="compact"]
+  .bond-dock__block
+  .bond-dock__bond
+  small {
+  font-size: 0.62rem;
+}
+
+.authenticated-map-home[data-presentation="compact"] .follow-arrows {
+  width: 2.8rem;
+}
+
+.authenticated-map-home[data-presentation="compact"] .follow-arrows__chevron {
+  width: 0.7rem;
+  height: 1.15rem;
+}
