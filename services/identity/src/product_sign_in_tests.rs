@@ -43,6 +43,8 @@ async fn an_unconfigured_site_says_so_on_every_route() {
         "/api/v1/auth/aiaiaiai/callback?code=x&state=y",
         "/api/v1/product/session",
         "/api/v1/product/profiles/00000000000000000000000000000000",
+        "/api/v1/session/activation",
+        "/api/v1/session/activation/requests/00000000000000000000000000000000/sync?offset=0",
     ] {
         let (status, body) = send(Request::get(uri).body(Body::empty()).unwrap()).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{uri}");
@@ -51,6 +53,7 @@ async fn an_unconfigured_site_says_so_on_every_route() {
     for uri in [
         "/api/v1/product/session/sign-out",
         "/api/v1/product/experience",
+        "/api/v1/session/activation/requests",
     ] {
         let request = Request::post(uri)
             .header(header::CONTENT_TYPE, "application/json")
