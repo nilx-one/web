@@ -165,6 +165,7 @@ export function WeightedBlock({
         ? { "aria-hidden": true as const, inert: true }
         : {})}
     >
+      <span className="weighted-block__glass" aria-hidden="true" />
       {children}
     </Element>
   );

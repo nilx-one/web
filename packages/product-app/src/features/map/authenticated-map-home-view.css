@@ -21,6 +21,8 @@
   --map-ink-muted: rgba(39, 52, 56, 0.62);
   --map-line: rgba(57, 85, 92, 0.16);
   --map-glass: rgba(250, 253, 253, 0.74);
+  /* The floating blocks are thinner frost: the blurred world shows through. */
+  --map-glass-frost: rgba(250, 253, 253, 0.42);
   --map-glass-strong: rgba(250, 253, 253, 0.9);
   --map-shadow: rgba(65, 88, 94, 0.14);
   --map-night-border: var(--map-line);
@@ -57,6 +59,7 @@
   --map-ink-muted: rgba(232, 240, 242, 0.62);
   --map-line: rgba(191, 221, 226, 0.16);
   --map-glass: rgba(7, 14, 17, 0.7);
+  --map-glass-frost: rgba(7, 14, 17, 0.4);
   --map-glass-strong: rgba(9, 18, 21, 0.88);
   --map-shadow: rgba(0, 0, 0, 0.3);
   --map-positive: #5bd5a9;
@@ -214,7 +217,7 @@
   --header-ink: var(--map-ink);
   --header-ink-muted: var(--map-ink-muted);
   --header-line: var(--map-line);
-  --header-surface: var(--map-glass);
+  --header-surface: var(--map-glass-frost);
   --header-accent: var(--map-accent-spatial-strong);
 }
 
@@ -447,52 +450,64 @@
 }
 
 .bond-dock__block {
+  --glass-tint: var(--block-line);
   min-width: 0;
   padding: 1rem 1.15rem;
-  border: 1px solid var(--block-line, var(--map-line));
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 1.5rem;
+  /* The body is frost over the world: blurred, a little brightened, tinted
+     towards the seat's colour from the bottom where its caustic pools. */
   background:
     linear-gradient(
-      160deg,
-      rgba(255, 255, 255, 0.14),
-      rgba(255, 255, 255, 0.02) 42%
+      200deg,
+      rgba(255, 255, 255, 0.05),
+      transparent 45%,
+      var(--block-body-tint, transparent)
     ),
-    var(--map-glass);
-  backdrop-filter: blur(26px) saturate(1.2);
+    var(--map-glass-frost);
+  backdrop-filter: blur(14px) saturate(1.4) brightness(1.05);
+  /* Weight: a tight contact shadow under the slab, a soft ambient one far
+     below it, and the seat's light spilling around the active block. */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.44),
-    0 0 1.8rem var(--block-glow, transparent),
-    0 1.1rem 2.6rem var(--map-shadow),
-    0 0.25rem 0.6rem rgba(0, 0, 0, 0.12);
+    0 0 2.2rem var(--block-glow, transparent),
+    0 0.15rem 0.3rem rgba(0, 0, 0, 0.22),
+    0 0.8rem 1.4rem -0.4rem rgba(0, 0, 0, 0.3),
+    0 2rem 3.6rem -1rem var(--map-shadow);
   transition:
-    border-color 320ms ease,
-    box-shadow 320ms ease;
+    box-shadow 320ms ease,
+    background-color 320ms ease;
 }
 
 .authenticated-map-home[data-theme="dark"] .bond-dock__block {
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 1.8rem var(--block-glow, transparent),
-    0 1.1rem 2.6rem var(--map-shadow);
+  --glass-grain: 0.07;
+  --glass-rim: rgba(255, 255, 255, 0.5);
 }
 
 .bond-dock__block[data-seat="avaia"] {
-  --block-line: rgba(155, 108, 250, 0.4);
+  --block-line: rgba(155, 108, 250, 0.42);
+  --block-body-tint: rgba(155, 108, 250, 0.08);
+  --glass-tint-glow: rgba(155, 108, 250, 0.16);
 }
 
 .bond-dock__block[data-seat="bond"] {
-  --block-line: rgba(0, 191, 212, 0.38);
+  --block-line: rgba(0, 191, 212, 0.4);
+  --block-body-tint: rgba(55, 215, 229, 0.07);
+  --glass-tint-glow: rgba(55, 215, 229, 0.14);
 }
 
-/* The block of whoever drives glows in its own colour. */
+/* The block of whoever drives is lit from within in its own colour. */
 .bond-dock__block[data-seat="avaia"]:has(.bond-dock__bond--active) {
-  --block-line: rgba(155, 108, 250, 0.75);
-  --block-glow: rgba(155, 108, 250, 0.22);
+  --block-line: rgba(176, 140, 255, 0.85);
+  --block-body-tint: rgba(155, 108, 250, 0.14);
+  --block-glow: rgba(155, 108, 250, 0.24);
+  --glass-tint-glow: rgba(155, 108, 250, 0.34);
 }
 
 .bond-dock__block[data-seat="bond"]:has(.bond-dock__bond--active) {
-  --block-line: rgba(0, 191, 212, 0.72);
-  --block-glow: rgba(55, 215, 229, 0.2);
+  --block-line: rgba(80, 225, 238, 0.82);
+  --block-body-tint: rgba(55, 215, 229, 0.12);
+  --block-glow: rgba(55, 215, 229, 0.22);
+  --glass-tint-glow: rgba(55, 215, 229, 0.3);
 }
 
 .bond-dock__block > .bond-dock__bond {

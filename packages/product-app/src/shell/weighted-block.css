@@ -27,6 +27,99 @@
   animation-name: weighted-block-land;
 }
 
+/* The glass itself. A block's own rule supplies the body (its tint and the
+   backdrop blur); these layers make it read as a slab with thickness:
+   - the glass layer: a lit upper edge, a darker lower edge, and a caustic of
+     the block's tint pooling at the bottom;
+   - its ::before: a fine grain, so the frost is not a flat colour;
+   - its ::after: a sheen that slides against the sway, the way a reflection
+     stays put while the pane moves;
+   - the block's ::after: a specular rim, bright where the light hits the
+     top-left edge and fading into the tint below.
+   Every layer is pointer-transparent and sits under the content but the rim,
+   which is one pixel wide. */
+.weighted-block {
+  --glass-tint: rgba(255, 255, 255, 0.2);
+  --glass-tint-glow: rgba(255, 255, 255, 0.05);
+  --glass-grain: 0.09;
+  --glass-sheen: rgba(255, 255, 255, 0.13);
+  --glass-rim: rgba(255, 255, 255, 0.62);
+
+  position: relative;
+  isolation: isolate;
+}
+
+.weighted-block__glass {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      120% 70% at 50% 125%,
+      var(--glass-tint-glow),
+      transparent 62%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.025) 34%,
+      transparent 60%,
+      rgba(0, 0, 0, 0.1)
+    );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.28),
+    inset 0 0.9rem 1.4rem -1rem rgba(255, 255, 255, 0.16),
+    inset 0 -0.7rem 1.2rem -0.9rem rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+.weighted-block__glass::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+  opacity: var(--glass-grain);
+}
+
+.weighted-block__glass::after {
+  position: absolute;
+  inset: -30% -70%;
+  content: "";
+  background: linear-gradient(
+    112deg,
+    transparent 40%,
+    var(--glass-sheen) 47%,
+    rgba(255, 255, 255, 0.035) 52%,
+    transparent 58%
+  );
+  transform: translate3d(calc(var(--block-sway-x) * -2.6), 0, 0);
+}
+
+.weighted-block::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  padding: 1px;
+  content: "";
+  border-radius: inherit;
+  background: linear-gradient(
+    148deg,
+    var(--glass-rim),
+    rgba(255, 255, 255, 0.12) 26%,
+    transparent 52%,
+    var(--glass-tint) 100%
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 .weighted-block[data-presence="exiting"] {
   pointer-events: none;
   animation: weighted-block-leave 280ms cubic-bezier(0.4, 0, 1, 1) both;

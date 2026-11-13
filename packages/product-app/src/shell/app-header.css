@@ -25,14 +25,22 @@
   gap: clamp(0.75rem, 2vw, 1.75rem);
   min-width: 0;
   padding: 0.35rem 0.45rem 0.35rem 1rem;
-  border: 1px solid var(--header-line);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 1.4rem;
   background: var(--header-surface);
-  backdrop-filter: blur(22px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.4) brightness(1.05);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 0.9rem 2.4rem rgba(0, 0, 0, 0.26),
-    0 0.2rem 0.5rem rgba(0, 0, 0, 0.16);
+    0 0.12rem 0.25rem rgba(0, 0, 0, 0.2),
+    0 0.7rem 1.2rem -0.4rem rgba(0, 0, 0, 0.28),
+    0 1.6rem 3rem -1rem rgba(0, 0, 0, 0.3);
+}
+
+/* The rim and thickness come from the weighted block's glass layers; the
+   header's glass carries a faint cyan. Scoped under .app-header so it wins
+   over the block's neutral defaults whatever order the sheets load in. */
+.app-header .app-header__zone {
+  --glass-tint: rgba(55, 215, 229, 0.28);
+  --glass-tint-glow: rgba(55, 215, 229, 0.08);
 }
 
 .app-header__zone--lead {
