@@ -28,7 +28,7 @@ use nilxone_identity::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    api::request_source,
+    api::{request_source, request_user_agent},
     browser_web_auth::{
         append_cookie, clear_cookie, no_store_error, no_store_json, now_unix_seconds, read_cookie,
         redirect_with_cookies, secure_cookie,
@@ -87,6 +87,7 @@ pub fn router(sign_in: Option<ProductSignIn>) -> Router {
         .route("/api/v1/product/session/sign-out", post(sign_out))
         .route("/api/v1/product/experience", post(publish_experience))
         .route("/api/v1/product/profiles/{profile_id}", get(read_profile))
+        .merge(activation::routes())
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(ProductState {
             sign_in,
@@ -252,11 +253,20 @@ async fn callback(
     let Ok(token) = TokenFactory::session() else {
         return failed("aiaiaiai_sign_in_unavailable", finished.clear_cookie);
     };
-    let repository = sign_in.service.repository();
-    if repository
+    // A session this browser already held is replaced in the same step, so
+    // signing in again on the active client keeps it active.
+    let previous =
+        read_cookie(&headers, PRODUCT_SESSION_COOKIE).map(|previous| sign_in.token_hash(&previous));
+    let client_label =
+        crate::repository::session_client_label("Browser", request_user_agent(&headers));
+    if sign_in
+        .service
+        .repository()
         .open_session(
             &signed_in.owner,
             &sign_in.token_hash(&token),
+            &client_label,
+            previous.as_deref(),
             now,
             now.saturating_add(sign_in.session_ttl_seconds),
         )
@@ -264,12 +274,6 @@ async fn callback(
         .is_err()
     {
         return failed("aiaiaiai_sign_in_unavailable", finished.clear_cookie);
-    }
-    // A session this browser already held is replaced, not left behind.
-    if let Some(previous) = read_cookie(&headers, PRODUCT_SESSION_COOKIE) {
-        let _ = repository
-            .close_session(&sign_in.token_hash(&previous))
-            .await;
     }
     redirect_with_cookies(
         &signed_in.return_path,
@@ -322,11 +326,14 @@ async fn sign_out(State(state): State<ProductState>, headers: HeaderMap) -> Resp
     if !valid_csrf(&headers) {
         return csrf_required();
     }
+    let Some(now) = now_unix_seconds() else {
+        return unavailable();
+    };
     if let Some(token) = read_cookie(&headers, PRODUCT_SESSION_COOKIE)
         && sign_in
             .service
             .repository()
-            .close_session(&sign_in.token_hash(&token))
+            .close_session(&sign_in.token_hash(&token), now)
             .await
             .is_err()
     {
@@ -385,6 +392,11 @@ async fn publish_experience(
             "The experience totals exceed the publication limit.",
         ),
         Err(PublicInfoError::ProfileGone) => session_required(true),
+        Err(PublicInfoError::SessionInactive) => no_store_error(
+            StatusCode::FORBIDDEN,
+            "session_inactive",
+            "This client is not the active one. Ask to play here first.",
+        ),
         Err(_) => unavailable(),
     }
 }
@@ -431,6 +443,9 @@ async fn read_profile(
         Err(_) => unavailable(),
     }
 }
+
+#[path = "product_activation.rs"]
+mod activation;
 
 #[cfg(test)]
 #[path = "product_sign_in_tests.rs"]
