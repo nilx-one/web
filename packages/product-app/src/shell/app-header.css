@@ -17,20 +17,48 @@
   background: transparent;
 }
 
+/* Each zone is its own floating glass block with weight, not a strip of a
+   bar: the Header block on the left, the Settings block on the right. */
 .app-header__zone {
   display: flex;
   align-items: center;
   gap: clamp(0.75rem, 2vw, 1.75rem);
   min-width: 0;
+  padding: 0.35rem 0.45rem 0.35rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1.4rem;
+  background: var(--header-surface);
+  backdrop-filter: blur(16px) saturate(1.4) brightness(1.05);
+  box-shadow:
+    0 0.12rem 0.25rem rgba(0, 0, 0, 0.2),
+    0 0.7rem 1.2rem -0.4rem rgba(0, 0, 0, 0.28),
+    0 1.6rem 3rem -1rem rgba(0, 0, 0, 0.3);
+}
+
+/* The rim and thickness come from the weighted block's glass layers; the
+   header's glass carries a faint cyan. Scoped under .app-header so it wins
+   over the block's neutral defaults whatever order the sheets load in. */
+.app-header .app-header__zone {
+  --glass-tint: rgba(55, 215, 229, 0.28);
+  --glass-tint-glow: rgba(55, 215, 229, 0.08);
 }
 
 .app-header__zone--lead {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 
 .app-header__zone--trail {
-  flex: 0 1 auto;
-  gap: clamp(0.6rem, 1.4vw, 1rem);
+  flex: 0 0 auto;
+  gap: clamp(0.4rem, 1vw, 0.6rem);
+  padding: 0.35rem;
+  border-radius: 999px;
+}
+
+.app-header__session {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
 }
 
 .app-header__brand {
@@ -213,6 +241,35 @@
   background: rgba(6, 9, 17, 0.86);
   backdrop-filter: blur(24px) saturate(1.2);
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.32);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-header__menu {
+    transform-origin: 100% 0%;
+    animation: app-header-menu-open 260ms cubic-bezier(0.2, 1.25, 0.4, 1) both;
+  }
+
+  .app-header__menu[data-presence="exiting"] {
+    animation: app-header-menu-close 220ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+}
+
+.app-header__menu[data-presence="exiting"] {
+  pointer-events: none;
+}
+
+@keyframes app-header-menu-open {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem) scale(0.92);
+  }
+}
+
+@keyframes app-header-menu-close {
+  to {
+    opacity: 0;
+    transform: translateY(-0.3rem) scale(0.94);
+  }
 }
 
 .app-header__menu-context {

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import type { TranslationKey } from "../localization";
+import { ACTIVATION_RU } from "./activation";
 import { FINDS_RU } from "./finds";
 import { GUIDE_RU } from "./guide";
 
@@ -309,7 +310,9 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.unavailable": "недоступно",
   "dock.inactive": "неактивно",
   "dock.error": "ошибка",
-  "dock.noRelationship": "Взаимная связь не утверждается",
+  "dock.follows": "{leader} ведёт, {follower} следует",
+  "header.session": "Сессия",
+  "header.sessionLevel": "Ур. {level}",
   "dock.focusWorld": "Сфокусировать мир на {name}",
   "dock.takeWheel": "Сесть за руль как {name}",
   "dock.handWheel": "Передать руль {name}",
@@ -623,4 +626,5 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "discord.unknownFailure": "Неизвестный сбой",
   ...GUIDE_RU,
   ...FINDS_RU,
+  ...ACTIVATION_RU,
 };

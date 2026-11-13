@@ -441,7 +441,7 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeNull();
   });
 
-  it("presents the compact Bond pair without inventing reciprocity", () => {
+  it("presents the Avaia and the Bond as blocks, chevrons following the wheel", () => {
     const mapRenderer = renderer();
 
     renderView({ mapRenderer });
@@ -454,14 +454,27 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("driving");
-    expect(
-      screen.getByRole("separator", {
-        name: "No reciprocal relationship asserted",
-      }),
-    ).toBeEmptyDOMElement();
+    const arrows = screen.getByRole("img", {
+      name: "x0skai drives, 0x0sky follows",
+    });
+    expect(arrows).toHaveAttribute("data-leader", "avaia");
+    const blocks = [
+      ...document.querySelectorAll(".bond-dock__pair > .weighted-block"),
+    ];
+    expect(blocks.map((block) => block.getAttribute("data-seat"))).toEqual([
+      "avaia",
+      "bond",
+    ]);
+    expect(blocks[0]?.nextElementSibling).toBe(arrows);
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toHaveTextContent("spectate");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+    expect(
+      screen.getByRole("img", { name: "0x0sky drives, x0skai follows" }),
+    ).toHaveAttribute("data-leader", "bond");
     expect(screen.getByText("x0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
@@ -671,16 +684,18 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
   });
 
-  it("opens the Bond edit surface from the Dock header", () => {
+  it("opens the Bond edit surface from the Header block's pen", () => {
     const onNavigate = vi.fn();
 
-    renderView({ onNavigate });
+    const { container } = renderView({ onNavigate });
     fireEvent.click(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
     const edit = screen.getByRole("button", { name: "Edit 0x0sky" });
 
-    expect(edit).toHaveTextContent("edit");
+    expect(container.querySelector(".app-header")).toContainElement(edit);
+    expect(edit).toHaveTextContent("");
+    expect(edit.querySelector("svg")).not.toBeNull();
     fireEvent.click(edit);
 
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
@@ -733,7 +748,7 @@ describe("AuthenticatedMapHomeView", () => {
 
       renderView(inventoryHost);
       const actions = [
-        ...document.querySelectorAll(".bond-dock__header-actions button"),
+        ...document.querySelectorAll(".app-header__session-actions button"),
       ].map((button) => button.getAttribute("aria-label"));
       expect(actions).toEqual([
         "Status and inventory of x0skai",

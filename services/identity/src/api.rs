@@ -1666,7 +1666,7 @@ fn presented_session_hash(state: &ApiState, headers: &HeaderMap) -> Option<Vec<u
     Some(state.secret_digester.digest("native-session", &token))
 }
 
-fn request_user_agent(headers: &HeaderMap) -> Option<&str> {
+pub(crate) fn request_user_agent(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(USER_AGENT)
         .and_then(|value| value.to_str().ok())

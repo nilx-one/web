@@ -721,3 +721,6 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_a_product_session() {
         .expect("count");
     assert_eq!(links, 0);
 }
+
+#[path = "product_activation_tests.rs"]
+mod product_activation;
