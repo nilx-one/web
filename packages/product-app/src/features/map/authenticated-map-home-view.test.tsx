@@ -466,6 +466,13 @@ describe("AuthenticatedMapHomeView", () => {
       "bond",
     ]);
     expect(blocks[0]?.nextElementSibling).toBe(arrows);
+    // The path in the corner always holds at least the Dock itself.
+    const path = screen.getByRole("navigation", { name: "Dock path" });
+    expect(path.closest(".app-shell__path")).not.toBeNull();
+    expect(path.querySelector('[aria-current="page"]')).toHaveTextContent(
+      "Dock",
+    );
+    expect(path).toHaveTextContent("x0skai drives, 0x0sky follows");
     // The ribbons' state, in words: who follows whom.
     expect(
       document.querySelector(".bond-dock__follow-caption"),
@@ -1725,6 +1732,11 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getByText("хост браузера")).toBeVisible();
     expect(screen.getByText("Спільний Core готовий")).toBeVisible();
     expect(screen.getByText("контракт 0.1.0")).toBeVisible();
+    const path = screen.getByRole("navigation", { name: "Шлях Dock" });
+    expect(path.querySelector('[aria-current="page"]')).toHaveTextContent(
+      "Налаштування",
+    );
+    expect(screen.getByRole("button", { name: "Назад до Dock" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Назад" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Більше" }));

@@ -312,6 +312,8 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.error": "ошибка",
   "dock.follows": "{leader} ведёт, {follower} следует",
   "dock.followsCaption": "{follower} следует за {leader}",
+  "dock.path": "Путь Dock",
+  "dock.pathBack": "Назад к {place}",
   "header.session": "Сессия",
   "header.sessionLevel": "Ур. {level}",
   "dock.focusWorld": "Сфокусировать мир на {name}",

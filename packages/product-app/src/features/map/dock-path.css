@@ -1,0 +1,246 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+/* The path: a glass block in the bottom-left corner. It grows out of that
+   corner, its steps open and close in place, and a lit pill slides from the
+   window that was open to the one that is. */
+.dock-path {
+  --glass-tint: rgba(255, 176, 90, 0.5);
+  --glass-rim: rgba(255, 206, 140, 0.9);
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.75rem;
+  max-width: 100%;
+  padding: 0.35rem 0.85rem 0.35rem 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.35rem;
+  color: var(--dock-card-ink, #fbf7f1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 60%),
+    var(--dock-smoke, rgba(40, 42, 52, 0.46));
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow:
+    0 0 1.4rem var(--dock-halo, rgba(255, 160, 70, 0.2)),
+    0 0.8rem 1.4rem -0.6rem rgba(0, 0, 0, 0.35);
+}
+
+.app-shell__bottom .dock-path.weighted-block {
+  transform-origin: 0% 100%;
+  animation-name: dock-path-emerge;
+  animation-duration: 560ms;
+}
+
+.dock-path__steps {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dock-path__step {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: dock-path-open 420ms cubic-bezier(0.2, 1.2, 0.35, 1) both;
+}
+
+.dock-path__step[data-presence="exiting"] {
+  pointer-events: none;
+  animation: dock-path-close 280ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.dock-path__separator {
+  padding: 0 0.15rem;
+  color: rgba(255, 196, 120, 0.7);
+  font-size: 1.05rem;
+}
+
+.dock-path__place {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 1rem;
+  color: inherit;
+  background: none;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  opacity: 0.72;
+  transition: opacity 240ms ease;
+}
+
+button.dock-path__place {
+  cursor: pointer;
+}
+
+button.dock-path__place:hover,
+button.dock-path__place:focus-visible,
+.dock-path__step[aria-current="page"] .dock-path__place {
+  opacity: 1;
+}
+
+.dock-path__label {
+  overflow: hidden;
+  max-width: 9rem;
+  text-overflow: ellipsis;
+}
+
+.dock-path__icon {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.dock-path__step[aria-current="page"] .dock-path__icon {
+  color: #ffc77a;
+  filter: drop-shadow(0 0 0.35rem rgba(255, 170, 80, 0.8));
+}
+
+/* The lit pill under the open window, the reference's golden selection. It
+   glides between steps rather than jumping. */
+.dock-path__thumb {
+  --glass-tint: rgba(255, 176, 90, 0.9);
+
+  position: absolute;
+  top: 0.35rem;
+  left: 0;
+  width: var(--path-thumb-width, 3rem);
+  height: 2.5rem;
+  border: 1px solid rgba(255, 200, 130, 0.62);
+  border-radius: 1rem;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 196, 120, 0.32),
+    rgba(255, 150, 60, 0.16)
+  );
+  box-shadow:
+    0 0 1rem rgba(255, 160, 70, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transform: translateX(calc(var(--path-thumb-x, 0px) + 0.35rem));
+  transition:
+    transform 460ms cubic-bezier(0.3, 1.35, 0.4, 1),
+    width 460ms cubic-bezier(0.3, 1.35, 0.4, 1);
+  pointer-events: none;
+}
+
+.dock-path__info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--dock-card-ink-muted, rgba(251, 247, 241, 0.72));
+  font-size: 0.74rem;
+  animation: dock-path-info 360ms ease both;
+}
+
+.dock-path__info > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-path__fact {
+  flex: none;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid rgba(255, 200, 130, 0.28);
+  border-radius: 999px;
+  color: var(--dock-card-ink, #fbf7f1);
+  font-weight: 600;
+}
+
+.authenticated-map-home[data-presentation="compact"] .dock-path {
+  padding-right: 0.6rem;
+}
+
+.authenticated-map-home[data-presentation="compact"] .dock-path__label {
+  max-width: 6.5rem;
+}
+
+@keyframes dock-path-emerge {
+  from {
+    opacity: 0;
+    translate: -1.5rem 1.5rem;
+    scale: 0.35;
+  }
+
+  60% {
+    opacity: 1;
+    scale: 1.03;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+
+@keyframes dock-path-open {
+  from {
+    max-width: 0;
+    opacity: 0;
+    translate: -0.5rem 0;
+  }
+
+  to {
+    max-width: 14rem;
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes dock-path-close {
+  from {
+    max-width: 14rem;
+    opacity: 1;
+  }
+
+  to {
+    max-width: 0;
+    opacity: 0;
+    translate: 0.5rem 0;
+  }
+}
+
+@keyframes dock-path-info {
+  from {
+    opacity: 0;
+    translate: 0 0.35rem;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__bottom .dock-path.weighted-block,
+  .dock-path__step,
+  .dock-path__step[data-presence="exiting"],
+  .dock-path__info {
+    animation: none;
+  }
+
+  .dock-path__thumb {
+    transition: none;
+  }
+}

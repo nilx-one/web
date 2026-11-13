@@ -31,6 +31,8 @@ export interface AppShellProps extends Omit<
   readonly header: ReactNode;
   /** The bottom-anchored contextual surface. It grows upward, never downward. */
   readonly dock: ReactNode;
+  /** Where the Dock is: anchored in the bottom-left corner, under the Dock. */
+  readonly path?: ReactNode;
   readonly toasts?: ReactNode;
   /** Low-frequency system status. Compact by contract, never a toast. */
   readonly statusRail?: ReactNode;
@@ -54,6 +56,7 @@ export function AppShell({
   world,
   header,
   dock,
+  path,
   toasts,
   statusRail,
   overlay,
@@ -113,6 +116,9 @@ export function AppShell({
       <div className="app-shell__header">{header}</div>
       <ToastViewport>{toasts}</ToastViewport>
       <div className="app-shell__bottom" ref={bottomRef}>
+        {path === undefined ? null : (
+          <div className="app-shell__path">{path}</div>
+        )}
         <div className="app-shell__dock">{dock}</div>
         {statusRail === undefined ? null : (
           <div className="app-shell__status">{statusRail}</div>
