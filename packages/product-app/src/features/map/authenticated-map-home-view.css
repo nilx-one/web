@@ -253,6 +253,80 @@
   box-shadow: 0 0 0 0.28rem var(--pulse-ring);
 }
 
+/* The Header block's session: who it is about, at what level, and that
+   seat's backpack and pen. The seat's colour carries the "who". */
+.app-header__session-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--map-line);
+}
+
+.app-header__session-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-right: 0.2rem;
+  color: var(--map-ink-muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.app-header__session-level > i {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #00bfd4;
+  box-shadow: 0 0 0.6rem rgba(55, 215, 229, 0.7);
+  transition:
+    background-color 320ms ease,
+    box-shadow 320ms ease;
+}
+
+.app-header__session-level[data-seat="avaia"] > i {
+  background: #9b6cfa;
+  box-shadow: 0 0 0.6rem rgba(155, 108, 250, 0.7);
+}
+
+.app-header__session-actions .bond-dock__edit {
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    opacity 240ms ease,
+    scale 240ms cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+
+.app-header__session-actions .bond-dock__edit--glyph[data-seat="avaia"] {
+  color: #9b6cfa;
+}
+
+.app-header__session-actions .bond-dock__edit--glyph[data-seat="bond"] {
+  color: #00a9bd;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-header__session-actions > * {
+    animation: app-header-session-in 360ms cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  }
+}
+
+.app-header__session-actions [data-presence="exiting"] {
+  opacity: 0;
+  scale: 0.6;
+  pointer-events: none;
+}
+
+@keyframes app-header-session-in {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+
 .authenticated-map-home.authenticated-map-home .app-header__settings,
 .authenticated-map-home.authenticated-map-home .app-header__overflow-trigger {
   border-color: var(--map-line);
@@ -323,6 +397,12 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.44),
     0 1rem 3.2rem var(--map-shadow);
+  transition:
+    background-color 360ms ease,
+    border-color 360ms ease,
+    box-shadow 360ms ease,
+    backdrop-filter 360ms ease,
+    padding 360ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .authenticated-map-home[data-theme="dark"] .bond-dock {
@@ -342,25 +422,81 @@
   overscroll-behavior: contain;
 }
 
-.bond-dock__kicker {
-  display: block;
-  margin-bottom: 0.72rem;
-  color: #00899a;
-  font-size: 0.64rem;
-  font-weight: 760;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+/* On the world the Dock is not one card: it lets go of its glass and the two
+   seats float as their own weighted blocks, the Avaia's on the left and the
+   Bond's on the right, with the wheel's chevrons between them. Every other
+   screen gathers the glass back, and the change is eased both ways. */
+.authenticated-map-home.authenticated-map-home .bond-dock[data-screen="home"] {
+  overflow: visible;
+  padding: 0;
+  border-color: transparent;
+  background-color: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
-.authenticated-map-home[data-theme="dark"] .bond-dock__kicker {
-  color: #74e6ee;
+.bond-dock[data-screen="home"] .bond-dock__scroll {
+  overflow: visible;
 }
 
 .bond-dock__pair {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 2.2rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.6rem;
+}
+
+.bond-dock__block {
+  min-width: 0;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--block-line, var(--map-line));
+  border-radius: 1.5rem;
+  background:
+    linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.14),
+      rgba(255, 255, 255, 0.02) 42%
+    ),
+    var(--map-glass);
+  backdrop-filter: blur(26px) saturate(1.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.44),
+    0 0 1.8rem var(--block-glow, transparent),
+    0 1.1rem 2.6rem var(--map-shadow),
+    0 0.25rem 0.6rem rgba(0, 0, 0, 0.12);
+  transition:
+    border-color 320ms ease,
+    box-shadow 320ms ease;
+}
+
+.authenticated-map-home[data-theme="dark"] .bond-dock__block {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 1.8rem var(--block-glow, transparent),
+    0 1.1rem 2.6rem var(--map-shadow);
+}
+
+.bond-dock__block[data-seat="avaia"] {
+  --block-line: rgba(155, 108, 250, 0.4);
+}
+
+.bond-dock__block[data-seat="bond"] {
+  --block-line: rgba(0, 191, 212, 0.38);
+}
+
+/* The block of whoever drives glows in its own colour. */
+.bond-dock__block[data-seat="avaia"]:has(.bond-dock__bond--active) {
+  --block-line: rgba(155, 108, 250, 0.75);
+  --block-glow: rgba(155, 108, 250, 0.22);
+}
+
+.bond-dock__block[data-seat="bond"]:has(.bond-dock__bond--active) {
+  --block-line: rgba(0, 191, 212, 0.72);
+  --block-glow: rgba(55, 215, 229, 0.2);
+}
+
+.bond-dock__block > .bond-dock__bond {
+  width: 100%;
 }
 
 .bond-dock__bond {
@@ -525,13 +661,6 @@
 .bond-dock__public-url:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 3px;
-}
-
-.bond-dock__link {
-  justify-self: center;
-  width: 1px;
-  height: 2.2rem;
-  background: var(--map-line);
 }
 
 .bond-dock__status-dot {
@@ -835,13 +964,22 @@
   border-radius: var(--dock-radius);
 }
 
-.authenticated-map-home[data-presentation="compact"] .bond-dock__kicker {
-  margin-bottom: 0.55rem;
+.authenticated-map-home[data-presentation="compact"] .bond-dock__pair {
+  gap: 0.3rem;
 }
 
-.authenticated-map-home[data-presentation="compact"] .bond-dock__pair {
-  grid-template-columns: minmax(0, 1fr) 1.35rem minmax(0, 1fr);
-  gap: 0.45rem;
+.authenticated-map-home[data-presentation="compact"] .bond-dock__block {
+  padding: 0.6rem 0.65rem;
+  border-radius: 1.1rem;
+}
+
+.authenticated-map-home[data-presentation="compact"] .follow-arrows {
+  width: 2.4rem;
+}
+
+.authenticated-map-home[data-presentation="compact"] .follow-arrows__chevron {
+  width: 0.6rem;
+  height: 1rem;
 }
 
 .authenticated-map-home[data-presentation="compact"] .bond-dock__bond {
@@ -865,19 +1003,11 @@
   font-size: 0.58rem;
 }
 
-.authenticated-map-home[data-presentation="compact"] .bond-dock__link {
-  height: 1.8rem;
-}
-
 @media (max-height: 520px) {
   .bond-dock {
     --dock-pad-top: 0.72rem;
     --dock-pad-inline: 0.82rem;
     padding: var(--dock-pad-top) var(--dock-pad-inline) 0.78rem;
-  }
-
-  .bond-dock__kicker {
-    display: none;
   }
 
   .bond-dock__glyph {

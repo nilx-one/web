@@ -77,6 +77,14 @@ import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
+import {
+  BlockWeightProvider,
+  WeightedBlock,
+  useBlockWeightClock,
+  useCameraWeight,
+  usePresence,
+} from "../../shell/weighted-block";
+import { FollowArrows } from "./follow-arrows";
 import { LanguageSettings } from "../../shell/language-settings";
 import {
   useSoundCue,
@@ -617,6 +625,27 @@ export function levelFill(standing: LevelStanding, seat: DockSeat): number {
   return levelSpan > 0 ? (standing.xp - currentLevelXp) / levelSpan : 0;
 }
 
+/** A pen: edits whoever the Header's session is about. */
+function EditGlyph() {
+  return (
+    <svg
+      className="bond-dock__edit-glyph"
+      viewBox="0 0 20 20"
+      width="18"
+      height="18"
+      aria-hidden="true"
+    >
+      <path
+        d="M12.8 3.9l3.3 3.3-8.9 8.9-4 .7.7-4z M11.2 5.5l3.3 3.3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /**
  * The Dock's status and inventory in one mark: a bag, filled as far as the
  * driver's state goes. `fill` runs from 0 to 1.
@@ -997,6 +1026,8 @@ export function AuthenticatedMapHomeView({
 }: AuthenticatedMapHomeViewProps) {
   const mapHostRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLElement>(null);
+  const blockWeight = useBlockWeightClock();
+  useCameraWeight(renderer, blockWeight);
   const returnToPickup = useRef(false);
   const renderedDetailScreenKey = useRef<string | undefined>(undefined);
   const location = useDeviceLocation(geolocation);
@@ -3641,7 +3672,11 @@ export function AuthenticatedMapHomeView({
       }}
     />
   );
-  return (
+  const sessionName = dock.configure.seat === "avaia" ? avaiaLabel : pubDress;
+  const backpack = usePresence(inventoryReady);
+  const leaderName = dock.wheel === "avaia" ? avaiaLabel : pubDress;
+  const followerName = dock.wheel === "avaia" ? pubDress : avaiaLabel;
+  const shell = (
     <AppShell
       className={
         flyover.expanded
@@ -3701,6 +3736,60 @@ export function AuthenticatedMapHomeView({
           actions={headerActions}
           settingsAttention={settingsAttention}
           onNavigate={navigate}
+          {...(section === "world"
+            ? {
+                session: (
+                  <div
+                    className="app-header__session-actions"
+                    role="group"
+                    aria-label={t("header.session")}
+                    data-seat={dock.configure.seat}
+                  >
+                    <span
+                      className="app-header__session-level"
+                      data-seat={dock.configure.seat}
+                    >
+                      <i aria-hidden="true" />
+                      {t("header.sessionLevel").replace(
+                        "{level}",
+                        String(standing[dock.configure.seat].level),
+                      )}
+                    </span>
+                    {backpack.rendered ? (
+                      <button
+                        className="bond-dock__edit bond-dock__status"
+                        type="button"
+                        data-seat={dock.configure.seat}
+                        data-presence={backpack.phase}
+                        {...(backpack.phase === "exiting"
+                          ? { "aria-hidden": true as const, inert: true }
+                          : {})}
+                        aria-label={t("inventory.openNamed").replace(
+                          "{name}",
+                          sessionName,
+                        )}
+                        onClick={activateInventory}
+                      >
+                        <StatusGlyph fill={statusFill} />
+                      </button>
+                    ) : null}
+                    <button
+                      className="bond-dock__edit bond-dock__edit--glyph"
+                      type="button"
+                      data-seat={dock.configure.seat}
+                      aria-label={translateFirst(
+                        t,
+                        dock.configure.label,
+                        DOCK_ACTION_KEYS,
+                      )}
+                      onClick={activateConfigure}
+                    >
+                      <EditGlyph />
+                    </button>
+                  </div>
+                ),
+              }
+            : {})}
         />
       }
       toasts={
@@ -3883,59 +3972,36 @@ export function AuthenticatedMapHomeView({
                 </div>
               </div>
             ) : section === "world" && activeDetail === undefined ? (
-              <>
-                <div className="bond-dock__header">
-                  <span className="bond-dock__kicker">Bond</span>
-                  <div className="bond-dock__header-actions">
-                    {inventoryReady ? (
-                      <button
-                        className="bond-dock__edit bond-dock__status"
-                        type="button"
-                        data-seat={dock.configure.seat}
-                        aria-label={t("inventory.openNamed").replace(
-                          "{name}",
-                          dock.configure.seat === "avaia"
-                            ? avaiaLabel
-                            : pubDress,
-                        )}
-                        onClick={activateInventory}
-                      >
-                        <StatusGlyph fill={statusFill} />
-                      </button>
-                    ) : null}
-                    <button
-                      className="bond-dock__edit"
-                      type="button"
-                      aria-label={translateFirst(
-                        t,
-                        dock.configure.label,
-                        DOCK_ACTION_KEYS,
-                      )}
-                      onClick={activateConfigure}
-                    >
-                      {t("dock.edit")}
-                    </button>
-                  </div>
-                </div>
-                <div className="bond-dock__scroll">
-                  <div className="bond-dock__pair">
+              <div className="bond-dock__scroll">
+                <div className="bond-dock__pair">
+                  <WeightedBlock
+                    className="bond-dock__block"
+                    data-seat={dock.places[0].identity.seat}
+                    mass={1.15}
+                  >
                     <DockPlaceButton
                       place={dock.places[0]}
                       onActivate={activateDockIdentity}
                     />
-                    <span
-                      className="bond-dock__link"
-                      role="separator"
-                      aria-orientation="vertical"
-                      aria-label={t("dock.noRelationship")}
-                    />
+                  </WeightedBlock>
+                  <FollowArrows
+                    leader={dock.wheel}
+                    label={t("dock.follows")
+                      .replace("{leader}", leaderName)
+                      .replace("{follower}", followerName)}
+                  />
+                  <WeightedBlock
+                    className="bond-dock__block"
+                    data-seat={dock.places[1].identity.seat}
+                    mass={1}
+                  >
                     <DockPlaceButton
                       place={dock.places[1]}
                       onActivate={activateDockIdentity}
                     />
-                  </div>
+                  </WeightedBlock>
                 </div>
-              </>
+              </div>
             ) : (
               <div
                 className={`bond-dock__detail${activeDetail === "inventory" ? " bond-dock__detail--inventory" : ""}`}
@@ -4961,5 +5027,8 @@ export function AuthenticatedMapHomeView({
         </>
       }
     />
+  );
+  return (
+    <BlockWeightProvider weight={blockWeight}>{shell}</BlockWeightProvider>
   );
 }

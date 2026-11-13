@@ -1,0 +1,72 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.follow-arrows {
+  display: grid;
+  align-self: center;
+  justify-self: center;
+  place-items: center;
+  width: 4.2rem;
+  height: 2.5rem;
+}
+
+/* The turn itself: half a circle on a spring when the wheel changes hands.
+   The chevrons are drawn pointing right, from the Avaia to the Bond. */
+.follow-arrows__track {
+  display: flex;
+  gap: 0.05rem;
+  align-items: center;
+  transition: transform 640ms cubic-bezier(0.34, 1.45, 0.5, 1);
+  transform: rotate(0deg);
+}
+
+.follow-arrows[data-leader="bond"] .follow-arrows__track {
+  transform: rotate(180deg);
+}
+
+.follow-arrows__chevron {
+  width: 0.95rem;
+  height: 1.5rem;
+  fill: none;
+  stroke: var(--follow-ink, #9b6cfa);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(
+    0 0 0.35rem var(--follow-glow, rgba(155, 108, 250, 0.55))
+  );
+  animation: follow-arrows-flow 1.4s ease-in-out infinite;
+}
+
+.follow-arrows[data-leader="bond"] {
+  --follow-ink: #37d7e5;
+  --follow-glow: rgba(55, 215, 229, 0.55);
+}
+
+.follow-arrows__chevron {
+  transition: stroke 400ms ease;
+}
+
+@keyframes follow-arrows-flow {
+  0%,
+  100% {
+    opacity: 0.4;
+    translate: -0.12rem 0;
+  }
+
+  45% {
+    opacity: 1;
+    translate: 0.12rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .follow-arrows__track {
+    transition-duration: 1ms;
+  }
+
+  .follow-arrows__chevron {
+    opacity: 0.85;
+    animation: none;
+  }
+}
