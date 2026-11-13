@@ -164,6 +164,18 @@
   pointer-events: none;
 }
 
+/* The path sits in the bottom-left corner, under the Dock, as wide as it
+   needs and never wider than the Dock. */
+.app-shell__path {
+  display: flex;
+  justify-content: flex-start;
+  max-width: min(var(--shell-dock-width), 100%);
+}
+
+.app-shell__path > * {
+  pointer-events: auto;
+}
+
 /* The Dock surface sizes itself from --shell-dock-width so a width change
    stays animatable on the surface that owns the material. */
 .app-shell__dock {
@@ -210,8 +222,24 @@
    the world keeps its negative space. */
 .app-shell[data-presentation="wide"] .app-shell__bottom {
   flex-direction: row;
-  align-items: flex-end;
+  flex-wrap: wrap-reverse;
+  /* wrap-reverse swaps the cross axis: flex-start is the bottom edge here. */
+  align-items: flex-start;
   justify-content: space-between;
+}
+
+.app-shell[data-presentation="wide"] .app-shell__status {
+  align-self: flex-start;
+}
+
+/* The path takes its own line, which wrap-reverse lays under the Dock. */
+.app-shell[data-presentation="wide"] .app-shell__path {
+  flex: 0 0 100%;
+  max-width: 100%;
+}
+
+.app-shell[data-presentation="wide"] .app-shell__path > * {
+  max-width: min(var(--shell-dock-width), 100%);
 }
 
 .app-shell[data-presentation="compact"] .app-shell__toasts > * {

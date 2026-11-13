@@ -56,7 +56,9 @@ export function readGlassPanel(
   if (width === 0 || height === 0 || bounds.width === 0) return undefined;
   const style = getComputedStyle(element);
   const seat = element.dataset.seat;
-  const active = element.querySelector(".bond-dock__bond--active") !== null;
+  const active =
+    element.hasAttribute("data-glass-lit") ||
+    element.querySelector(".bond-dock__bond--active") !== null;
   const opacity = Number.parseFloat(style.opacity);
   return {
     quad: boxQuad(bounds, width, height, composeBoxMatrix(style)),

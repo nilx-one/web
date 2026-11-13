@@ -220,7 +220,7 @@ fn panelFragment(in: PanelOut) -> @location(0) vec4f {
   colour += vec3f(1.0) * (1.0 - smoothstep(0.0, 0.36, down)) * 0.075;
   colour *= 1.0 - smoothstep(0.6, 1.0, down) * 0.2;
   let pool = exp(-pow((1.0 - down) / 0.42, 2.0)) * exp(-pow(q.x / (size.x * 0.6), 2.0));
-  colour += tint * pool * select(0.2 + 0.55 * lit, 0.12, tile);
+  colour += tint * pool * select(0.2 + 0.55 * lit, 0.12 + 0.6 * lit, tile);
   let sweep = dot(in.local / size, vec2f(0.82, -0.57)) - panel.light.z * 0.006;
   colour += vec3f(1.0) * (1.0 - smoothstep(0.0, 0.05, abs(fract(sweep * 0.6 + 0.25) - 0.5))) * 0.06;
   colour += (grain(floor(in.position.xy)) - 0.5) * 0.035;

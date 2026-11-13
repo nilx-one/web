@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import { render } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { AppShell } from "./app-shell";
 
-function renderShell() {
+function renderShell(extra: { readonly path?: ReactNode } = {}) {
   return render(
     <AppShell
+      {...extra}
       presentation="wide"
       safeArea={{ top: 44, right: 8, bottom: 34, left: 8 }}
       world={<div data-testid="world" />}
@@ -62,6 +64,15 @@ describe("AppShell", () => {
     // The bottom layer is reversed in flow: the Dock is the first child and
     // stays visually attached to the bottom while the status rail rides above.
     expect(children).toEqual(["app-shell__dock", "app-shell__status"]);
+  });
+
+  it("anchors the path under the Dock, in the bottom-left corner", () => {
+    const { container } = renderShell({ path: <nav data-testid="path" /> });
+    const bottom = container.querySelector(".app-shell__bottom");
+
+    expect(
+      [...(bottom?.children ?? [])].map((child) => child.className),
+    ).toEqual(["app-shell__path", "app-shell__dock", "app-shell__status"]);
   });
 
   it("publishes the host safe area to every layer", () => {

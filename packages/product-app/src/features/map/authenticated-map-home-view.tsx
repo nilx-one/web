@@ -85,6 +85,7 @@ import {
   useCameraWeight,
   usePresence,
 } from "../../shell/weighted-block";
+import { DockPath, type DockPathStep } from "./dock-path";
 import { FollowArrows, LightTrails } from "./follow-arrows";
 import { LanguageSettings } from "../../shell/language-settings";
 import {
@@ -3678,6 +3679,62 @@ export function AuthenticatedMapHomeView({
   const backpack = usePresence(inventoryReady);
   const leaderName = dock.wheel === "avaia" ? avaiaLabel : pubDress;
   const followerName = dock.wheel === "avaia" ? pubDress : avaiaLabel;
+  const followsLabel = t("dock.follows")
+    .replace("{leader}", leaderName)
+    .replace("{follower}", followerName);
+  const levelFact = (seat: DockSeat) =>
+    t("header.sessionLevel").replace("{level}", String(standing[seat].level));
+  // The path names every window open on the Dock, from the Dock itself.
+  const pathSteps: [DockPathStep, ...DockPathStep[]] = [
+    { id: "dock", label: "Dock", icon: "dock" },
+  ];
+  if (selectedBond !== undefined) {
+    pathSteps.push({
+      id: `bond:${selectedBondBodyId}`,
+      label: selectedBond.pubDress,
+      icon: "bond",
+    });
+  } else {
+    if (section !== "world") {
+      pathSteps.push({
+        id: section,
+        label: section === "settings" ? t("header.settings") : pubDress,
+        icon: section === "settings" ? "settings" : "identity",
+      });
+    }
+    if (editing) {
+      pathSteps.push({
+        id: `${section}:edit`,
+        label: t("dock.editing"),
+        icon: "edit",
+      });
+    }
+    if (activeDetail !== undefined) {
+      pathSteps.push({
+        id: `${section}:${activeDetail}`,
+        label: detailTitle(),
+        icon: activeDetail,
+      });
+    }
+  }
+  const pathInfo =
+    selectedBond !== undefined
+      ? "Bond"
+      : pathSteps.length === 1
+        ? followsLabel
+        : section === "settings" && activeDetail === undefined
+          ? hostLabel
+          : detailEyebrow();
+  const pathFact =
+    selectedBond !== undefined
+      ? undefined
+      : pathSteps.length === 1
+        ? levelFact(dock.wheel)
+        : activeDetail === "avaia"
+          ? levelFact("avaia")
+          : section === "identity"
+            ? levelFact("bond")
+            : undefined;
   const shell = (
     <AppShell
       className={
@@ -3937,6 +3994,22 @@ export function AuthenticatedMapHomeView({
           </section>
         ) : null
       }
+      path={
+        <DockPath
+          steps={pathSteps}
+          info={pathInfo}
+          {...(pathFact === undefined ? {} : { fact: pathFact })}
+          label={t("dock.path")}
+          backLabel={(place) => t("dock.pathBack").replace("{place}", place)}
+          onBack={() => {
+            if (selectedBond !== undefined) {
+              setSelectedBondBodyId(undefined);
+              return;
+            }
+            leaveDetail();
+          }}
+        />
+      }
       dock={
         <section
           className="bond-dock"
@@ -3992,12 +4065,7 @@ export function AuthenticatedMapHomeView({
                       onActivate={activateDockIdentity}
                     />
                   </WeightedBlock>
-                  <FollowArrows
-                    leader={dock.wheel}
-                    label={t("dock.follows")
-                      .replace("{leader}", leaderName)
-                      .replace("{follower}", followerName)}
-                  />
+                  <FollowArrows leader={dock.wheel} label={followsLabel} />
                   <WeightedBlock
                     className="bond-dock__block"
                     data-seat={dock.places[1].identity.seat}
