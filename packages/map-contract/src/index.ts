@@ -622,6 +622,12 @@ export interface MapRenderer {
   setCamera(camera: MapCamera, options?: MapCameraOptions): void;
   subscribeCamera(listener: (change: MapCameraChange) => void): () => void;
   /**
+   * Hands over the world canvas each time a frame is drawn, in the same task:
+   * a WebGPU or WebGL canvas holds its frame only until that task ends.
+   * Presentation only, for chrome that refracts the world behind it.
+   */
+  subscribeFrame?(listener: (frame: HTMLCanvasElement) => void): () => void;
+  /**
    * What a person's zoom gesture closes in on. Optional: a renderer without
    * it always zooms toward the pointer.
    */

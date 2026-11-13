@@ -67,9 +67,11 @@ export function useCameraWeight(
     let frame: number | undefined;
     let moving = false;
     let restFrames = 0;
+    weight.project(previous);
     const sample = () => {
       frame = undefined;
       const next = renderer.getCamera();
+      weight.project(next);
       const push = cameraPush(previous, next);
       previous = next;
       const still = push.x === 0 && push.y === 0 && push.squash === 0;

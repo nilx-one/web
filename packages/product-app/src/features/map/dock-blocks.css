@@ -269,6 +269,37 @@
   }
 }
 
+/* The GPU draws the ribbons as light that sways with the cards. */
+.app-shell[data-glass="gpu"] .light-trails {
+  display: none;
+}
+
+/* Says in words what the ribbons show: who follows whom. Its colours run
+   the way the ribbons flow, from the leader's to the follower's. */
+.authenticated-map-home .bond-dock__follow-caption {
+  --caption-from: rgba(155, 108, 250, 0.34);
+  --caption-to: rgba(55, 215, 229, 0.26);
+
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin: 0.15rem 0 0;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid rgba(255, 200, 130, 0.22);
+  border-radius: 999px;
+  color: var(--dock-card-ink);
+  background: linear-gradient(90deg, var(--caption-from), var(--caption-to));
+  box-shadow: 0 0 1.2rem var(--dock-halo);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  transition: background 360ms ease;
+}
+
+.authenticated-map-home .bond-dock__follow-caption[data-leader="bond"] {
+  --caption-from: rgba(55, 215, 229, 0.3);
+  --caption-to: rgba(155, 108, 250, 0.3);
+}
+
 .authenticated-map-home[data-presentation="compact"] .bond-dock__pair {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   width: 100%;

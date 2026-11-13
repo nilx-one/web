@@ -14,6 +14,7 @@ export {
   type AvatarPreviewOptions,
   type AvatarPreviewStatus,
 } from "./avatar-preview";
+export * from "./dock-glass";
 
 export type GraphicsBackend = "webgpu" | "webgl2" | "unsupported";
 

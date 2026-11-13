@@ -1022,6 +1022,7 @@ export function createMapLibreRenderer(
         });
   const listeners = new Set<(next: MapRendererStatus) => void>();
   const cameraListeners = new Set<(change: MapCameraChange) => void>();
+  const frameListeners = new Set<(frame: HTMLCanvasElement) => void>();
   const bodyActivationListeners = new Set<
     (activation: MapBodyActivation) => void
   >();
@@ -2473,6 +2474,9 @@ export function createMapLibreRenderer(
         });
         mountedMap.on("render", () => {
           if (styleReadyForPaint) completeFirstPaint(mountedMap, container);
+          if (frameListeners.size === 0) return;
+          const frame = mountedMap.getCanvas();
+          for (const listener of frameListeners) listener(frame);
         });
         mountedMap.on("styledata", () => {
           styleResolved = true;
@@ -2680,6 +2684,11 @@ export function createMapLibreRenderer(
     subscribeCamera(listener) {
       cameraListeners.add(listener);
       return () => cameraListeners.delete(listener);
+    },
+
+    subscribeFrame(listener) {
+      frameListeners.add(listener);
+      return () => frameListeners.delete(listener);
     },
 
     subscribeBodyActivation(listener) {

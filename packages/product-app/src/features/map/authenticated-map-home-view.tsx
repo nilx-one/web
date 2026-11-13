@@ -77,6 +77,7 @@ import { AppHeader, type HeaderAction } from "../../shell/app-header";
 import { AppShell, type ShellSafeArea } from "../../shell/app-shell";
 import { chooseAppearance, useAppearance } from "../../shell/appearance";
 import { DockWindow } from "../../shell/dock-window";
+import { GlassLayer } from "../../shell/glass-layer";
 import {
   BlockWeightProvider,
   WeightedBlock,
@@ -894,7 +895,7 @@ function DockPlaceButton({
       onClick={() => onActivate(identity)}
       aria-label={translateFirst(t, identity.actionLabel, DOCK_ACTION_KEYS)}
     >
-      <span className="bond-dock__glyph">
+      <span className="bond-dock__glyph" data-glass-tile="">
         {translateIf(t, "dock.ai", identity.glyph)}
       </span>
       <strong>
@@ -3704,6 +3705,11 @@ export function AuthenticatedMapHomeView({
             />
           </div>
           <div className="authenticated-map-home__shade" aria-hidden="true" />
+          <GlassLayer
+            weight={blockWeight}
+            renderer={renderer}
+            leader={dock.wheel}
+          />
           {!startup.ready && renderer.whenSceneReady ? (
             <div
               className="authenticated-map-home__startup"
@@ -4002,6 +4008,21 @@ export function AuthenticatedMapHomeView({
                       onActivate={activateDockIdentity}
                     />
                   </WeightedBlock>
+                  <p
+                    className="bond-dock__follow-caption"
+                    data-leader={dock.wheel}
+                    aria-hidden="true"
+                  >
+                    {t("dock.followsCaption")
+                      .replace(
+                        "{leader}",
+                        dock.wheel === "avaia" ? "Avaia" : "Bond",
+                      )
+                      .replace(
+                        "{follower}",
+                        dock.wheel === "avaia" ? "Bond" : "Avaia",
+                      )}
+                  </p>
                 </div>
               </div>
             ) : (

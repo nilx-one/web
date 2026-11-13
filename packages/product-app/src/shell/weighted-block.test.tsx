@@ -27,6 +27,8 @@ function weightSpy() {
   return {
     register: vi.fn<BlockWeight["register"]>(() => stop),
     push: vi.fn<BlockWeight["push"]>(),
+    blocks: vi.fn<BlockWeight["blocks"]>(() => []),
+    project: vi.fn<BlockWeight["project"]>(),
   };
 }
 
@@ -130,6 +132,7 @@ describe("useCameraWeight", () => {
 
     expect(weight.push).toHaveBeenCalledTimes(2);
     expect(weight.push.mock.calls[0]?.[0].x).toBeLessThan(0);
+    expect(weight.project).toHaveBeenLastCalledWith(current);
 
     act(() => {
       listener?.({ camera: current, gesture: true, phase: "end" });
