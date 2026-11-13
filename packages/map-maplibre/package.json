@@ -8,7 +8,7 @@
     "@nilx-one/graphics": "workspace:*",
     "@nilx-one/map-contract": "workspace:*",
     "@types/three": "^0.185.4",
-    "maplibre-gl": "^6.6.0",
+    "maplibre-gl": "^6.18.0",
     "pmtiles": "^4.5.0",
     "three": "^0.185.1",
     "h3-js": "^4.5.0"
