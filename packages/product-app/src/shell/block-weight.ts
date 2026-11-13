@@ -11,8 +11,9 @@ import { prefersReducedMotion } from "./motion";
  * springs back to rest. This is presentation only. It reads the camera the
  * renderer already reports and decides nothing about the world.
  *
- * The deformation is written as CSS custom properties that feed `transform`,
- * so the compositor draws it whatever backend the world canvas uses.
+ * The block's bulk motion is written as CSS custom properties that feed
+ * `transform`, so its text and controls move with it; the glass itself, and
+ * how it deforms around that motion, is drawn and simulated on the GPU.
  */
 
 export interface BlockSway {
@@ -129,9 +130,32 @@ export function cameraPush(
   };
 }
 
+/** How far a block leans back at the map's steepest pitch, in degrees. */
+export const BLOCK_MAX_TILT = 9;
+const MAX_PITCH = 85;
+
+/**
+ * Blocks stand on the world the camera looks at: as the map pitches, they
+ * lean back with it, so the chrome shares the world's projection.
+ */
+export function cameraTilt(camera: MapCamera): number {
+  const pitch = Number.isFinite(camera.pitch) ? camera.pitch : 0;
+  return (Math.max(0, Math.min(MAX_PITCH, pitch)) / MAX_PITCH) * BLOCK_MAX_TILT;
+}
+
+export interface WeightedBlockState {
+  readonly element: HTMLElement;
+  readonly mass: number;
+  readonly sway: BlockSway;
+}
+
 export interface BlockWeight {
   /** Starts drawing a block's sway; the return stops it. */
   register(element: HTMLElement, mass: number): () => void;
+  /** Every block on screen, with its mass and its sway this frame. */
+  blocks(): readonly WeightedBlockState[];
+  /** Leans every block back with the camera's pitch. */
+  project(camera: MapCamera): void;
   /** Pushes every block at once, as one camera step does. */
   push(push: {
     readonly x: number;
@@ -177,6 +201,9 @@ export function createBlockWeight(
 ): BlockWeight {
   const blocks = new Set<Tracked>();
   const pending = { x: 0, y: 0, squash: 0 };
+  let tilt = 0;
+  const lean = (element: HTMLElement) =>
+    element.style.setProperty("--block-tilt", `${tilt.toFixed(3)}deg`);
   let frame: number | undefined;
   let last: number | undefined;
 
@@ -207,6 +234,7 @@ export function createBlockWeight(
     register(element, mass) {
       const block: Tracked = { element, mass, sway: BLOCK_REST };
       blocks.add(block);
+      lean(element);
       return () => {
         blocks.delete(block);
         if (blocks.size === 0 && frame !== undefined) {
@@ -215,6 +243,15 @@ export function createBlockWeight(
           last = undefined;
         }
       };
+    },
+    blocks() {
+      return [...blocks];
+    },
+    project(camera) {
+      const next = cameraTilt(camera);
+      if (Math.abs(next - tilt) < 0.001) return;
+      tilt = next;
+      for (const block of blocks) lean(block.element);
     },
     push(push) {
       if (blocks.size === 0 || reducedMotion()) return;

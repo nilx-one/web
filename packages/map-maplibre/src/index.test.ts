@@ -927,6 +927,19 @@ describe("camera ownership", () => {
     expect(phases).toEqual(["start", "end"]);
   });
 
+  it("hands over the world canvas as each frame is drawn, until unsubscribed", () => {
+    const fakeMap = makeFakeMap();
+    const renderer = readyRenderer(fakeMap);
+    const frames: HTMLCanvasElement[] = [];
+    const unsubscribe = renderer.subscribeFrame!((frame) => frames.push(frame));
+
+    fakeMap.emit("render");
+    unsubscribe();
+    fakeMap.emit("render");
+
+    expect(frames).toEqual([fakeMap.getCanvas()]);
+  });
+
   it("holds a background move back while a finger or button is on the map", () => {
     const fakeMap = makeFakeMap();
     const renderer = createMapLibreRenderer({

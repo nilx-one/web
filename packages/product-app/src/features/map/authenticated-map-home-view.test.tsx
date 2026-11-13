@@ -466,6 +466,10 @@ describe("AuthenticatedMapHomeView", () => {
       "bond",
     ]);
     expect(blocks[0]?.nextElementSibling).toBe(arrows);
+    // The ribbons' state, in words: who follows whom.
+    expect(
+      document.querySelector(".bond-dock__follow-caption"),
+    ).toHaveTextContent("Bond follows Avaia");
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toHaveTextContent("spectate");
@@ -475,6 +479,9 @@ describe("AuthenticatedMapHomeView", () => {
     expect(
       screen.getByRole("img", { name: "0x0sky drives, x0skai follows" }),
     ).toHaveAttribute("data-leader", "bond");
+    expect(
+      document.querySelector(".bond-dock__follow-caption"),
+    ).toHaveTextContent("Avaia follows Bond");
     expect(screen.getByText("x0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();

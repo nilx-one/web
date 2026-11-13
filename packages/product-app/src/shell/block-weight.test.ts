@@ -7,8 +7,10 @@ import type { MapCamera } from "@nilx-one/map-contract";
 
 import {
   BLOCK_MAX_SWAY,
+  BLOCK_MAX_TILT,
   BLOCK_REST,
   cameraPush,
+  cameraTilt,
   createBlockWeight,
   stepSway,
   swaySettled,
@@ -168,5 +170,33 @@ describe("createBlockWeight", () => {
     stop();
 
     expect(frames.scheduler.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("leans every block back with the camera's pitch and lists them", () => {
+    const frames = clock();
+    const weight = createBlockWeight(frames.scheduler, () => false);
+    const element = document.createElement("div");
+    weight.register(element, 1.2);
+
+    weight.project(camera({ pitch: 85 }));
+
+    expect(element.style.getPropertyValue("--block-tilt")).toBe(
+      `${BLOCK_MAX_TILT.toFixed(3)}deg`,
+    );
+    expect(weight.blocks()).toEqual([{ element, mass: 1.2, sway: BLOCK_REST }]);
+    const late = document.createElement("div");
+    weight.register(late, 1);
+    expect(late.style.getPropertyValue("--block-tilt")).toBe(
+      `${BLOCK_MAX_TILT.toFixed(3)}deg`,
+    );
+  });
+});
+
+describe("cameraTilt", () => {
+  it("stands blocks upright over a flat map and leans them as it pitches", () => {
+    expect(cameraTilt(camera({ pitch: 0 }))).toBe(0);
+    expect(cameraTilt(camera({ pitch: 42.5 }))).toBeCloseTo(BLOCK_MAX_TILT / 2);
+    expect(cameraTilt(camera({ pitch: 120 }))).toBe(BLOCK_MAX_TILT);
+    expect(cameraTilt(camera({ pitch: Number.NaN }))).toBe(0);
   });
 });
