@@ -5,7 +5,7 @@ name: Temporary MapLibre lockfile regeneration
 on:
   push:
     branches: [fix/maplibre-6-18-upgrade]
-    paths: [.github/workflows/temp-maplibre-lockfile.yml]
+    paths: [packages/map-shade/package.json]
 permissions:
   contents: read
 jobs:
