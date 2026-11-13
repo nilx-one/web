@@ -24,7 +24,7 @@
     "@nilx-one/product-app": "workspace:*",
     "@nilx-one/ui": "workspace:*",
     "@nilx-one/walk-graph": "workspace:*",
-    "maplibre-gl": "^6.6.0",
+    "maplibre-gl": "^6.18.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }
