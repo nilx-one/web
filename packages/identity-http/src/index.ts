@@ -81,6 +81,7 @@ import {
 } from "@nilx-one/application";
 
 export * from "./bond-location-control";
+export * from "./ais-product-session";
 
 /** The part of the Core runtime that reads the service's answers. */
 export type IdentityAnswerReader = Pick<
