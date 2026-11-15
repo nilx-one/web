@@ -98,8 +98,12 @@ describe("AIS product-session transport", () => {
   it("returns anonymous only on 401 and fails closed on malformed data", async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(answer(401, { error: { code: "product_session_required" } }))
-      .mockResolvedValueOnce(answer(200, { profile: { profile_id: PROFILE_ID } }))
+      .mockResolvedValueOnce(
+        answer(401, { error: { code: "product_session_required" } }),
+      )
+      .mockResolvedValueOnce(
+        answer(200, { profile: { profile_id: PROFILE_ID } }),
+      )
       .mockResolvedValueOnce(
         answer(200, {
           profile: {
@@ -108,7 +112,9 @@ describe("AIS product-session transport", () => {
           },
         }),
       )
-      .mockResolvedValueOnce(answer(503, { error: { code: "not_configured" } }));
+      .mockResolvedValueOnce(
+        answer(503, { error: { code: "not_configured" } }),
+      );
     const client = createAisProductSessionPort({ fetch });
     expect(await client.readSession()).toEqual({ kind: "anonymous" });
     expect(await client.readSession()).toEqual({ kind: "unavailable" });

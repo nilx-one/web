@@ -112,7 +112,9 @@ export function createAisProductSessionPort(
 
   return {
     signInPath(returnPath) {
-      return AIS_START + "?return=" + encodeURIComponent(safeReturnPath(returnPath));
+      return (
+        AIS_START + "?return=" + encodeURIComponent(safeReturnPath(returnPath))
+      );
     },
 
     async readConfiguration() {
