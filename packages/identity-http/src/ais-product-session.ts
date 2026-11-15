@@ -61,7 +61,7 @@ function safeReturnPath(value: string | undefined): string {
     value.startsWith("/") &&
     !value.startsWith("//") &&
     !value.includes("\\") &&
-    !/[\u0000-\u001f\u007f]/u.test(value) &&
+    !/\p{Cc}/u.test(value) &&
     value.length <= 512
     ? value
     : "/";
