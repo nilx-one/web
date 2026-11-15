@@ -16,9 +16,11 @@ function answer(status: number, body: unknown): Response {
 
 describe("AIS product-session transport", () => {
   it("reads public issuer configuration without a provider credential", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
-      answer(200, { enabled: true, issuer: "https://auth.aiaiaiai.org" }),
-    );
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        answer(200, { enabled: true, issuer: "https://auth.aiaiaiai.org" }),
+      );
     const client = createAisProductSessionPort({ fetch });
     expect(await client.readConfiguration()).toEqual({
       kind: "enabled",

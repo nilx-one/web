@@ -31,8 +31,7 @@ export type AisSessionReading =
   | { readonly kind: "anonymous" | "unavailable" };
 
 export type AisSessionSignOut =
-  | { readonly kind: "signed-out" }
-  | { readonly kind: "unavailable" };
+  { readonly kind: "signed-out" } | { readonly kind: "unavailable" };
 
 export interface AisProductSessionPort {
   readConfiguration(): Promise<AisConfiguration>;
