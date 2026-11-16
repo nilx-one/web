@@ -12,6 +12,7 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useSpecialItems } from "../courier/use-special-items";
 import { useCourier } from "../courier/use-courier";
+import { withMarketInventory } from "../courier/market-inventory-core";
 import { useMarketReturn, useReturnFlight } from "../courier/use-market-return";
 import { CourierOffer } from "../courier/courier-offer";
 import {
@@ -958,6 +959,13 @@ function NotebookDescription({ text }: { readonly text: string | undefined }) {
   );
 }
 
+/**
+ * One empty list for every render without a host projection. A fresh `[]`
+ * default would be a new dependency each render, and the pinned-landmark
+ * effect would hand the renderer the same pins again on all of them.
+ */
+const NO_CURATED_RARITY_PINS: readonly MapPinnedLandmark[] = Object.freeze([]);
+
 /** A status change also invalidates off-wheel cached presentation handles. */
 export function syncCachedSubscriptionAuras(
   avatars: Pick<NonNullable<MapRenderer["avatars"]>, "upsert"> | undefined,
@@ -989,7 +997,7 @@ export function AuthenticatedMapHomeView({
   avaiaPubDress,
   bondBodies,
   renderer,
-  curatedRarityPins = [],
+  curatedRarityPins = NO_CURATED_RARITY_PINS,
   geolocation,
   onManualBondMove,
   feedback,
@@ -1092,14 +1100,7 @@ export function AuthenticatedMapHomeView({
   const findItems = useMemo(
     () =>
       localFindItems && marketCatalog?.inventoryCommand
-        ? new Proxy(localFindItems, {
-            get(target, property) {
-              if (property === "applyInventoryCommand")
-                return marketCatalog.inventoryCommand;
-              const value = Reflect.get(target, property);
-              return typeof value === "function" ? value.bind(target) : value;
-            },
-          })
+        ? withMarketInventory(localFindItems, marketCatalog.inventoryCommand)
         : localFindItems,
     [localFindItems, marketCatalog],
   );
