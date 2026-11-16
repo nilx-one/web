@@ -252,8 +252,55 @@ function metersToLine(point: LonLat, line: Ring): number {
   return best;
 }
 
+/**
+ * The box a ring fits in: west, south, east, north. A city block's ground is
+ * thousands of rings and every spot is asked against all of them, so a ring
+ * is measured once and a spot nowhere near it never walks its points.
+ */
+const ringBounds = new WeakMap<
+  Ring,
+  readonly [number, number, number, number]
+>();
+
+function boundsOf(ring: Ring): readonly [number, number, number, number] {
+  const held = ringBounds.get(ring);
+  if (held !== undefined) return held;
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const [longitude, latitude] of ring) {
+    if (longitude < west) west = longitude;
+    if (longitude > east) east = longitude;
+    if (latitude < south) south = latitude;
+    if (latitude > north) north = latitude;
+  }
+  const bounds = [west, south, east, north] as const;
+  ringBounds.set(ring, bounds);
+  return bounds;
+}
+
+/** Whether a point is within `meters` of the box a ring fits in. */
+function nearBounds(point: LonLat, ring: Ring, meters: number): boolean {
+  const [west, south, east, north] = boundsOf(ring);
+  const dy = meters / METERS_PER_DEGREE;
+  const dx = dy / Math.max(1e-6, Math.cos(point[1] * RAD));
+  return (
+    point[0] >= west - dx &&
+    point[0] <= east + dx &&
+    point[1] >= south - dy &&
+    point[1] <= north + dy
+  );
+}
+
 function inside(point: LonLat, polygons: readonly Polygon[]): boolean {
-  return polygons.some((rings) => insidePolygon(point, rings));
+  // Even-odd counts every ring alike, so a point outside the box of each of
+  // them crosses none and is outside: the same answer, without the walk.
+  return polygons.some(
+    (rings) =>
+      rings.some((ring) => nearBounds(point, ring, 0)) &&
+      insidePolygon(point, rings),
+  );
 }
 
 /**
@@ -268,7 +315,11 @@ export function habitatAt(
   if (inside(point, ground.buildings)) return undefined;
   if (inside(point, ground.green)) return "green";
   if (
-    ground.paths.some((line) => metersToLine(point, line) <= PATH_REACH_METERS)
+    ground.paths.some(
+      (line) =>
+        nearBounds(point, line, PATH_REACH_METERS) &&
+        metersToLine(point, line) <= PATH_REACH_METERS,
+    )
   )
     return "path";
   return undefined;

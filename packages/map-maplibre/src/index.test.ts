@@ -32,6 +32,7 @@ import {
   MAP_STYLE_URL,
   MAP_STYLE_URLS,
   TAP_FEEDBACK_COLORS,
+  SETTLE_MIN_INTERVAL_MS,
   TAP_FEEDBACK_FADE_MS,
   TAP_FEEDBACK_LIFETIME_MS,
   TERRAIN_EXAGGERATION,
@@ -103,6 +104,8 @@ interface FakeMap {
       originalEvent?: unknown;
       point?: { x: number; y: number };
       lngLat?: { lng: number; lat: number };
+      tile?: unknown;
+      source?: { type?: string };
     },
   ): void;
   /** A style swap discards everything the renderer added, as MapLibre does. */
@@ -1505,17 +1508,96 @@ describe("landmarks the basemap draws", () => {
   });
 
   it("says the answer may have changed each time the map settles", () => {
-    const fakeMap = makeFakeMap();
-    const renderer = readyRenderer(fakeMap);
-    const changed = vi.fn();
-    const unsubscribe = renderer.subscribeLandmarksChanged?.(changed);
+    vi.useFakeTimers();
+    try {
+      const fakeMap = makeFakeMap();
+      const renderer = readyRenderer(fakeMap);
+      const changed = vi.fn();
+      const unsubscribe = renderer.subscribeLandmarksChanged?.(changed);
 
-    fakeMap.emit("idle");
-    fakeMap.emit("idle");
-    unsubscribe?.();
-    fakeMap.emit("idle");
+      fakeMap.emit("idle");
+      // A tile arrives, and the map settles again with more to read.
+      vi.advanceTimersByTime(SETTLE_MIN_INTERVAL_MS);
+      fakeMap.emit("sourcedata", { tile: {}, source: { type: "vector" } });
+      fakeMap.emit("idle");
+      unsubscribe?.();
+      vi.advanceTimersByTime(SETTLE_MIN_INTERVAL_MS);
+      fakeMap.emit("moveend");
+      fakeMap.emit("idle");
 
-    expect(changed).toHaveBeenCalledTimes(2);
+      expect(changed).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("settles once for a view that stands still, however many frames say idle", () => {
+    vi.useFakeTimers();
+    try {
+      const fakeMap = makeFakeMap();
+      const renderer = readyRenderer(fakeMap);
+      const changed = vi.fn();
+      renderer.subscribeLandmarksChanged?.(changed);
+
+      // The bodies over the map ask for a frame all the time, and MapLibre
+      // says "idle" after each one that had nothing to load.
+      for (let frame = 0; frame < 600; frame++) {
+        vi.advanceTimersByTime(16);
+        fakeMap.emit("idle");
+      }
+      expect(changed).toHaveBeenCalledTimes(1);
+
+      // What the renderer draws into its own sources is not something to read.
+      fakeMap.emit("sourcedata", { tile: {}, source: { type: "geojson" } });
+      fakeMap.emit("sourcedata", { source: { type: "vector" } });
+      fakeMap.emit("idle");
+      expect(changed).toHaveBeenCalledTimes(1);
+
+      // The camera came to rest somewhere: a different view to read.
+      fakeMap.emit("moveend");
+      fakeMap.emit("idle");
+      fakeMap.emit("idle");
+      expect(changed).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the settles of a camera that follows a walk apart", () => {
+    vi.useFakeTimers();
+    try {
+      const fakeMap = makeFakeMap();
+      const renderer = readyRenderer(fakeMap);
+      const changed = vi.fn();
+      renderer.subscribeLandmarksChanged?.(changed);
+      const repaints = fakeMap.triggerRepaint.mock.calls.length;
+
+      // Two seconds of a camera stepping after a body, one step a frame.
+      for (let frame = 0; frame < 120; frame++) {
+        fakeMap.emit("moveend");
+        fakeMap.emit("idle");
+        vi.advanceTimersByTime(1000 / 60);
+      }
+      expect(changed.mock.calls.length).toBeLessThanOrEqual(
+        2_000 / SETTLE_MIN_INTERVAL_MS + 1,
+      );
+      expect(changed.mock.calls.length).toBeGreaterThanOrEqual(3);
+
+      // The walk ends between settles and nothing draws again: the last view
+      // is still read, by a frame the renderer asks for itself.
+      const before = changed.mock.calls.length;
+      fakeMap.emit("moveend");
+      fakeMap.emit("idle");
+      expect(changed).toHaveBeenCalledTimes(before);
+      vi.advanceTimersByTime(SETTLE_MIN_INTERVAL_MS);
+      expect(fakeMap.triggerRepaint.mock.calls.length).toBeGreaterThan(
+        repaints,
+      );
+      fakeMap.emit("idle");
+      expect(changed).toHaveBeenCalledTimes(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("answers nothing before a map is mounted", () => {
