@@ -488,6 +488,48 @@ function createMapLibreLabelMarker(
   };
 }
 
+export const XPING_BEACON_CLASS = "map-xping-beacon";
+
+/**
+ * A small pill that says "xPing" where the drone is: a pulsing dot in the
+ * route's teal and the name. It never takes a tap, so a body or a place
+ * beneath it keeps its own.
+ */
+export function createXPingBeaconElement(document: Document): HTMLElement {
+  const element = document.createElement("div");
+  element.className = XPING_BEACON_CLASS;
+  element.setAttribute("aria-label", "xPing");
+  element.setAttribute("role", "img");
+  Object.assign(element.style, {
+    display: "none",
+    alignItems: "center",
+    gap: "6px",
+    padding: "3px 9px 3px 6px",
+    marginBottom: "6px",
+    borderRadius: "999px",
+    background: "rgba(255, 255, 255, 0.92)",
+    boxShadow: "0 1px 6px rgba(15, 40, 50, 0.25)",
+    color: "#0e4a55",
+    font: "600 12px/1.2 system-ui, -apple-system, sans-serif",
+    letterSpacing: "0.02em",
+    pointerEvents: "none",
+    whiteSpace: "nowrap",
+  } satisfies Partial<CSSStyleDeclaration>);
+  element.hidden = true;
+  const dot = document.createElement("span");
+  Object.assign(dot.style, {
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+    background: "#38c6d9",
+    boxShadow: "0 0 0 3px rgba(56, 198, 217, 0.3)",
+  } satisfies Partial<CSSStyleDeclaration>);
+  const name = document.createElement("span");
+  name.textContent = "xPing";
+  element.append(dot, name);
+  return element;
+}
+
 function createMapLibreSelectionMarker(
   map: MapLibreMap,
   center: [longitude: number, latitude: number],
@@ -698,6 +740,11 @@ export function createMapLibreRenderer(
   const animalHandles = new Map<string, AmbientAnimalHandle>();
   let flightLootHandles: readonly MapFlightLoot[] = [];
   let droneLayerFailed = false;
+  /** xPing's far-view beacons, one per xPing drone handle. */
+  const droneBeacons = new Map<
+    string,
+    { element: HTMLElement; marker: MapLabelMarker }
+  >();
   let avatarCamera: MapCamera = camera;
   let monumentLayer: MonumentCustomLayer | undefined;
   let monumentLayerPromise: Promise<MonumentCustomLayer> | undefined;
@@ -922,6 +969,7 @@ export function createMapLibreRenderer(
     },
     upsert(handle) {
       droneHandles.set(handle.id, handle);
+      if (map !== undefined && firstPaintDone) syncDroneBeacons(map);
       if (avatarLayer !== undefined) return avatarLayer.upsertDrone(handle);
       if (droneLayerFailed) return false;
       void requestAvatarLayer().catch(() => {
@@ -934,6 +982,7 @@ export function createMapLibreRenderer(
     },
     remove(id) {
       droneHandles.delete(id);
+      releaseDroneBeacon(id);
       if (droneHandles.size === 0) droneLayerFailed = false;
       avatarLayer?.remove(id);
     },
@@ -1315,6 +1364,46 @@ export function createMapLibreRenderer(
             mapMetersPerPixel(latitude, zoom),
         };
       });
+  }
+
+  /**
+   * xPing is drawn at its true 1.2 m, so further out than a body is drawn it
+   * is a speck no one can find, while the Avaia beside it is carried by its
+   * card. Below the same handover the drone gets a beacon, and the two take
+   * turns the way a body and its card do. Ambient drones are scenery and get
+   * none.
+   */
+  function syncDroneBeacons(mounted: MapLibreMap): void {
+    const xpings = [...droneHandles.values()].filter(
+      (handle) => handle.kind === undefined || handle.kind === "xping",
+    );
+    // No xPing in the air means nothing to mark, and nothing to ask the map.
+    if (xpings.length === 0) return;
+    const far = mounted.getZoom() < MAP_BODY_HANDOVER_ZOOM;
+    for (const handle of xpings) {
+      const center: [number, number] = [handle.lngLat[0], handle.lngLat[1]];
+      let beacon = droneBeacons.get(handle.id);
+      if (beacon === undefined) {
+        const element = createXPingBeaconElement(globalThis.document);
+        beacon = {
+          element,
+          marker: createLabelMarker(mounted, element, center),
+        };
+        droneBeacons.set(handle.id, beacon);
+      } else {
+        beacon.marker.setLngLat(center);
+      }
+      setPartShown(beacon.element, far, "flex");
+    }
+  }
+
+  function releaseDroneBeacon(id: string): void {
+    droneBeacons.get(id)?.marker.remove();
+    droneBeacons.delete(id);
+  }
+
+  function releaseDroneBeacons(): void {
+    for (const id of [...droneBeacons.keys()]) releaseDroneBeacon(id);
   }
 
   function updateLabelVisibility(mounted: MapLibreMap): void {
@@ -2131,6 +2220,7 @@ export function createMapLibreRenderer(
     applyPinnedLandmarks(mounted);
     applyObservedPosition(mounted);
     applySelectionPoint(mounted);
+    if (firstPaintDone) syncDroneBeacons(mounted);
     if (firstPaintDone && avatarLayer?.hasInstances())
       ensureAvatarLayer(mounted);
     if (firstPaintDone) {
@@ -2599,6 +2689,7 @@ export function createMapLibreRenderer(
         mountedMap.on("zoom", () => {
           updateLabelVisibility(mountedMap);
           updatePinnedLabelVisibility(mountedMap);
+          if (firstPaintDone) syncDroneBeacons(mountedMap);
         });
         // Pitch and bearing move cards relative to each other without a zoom,
         // so which ones collide is settled again once the camera stops. A
@@ -2710,6 +2801,7 @@ export function createMapLibreRenderer(
       releaseSelectionMarker();
       clearTapFeedback();
       releasePinnedLabels();
+      releaseDroneBeacons();
       vegetationPlanted = [];
       vegetationKey = "";
       vegetationLayer?.setInstances([]);
