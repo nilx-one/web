@@ -98,6 +98,24 @@ pub fn development_market_issuer_endpoint_allowed(browser_origin: &str, issuer_u
         && issuer.fragment().is_none()
 }
 
+/// The Market issuer follows the handoff secret: a service that can hand a Bond
+/// to Market also settles what that Bond buys there. `None` without the secret;
+/// no separate switch turns the worker or the return check on.
+pub fn market_issuer_config()
+-> Option<Result<market_issuer::MarketIssuerConfig, market_issuer::MarketIssuerConfigError>> {
+    let secret = std::env::var("NILX_BROWSER_HANDOFF_TOKEN").unwrap_or_default();
+    if secret.is_empty() {
+        return None;
+    }
+    let url = std::env::var("MARKET_ISSUER_URL")
+        .ok()
+        .filter(|value| !value.is_empty());
+    Some(market_issuer::MarketIssuerConfig::new(
+        &secret,
+        url.as_deref(),
+    ))
+}
+
 #[cfg(test)]
 mod development_market_issuer_endpoint_tests {
     use super::development_market_issuer_endpoint_allowed as allowed;
@@ -126,22 +144,4 @@ mod development_market_issuer_endpoint_tests {
             "https://market-test.onrender.com/issuer?token=abc"
         ));
     }
-}
-
-/// The Market issuer follows the handoff secret: a service that can hand a Bond
-/// to Market also settles what that Bond buys there. `None` without the secret;
-/// no separate switch turns the worker or the return check on.
-pub fn market_issuer_config()
--> Option<Result<market_issuer::MarketIssuerConfig, market_issuer::MarketIssuerConfigError>> {
-    let secret = std::env::var("NILX_BROWSER_HANDOFF_TOKEN").unwrap_or_default();
-    if secret.is_empty() {
-        return None;
-    }
-    let url = std::env::var("MARKET_ISSUER_URL")
-        .ok()
-        .filter(|value| !value.is_empty());
-    Some(market_issuer::MarketIssuerConfig::new(
-        &secret,
-        url.as_deref(),
-    ))
 }
