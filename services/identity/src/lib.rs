@@ -76,14 +76,9 @@ pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};
 /// the browser handoff. A missing or production target cannot be a fallback.
 /// This is a deployment safety rule, never proof of a customer's purchase.
 #[must_use]
-pub fn development_market_issuer_endpoint_allowed(
-    browser_origin: &str,
-    issuer_url: &str,
-) -> bool {
-    let (Ok(browser), Ok(issuer)) = (
-        url::Url::parse(browser_origin),
-        url::Url::parse(issuer_url),
-    ) else {
+pub fn development_market_issuer_endpoint_allowed(browser_origin: &str, issuer_url: &str) -> bool {
+    let (Ok(browser), Ok(issuer)) = (url::Url::parse(browser_origin), url::Url::parse(issuer_url))
+    else {
         return false;
     };
     browser.scheme() == "https"
