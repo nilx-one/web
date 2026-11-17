@@ -50,7 +50,8 @@ export interface EmbeddedMarketCatalogPort {
     point: string;
     pickupOrderId?: string;
     avaia: { longitude: number; latitude: number };
-    plan: CourierPlan;
+    /** Present only when an actual xPing flight is the visit's origin. */
+    plan?: CourierPlan;
     /** Abort a stale handoff if the selected arrival changes. */
     signal?: AbortSignal;
   }): Promise<void>;

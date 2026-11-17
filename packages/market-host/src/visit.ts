@@ -42,10 +42,16 @@ async function beginMarketVisit(
   // The optional return-trip hint is not required to authenticate at Market.
   // Blocked storage must not prevent an otherwise valid server handoff.
   try {
-    sessionStorage.setItem(
-      "nilx-one.market.trip",
-      JSON.stringify({ version: 1, plan: input.plan }),
-    );
+    if (input.plan) {
+      sessionStorage.setItem(
+        "nilx-one.market.trip",
+        JSON.stringify({ version: 1, plan: input.plan }),
+      );
+    } else {
+      // An Avaia/Bond visit is not an xPing flight. A previous trip in this
+      // tab must not send a courier home from a manual pickup.
+      sessionStorage.removeItem("nilx-one.market.trip");
+    }
   } catch {
     // This tab can still browse Market; return-flight integration is separate.
   }

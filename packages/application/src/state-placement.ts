@@ -93,6 +93,15 @@ export const STATE_PLACEMENT: readonly PlacedState[] = [
     perOwner: false,
     what: "This tab's pending xPing route for a return from Market. No authentication token, seeds balance, or purchase authority is stored here.",
   },
+  {
+    id: "market.manualPending",
+    placement: "device",
+    mobility: "resident",
+    medium: "session-storage",
+    key: "nilx-one.market.manual-pending",
+    perOwner: false,
+    what: "This tab's bounded manual Market collection retry references (opaque visit and order ids). Never entitlement, paid status, seeds, identity secret, or a forged courier route.",
+  },
   // ─── server: identity-service tables ───────────────────────────────────
   {
     id: "identity.pubDress",
