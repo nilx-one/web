@@ -13,6 +13,7 @@ import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useSpecialItems } from "../courier/use-special-items";
 import { ManualMarketPickup } from "../courier/manual-market-pickup";
 import { SpecialPickupNotice } from "../courier/special-pickup-notice";
+import { SpecialActivationPrompt } from "../courier/special-activation-prompt";
 import { useCourier } from "../courier/use-courier";
 import { withMarketInventory } from "../courier/market-inventory-core";
 import { useMarketReturn, useReturnFlight } from "../courier/use-market-return";
@@ -2113,6 +2114,17 @@ export function AuthenticatedMapHomeView({
   const [pickupOrder, setPickupOrder] = useState<string>();
   const { accept: acceptCourier, returnHome: flyHome } = courier;
   const { arrive: deliverSpecial } = special;
+  // xPing has put a purchased Special into the backpack: ask once whether to
+  // activate it. The question follows a delivery that took, never precedes it.
+  const [activationPrompt, setActivationPrompt] = useState<string>();
+  const askToActivate = useCallback(
+    (id: string) => {
+      void deliverSpecial(id).then((delivered) => {
+        if (delivered) setActivationPrompt(id);
+      });
+    },
+    [deliverSpecial],
+  );
   // A paid order is an invitation, never authorization to launch the courier
   // automatically. Identity remains the source of truth for pickup notices.
   const pickup = useCallback(
@@ -2176,8 +2188,8 @@ export function AuthenticatedMapHomeView({
     manualDeliveryAttempted.current.add(result.itemId);
     // Identity already validated/collected this item. Only now may the
     // existing inventory delivery path resolve it without a courier flight.
-    deliverSpecial(result.itemId);
-  }, [marketReturn.result, special.items, deliverSpecial]);
+    askToActivate(result.itemId);
+  }, [marketReturn.result, special.items, askToActivate]);
   const deliveryId = marketReturn.result?.itemId;
   const returnHome = useCallback(
     (trip: Parameters<typeof flyHome>[0]) => {
@@ -2188,11 +2200,11 @@ export function AuthenticatedMapHomeView({
       flyHome(
         trip,
         deliveryId && avaia
-          ? { avaia, arrived: () => deliverSpecial(deliveryId) }
+          ? { avaia, arrived: () => askToActivate(deliveryId) }
           : undefined,
       );
     },
-    [flyHome, avaiaWalk, pubDress, deliveryId, deliverSpecial],
+    [flyHome, avaiaWalk, pubDress, deliveryId, askToActivate],
   );
   // Camera stays with Avaia while xPing brings the item home.
   useReturnFlight(
@@ -3923,6 +3935,23 @@ export function AuthenticatedMapHomeView({
             failed={manualPickupError}
             onVisit={beginManualPickup}
           />
+          {activationPrompt !== undefined &&
+            special.items.some(
+              (item) =>
+                item.order_id === activationPrompt && item.state === "stored",
+            ) && (
+              <SpecialActivationPrompt
+                locale={locale}
+                canSkip={subscriptionTier !== undefined}
+                busy={special.busy}
+                onActivate={() => {
+                  void special.activate(activationPrompt).then((activated) => {
+                    if (activated) setActivationPrompt(undefined);
+                  });
+                }}
+                onSkip={() => setActivationPrompt(undefined)}
+              />
+            )}
           {(special.retry ||
             (marketReturn.notice?.itemId &&
               special.items.some(
@@ -3951,22 +3980,8 @@ export function AuthenticatedMapHomeView({
                             : "xPing is bringing Special to Avaia",
                         description:
                           locale === "uk-UA"
-                            ? "Активуй зараз або залиш предмет в інвентарі після доставки."
-                            : "Activate now or keep the item in inventory after delivery.",
-                        ...(special.busy
-                          ? {}
-                          : {
-                              action: {
-                                label:
-                                  locale === "uk-UA"
-                                    ? "Активувати"
-                                    : "Activate",
-                                onPerform: () =>
-                                  special.activate(
-                                    marketReturn.notice!.itemId!,
-                                  ),
-                              },
-                            }),
+                            ? "Після прильоту він з'явиться в рюкзаку."
+                            : "It will appear in your backpack on arrival.",
                       },
                     ]
                   : []),

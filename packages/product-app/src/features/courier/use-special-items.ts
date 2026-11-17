@@ -56,9 +56,10 @@ export function useSpecialItems(
     };
   }, [owner, catalog, returnId]);
 
+  /** Whether the change took: the caller asks the next question only then. */
   const change = useCallback(
-    async function perform(id: string, delivery: boolean) {
-      if (!catalog?.changeItem) return;
+    async function perform(id: string, delivery: boolean): Promise<boolean> {
+      if (!catalog?.changeItem) return false;
       setBusy(true);
       try {
         if (delivery)
@@ -75,10 +76,12 @@ export function useSpecialItems(
           await refresh();
         }
         setFailure(undefined);
+        return true;
       } catch {
         setFailure(() => () => {
           void perform(id, delivery);
         });
+        return false;
       } finally {
         setBusy(false);
       }
@@ -86,21 +89,18 @@ export function useSpecialItems(
     [owner, catalog, refresh],
   );
   const activate = useCallback(
-    (id: string) => {
-      if (pending.current) return;
+    async (id: string): Promise<boolean> => {
+      if (pending.current) return false;
       pending.current = true;
-      void change(id, false).finally(() => {
+      try {
+        return await change(id, false);
+      } finally {
         pending.current = false;
-      });
+      }
     },
     [change],
   );
-  const arrive = useCallback(
-    (id: string) => {
-      void change(id, true);
-    },
-    [change],
-  );
+  const arrive = useCallback((id: string) => change(id, true), [change]);
   return {
     items: snapshot?.owner === owner ? snapshot.items : [],
     busy,
