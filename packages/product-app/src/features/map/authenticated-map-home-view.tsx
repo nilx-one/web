@@ -11,7 +11,10 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useSpecialItems } from "../courier/use-special-items";
+import { ManualMarketPickup } from "../courier/manual-market-pickup";
+import { SpecialPickupNotice } from "../courier/special-pickup-notice";
 import { useCourier } from "../courier/use-courier";
+import { withMarketInventory } from "../courier/market-inventory-core";
 import { useMarketReturn, useReturnFlight } from "../courier/use-market-return";
 import { CourierOffer } from "../courier/courier-offer";
 import {
@@ -29,6 +32,7 @@ import {
   type AvaiaTravelResult,
   type AvatarModelResult,
   type AvatarSelection,
+  type BusinessPoint,
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
@@ -234,6 +238,7 @@ import { pinnedLandmarks } from "./pinned-landmarks";
 import {
   marketMapPoints,
   marketPointTitle,
+  KYIV_MARKET_BUSINESS_POINTS,
   seededMarketDirectory,
   MARKET_MARKER_ONLY_OWNERS,
 } from "../courier/market-points";
@@ -958,6 +963,13 @@ function NotebookDescription({ text }: { readonly text: string | undefined }) {
   );
 }
 
+/**
+ * One empty list for every render without a host projection. A fresh `[]`
+ * default would be a new dependency each render, and the pinned-landmark
+ * effect would hand the renderer the same pins again on all of them.
+ */
+const NO_CURATED_RARITY_PINS: readonly MapPinnedLandmark[] = Object.freeze([]);
+
 /** A status change also invalidates off-wheel cached presentation handles. */
 export function syncCachedSubscriptionAuras(
   avatars: Pick<NonNullable<MapRenderer["avatars"]>, "upsert"> | undefined,
@@ -989,7 +1001,7 @@ export function AuthenticatedMapHomeView({
   avaiaPubDress,
   bondBodies,
   renderer,
-  curatedRarityPins = [],
+  curatedRarityPins = NO_CURATED_RARITY_PINS,
   geolocation,
   onManualBondMove,
   feedback,
@@ -1092,14 +1104,7 @@ export function AuthenticatedMapHomeView({
   const findItems = useMemo(
     () =>
       localFindItems && marketCatalog?.inventoryCommand
-        ? new Proxy(localFindItems, {
-            get(target, property) {
-              if (property === "applyInventoryCommand")
-                return marketCatalog.inventoryCommand;
-              const value = Reflect.get(target, property);
-              return typeof value === "function" ? value.bind(target) : value;
-            },
-          })
+        ? withMarketInventory(localFindItems, marketCatalog.inventoryCommand)
         : localFindItems,
     [localFindItems, marketCatalog],
   );
@@ -2106,50 +2111,73 @@ export function AuthenticatedMapHomeView({
     suspended: courierSuspended,
   });
   const [pickupOrder, setPickupOrder] = useState<string>();
-  const attemptedPickups = useRef(new Set<string>());
   const { accept: acceptCourier, returnHome: flyHome } = courier;
   const { arrive: deliverSpecial } = special;
+  // A paid order is an invitation, never authorization to launch the courier
+  // automatically. Identity remains the source of truth for pickup notices.
   const pickup = useCallback(
     (id: string) => {
-      attemptedPickups.current.add(id);
+      if (courier.flyover.active || courier.busy || courierSuspended) return;
       setPickupOrder(id);
       void acceptCourier("special");
     },
-    [acceptCourier],
+    [acceptCourier, courier.flyover.active, courier.busy, courierSuspended],
   );
+  const pendingPickupOrder = special.items.some(
+    (item) => item.order_id === pickupOrder && item.state === "paid",
+  )
+    ? pickupOrder
+    : undefined;
+  const [manualPickupBusy, setManualPickupBusy] = useState(false);
+  const [manualPickupError, setManualPickupError] = useState(false);
+  const manualVisitStarted = useRef(false);
+  const beginManualPickup = useCallback(
+    (orderId: string, point: BusinessPoint) => {
+      if (manualVisitStarted.current || !marketCatalog?.beginVisit) return;
+      // The Avaia coordinate is context for Market presentation; it is never
+      // a receipt or a claim that the Bond physically stood at this point.
+      const avaia =
+        avaiaWalk.stance(globalThis.performance.now())?.point ??
+        readWorldMemory(pubDress).avaia;
+      if (!avaia) {
+        setManualPickupError(true);
+        return;
+      }
+      manualVisitStarted.current = true;
+      setManualPickupBusy(true);
+      setManualPickupError(false);
+      void marketCatalog
+        .beginVisit({
+          point: point.pub_dress.replace(/^0xda-market-/, ""),
+          pickupOrderId: orderId,
+          avaia: { longitude: avaia.longitude, latitude: avaia.latitude },
+          // No courier plan: do not fabricate xPing travel on the way back.
+        })
+        .catch(() => {
+          manualVisitStarted.current = false;
+          setManualPickupBusy(false);
+          setManualPickupError(true);
+        });
+    },
+    [avaiaWalk, marketCatalog, pubDress],
+  );
+  const manualDeliveryAttempted = useRef(new Set<string>());
   useEffect(() => {
+    const result = marketReturn.result;
+    if (!result?.confirmed || !result.itemId || result.trip) return;
+    const item = special.items.find(
+      (candidate) => candidate.order_id === result.itemId,
+    );
     if (
-      !marketReturn.checked ||
-      !observedPosition ||
-      courierSuspended ||
-      courier.flyover.active ||
-      courier.busy ||
-      courier.offer ||
-      (marketReturn.result && !marketReturn.result.confirmed) ||
-      (marketReturn.result?.itemId &&
-        special.items.some(
-          (item) =>
-            item.order_id === marketReturn.result?.itemId &&
-            item.state === "in_transit",
-        ))
+      item?.state !== "in_transit" ||
+      manualDeliveryAttempted.current.has(result.itemId)
     )
       return;
-    const item = special.items.find(
-      (item) =>
-        item.state === "paid" && !attemptedPickups.current.has(item.order_id),
-    );
-    if (item) pickup(item.order_id);
-  }, [
-    special.items,
-    marketReturn.checked,
-    marketReturn.result,
-    observedPosition,
-    courierSuspended,
-    courier.flyover.active,
-    courier.busy,
-    courier.offer,
-    pickup,
-  ]);
+    manualDeliveryAttempted.current.add(result.itemId);
+    // Identity already validated/collected this item. Only now may the
+    // existing inventory delivery path resolve it without a courier flight.
+    deliverSpecial(result.itemId);
+  }, [marketReturn.result, special.items, deliverSpecial]);
   const deliveryId = marketReturn.result?.itemId;
   const returnHome = useCallback(
     (trip: Parameters<typeof flyHome>[0]) => {
@@ -3858,6 +3886,43 @@ export function AuthenticatedMapHomeView({
       }
       toasts={
         <>
+          <SpecialPickupNotice
+            items={special.items}
+            locale={locale}
+            dispatching={
+              courier.flyover.active ||
+              courier.busy ||
+              courierSuspended ||
+              special.busy
+            }
+            onSendXping={pickup}
+          />
+          <ManualMarketPickup
+            items={special.items}
+            position={
+              wheel === "avaia"
+                ? (avaiaWalk.stance(globalThis.performance.now())?.point ??
+                  readWorldMemory(pubDress).avaia)
+                : observedPosition?.declared === true
+                  ? (manualBondPoint(globalThis.performance.now()) ??
+                    observedPosition)
+                  : observedPosition
+            }
+            points={KYIV_MARKET_BUSINESS_POINTS}
+            locale={locale}
+            disabled={
+              !marketCatalog?.beginVisit ||
+              section !== "world" ||
+              courierSuspended ||
+              courier.busy ||
+              courier.flyover.active ||
+              handover !== undefined ||
+              special.busy
+            }
+            busy={manualPickupBusy}
+            failed={manualPickupError}
+            onVisit={beginManualPickup}
+          />
           {(special.retry ||
             (marketReturn.notice?.itemId &&
               special.items.some(
@@ -4965,7 +5030,7 @@ export function AuthenticatedMapHomeView({
               <MarketDeparture
                 catalog={marketCatalog}
                 plan={courier.arrival}
-                pickupOrderId={pickupOrder}
+                pickupOrderId={pendingPickupOrder}
                 avaia={
                   avaiaWalk.stance(globalThis.performance.now())?.point ??
                   readWorldMemory(pubDress).avaia

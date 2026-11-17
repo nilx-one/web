@@ -32,6 +32,7 @@ import {
   mapDistanceMeters,
   type MapObstacle,
   type MapRoad,
+  type MapRoadPreload,
   type MapObservedPosition,
   type MapObservedPositionLabel,
   type MapOrb,
@@ -402,6 +403,8 @@ export type MapSelectionMarkerFactory = (
 export type MapTapFeedbackMarkerFactory = MapLabelMarkerFactory;
 export const TAP_FEEDBACK_LIFETIME_MS = 3_000;
 export const TAP_FEEDBACK_FADE_MS = 1_000;
+/** The least time between two settles of a view that keeps moving. */
+export const SETTLE_MIN_INTERVAL_MS = 500;
 export const TAP_FEEDBACK_COLORS = {
   bond: "#37d7e5",
   avaia: "#9b6cfa",
@@ -446,6 +449,20 @@ export interface MapLibreRendererOptions {
   readonly fetchLandmarkTile?: FetchLandmarkTile;
 }
 
+/**
+ * A narrow map opens its attribution expanded and folds it on the first drag.
+ * This world follows a body, so nobody drags and the credits stayed spread
+ * over the Dock. Start folded; the button still opens them.
+ */
+function collapseAttribution(container: HTMLElement): void {
+  for (const control of container.querySelectorAll(
+    ".maplibregl-ctrl-attrib.maplibregl-compact-show",
+  )) {
+    control.classList.remove("maplibregl-compact-show");
+    control.removeAttribute("open");
+  }
+}
+
 function createMapLibreLabelMarker(
   map: MapLibreMap,
   element: HTMLElement,
@@ -456,6 +473,9 @@ function createMapLibreLabelMarker(
     anchor: "bottom",
     pitchAlignment: "viewport",
     rotationAlignment: "viewport",
+    // A label names what stands at the point. MapLibre fades a marker it
+    // believes is behind terrain to 0.2, which left the name unreadable.
+    opacityWhenCovered: "1",
   })
     .setLngLat(center)
     .addTo(map);
@@ -1029,6 +1049,25 @@ export function createMapLibreRenderer(
   const pointSelectionListeners = new Set<(point: MapPointSelection) => void>();
   const groundTapListeners = new Set<(tap: MapGroundTap) => void>();
   const landmarkListeners = new Set<() => void>();
+  /**
+   * Whether the next MapLibre "idle" is a settle: something a settle is read
+   * for has changed since the last one. See the "idle" handler in `mount`.
+   */
+  let settleDue = true;
+  let settledAt = -Infinity;
+  let settleTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  /**
+   * Tiles read ahead are held beside what the view has loaded, and MapLibre
+   * knows nothing of them: a read that fetched some is a settle of its own.
+   */
+  function settleAfterPreload(preload: MapRoadPreload): MapRoadPreload {
+    if (preload.fetched > 0) {
+      settleDue = true;
+      map?.triggerRepaint();
+    }
+    return preload;
+  }
 
   function clearLoadTimer(): void {
     if (loadTimer === undefined) {
@@ -2356,6 +2395,8 @@ export function createMapLibreRenderer(
       }
 
       publish({ kind: "loading" });
+      settleDue = true;
+      settledAt = -Infinity;
 
       try {
         ensureWorkerUrl();
@@ -2484,6 +2525,7 @@ export function createMapLibreRenderer(
           // layers, so they are restored here rather than on a timer.
           if (!presentationApplied) {
             applyPresentation(mountedMap);
+            settleDue = true;
           }
         });
         mountedMap.on("error", (event) => {
@@ -2507,8 +2549,41 @@ export function createMapLibreRenderer(
         });
         // "idle" is MapLibre saying every tile the view needs has loaded and
         // painted: the one moment new landmarks can have become readable. It
-        // fires once per settle, not once per tile.
+        // fires once per tile-free frame, not once per settle: the bodies
+        // drawn over the map ask for a frame all the time, so while the camera
+        // stands still MapLibre says "idle" on every one of them. What a
+        // settle is read for is the tiles the view holds and the view itself,
+        // and those change only when a tile arrives or the camera has moved.
+        // One "idle" after either is the settle; the rest would read the same
+        // roads, plant the same trees and wake every listener again, each
+        // frame, for an answer that cannot have changed.
+        mountedMap.on(
+          "sourcedata",
+          (event: { tile?: unknown; source?: { type?: string } }) => {
+            // The renderer's own GeoJSON sources change with what it draws,
+            // some of them every frame; nothing a settle reads lives in them.
+            if (event?.tile !== undefined && event.source?.type !== "geojson")
+              settleDue = true;
+          },
+        );
         mountedMap.on("idle", () => {
+          if (!settleDue) return;
+          // A camera that follows a walking body comes to rest a little
+          // further on every frame. Those are one walk, not sixty views a
+          // second: the settles of a moving view keep this far apart, and
+          // the last one is asked for by a frame of its own, so it is read
+          // even if nothing else draws again.
+          const wait =
+            settledAt + SETTLE_MIN_INTERVAL_MS - globalThis.performance.now();
+          if (wait > 0) {
+            settleTimer ??= globalThis.setTimeout(() => {
+              settleTimer = undefined;
+              if (map === mountedMap) mountedMap.triggerRepaint();
+            }, wait);
+            return;
+          }
+          settleDue = false;
+          settledAt = globalThis.performance.now();
           try {
             refreshBridgeStructures(mountedMap);
           } catch {
@@ -2526,8 +2601,10 @@ export function createMapLibreRenderer(
           updatePinnedLabelVisibility(mountedMap);
         });
         // Pitch and bearing move cards relative to each other without a zoom,
-        // so which ones collide is settled again once the camera stops.
+        // so which ones collide is settled again once the camera stops. A
+        // camera that stopped somewhere else also holds a different view.
         mountedMap.on("moveend", () => {
+          settleDue = true;
           updatePinnedLabelVisibility(mountedMap);
         });
         // Point-selection mode consumes the tap before ordinary world actions.
@@ -2611,7 +2688,11 @@ export function createMapLibreRenderer(
           styleResolved = true;
           styleReadyForPaint = true;
           completeFirstPaint(mountedMap, container);
+          collapseAttribution(container);
         });
+        // The control settles its compact form when the map adds it, and may
+        // again once the style has loaded.
+        collapseAttribution(container);
       } catch {
         map = undefined;
         publish({ kind: "unavailable", reason: "renderer-init-failed" });
@@ -2619,6 +2700,8 @@ export function createMapLibreRenderer(
     },
 
     unmount() {
+      if (settleTimer !== undefined) globalThis.clearTimeout(settleTimer);
+      settleTimer = undefined;
       viewportCleanup?.();
       viewportCleanup = undefined;
       stopFogPulse();
@@ -2877,11 +2960,11 @@ export function createMapLibreRenderer(
     },
 
     preloadRoads(bounds, accept) {
-      return roadTiles.preload(bounds, accept);
+      return roadTiles.preload(bounds, accept).then(settleAfterPreload);
     },
 
     preloadLandmarks(bounds, accept) {
-      return landmarkTiles.preload(bounds, accept);
+      return landmarkTiles.preload(bounds, accept).then(settleAfterPreload);
     },
 
     subscribeLandmarksChanged(listener) {
@@ -2967,6 +3050,8 @@ export function createMapLibreRenderer(
       }
 
       dimension = next;
+      // Trees stand only in the volumetric world: the next settle reads again.
+      settleDue = true;
 
       if (map !== undefined && presentationApplied) {
         applyDimension(map);

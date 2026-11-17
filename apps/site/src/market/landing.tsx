@@ -266,6 +266,19 @@ export function MarketLanding() {
 
   const pinnedLabel = uk ? "Точка переходу" : "Selected visit point";
   const purchaseVisit = visit?.visit_id;
+  // Said inside the Dock when one is open, so it keeps the Dock's own inset
+  // and stays clear of the side tab.
+  const balanceNote = visit
+    ? `${visit.seeds} seeds · ${
+        visit.seeds_authority === "identity_snapshot"
+          ? uk
+            ? "баланс на момент переходу; перед покупкою буде перевірено знову"
+            : "balance at handoff; checked again before purchase"
+          : uk
+            ? "дані пристрою, не підтверджений баланс"
+            : "device display only, not a verified balance"
+      }`
+    : undefined;
 
   const content = (
     <section className="market-dock">
@@ -277,21 +290,13 @@ export function MarketLanding() {
         </p>
       ) : (
         <>
-          {visit && (
-            <p>
-              {visit.seeds} seeds ·{" "}
-              {visit.seeds_authority === "identity_snapshot"
-                ? uk
-                  ? "баланс на момент переходу; перед покупкою буде перевірено знову"
-                  : "balance at handoff; checked again before purchase"
-                : uk
-                  ? "дані пристрою, не підтверджений баланс"
-                  : "device display only, not a verified balance"}
-            </p>
+          {visit && !selected && (
+            <p className="market-dock__notice">{balanceNote}</p>
           )}
           {selected ? (
             <MarketDock
               catalog={dependencies.catalog}
+              {...(balanceNote === undefined ? {} : { note: balanceNote })}
               plan={{
                 destination: selected,
                 origin: selected.coordinate,

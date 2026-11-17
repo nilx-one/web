@@ -23,13 +23,18 @@ const visit = {
   avaia: { longitude: 30.5, latitude: 50.4 },
   plan,
 };
-const response = () =>
-  new Response(JSON.stringify({ code: "a".repeat(43) }), { status: 201 });
+const response = (
+  action = "https://0xda-market.nilx.one/nilx-browser/exchange",
+) =>
+  new Response(JSON.stringify({ code: "a".repeat(43), action }), {
+    status: 201,
+  });
 
 afterEach(() => {
   document.querySelectorAll("form").forEach((form) => form.remove());
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 it("continues the one-time handoff if sessionStorage is restricted", async () => {
@@ -98,4 +103,92 @@ it("sends no empty credential when the host has none", async () => {
   expect(request.mock.calls[0]?.[1]?.headers).not.toHaveProperty(
     "authorization",
   );
+});
+
+it("sends only the coordinates of a remembered Avaia position", async () => {
+  const request = vi.fn().mockResolvedValue(response());
+  vi.stubGlobal("fetch", request);
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  const remembered = { longitude: 30.5, latitude: 50.4, bearingDeg: 90 };
+  await beginMarketVisit({ ...visit, avaia: remembered });
+  const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body)) as {
+    avaia: unknown;
+  };
+  expect(requestBody.avaia).toEqual({ longitude: 30.5, latitude: 50.4 });
+});
+
+it("follows the signed-in TEST Identity's exchange origin without a production fallback", async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValue(
+      response("https://market-test.onrender.com/nilx-browser/exchange"),
+    );
+  vi.stubGlobal("fetch", request);
+  const submit = vi
+    .spyOn(HTMLFormElement.prototype, "submit")
+    .mockImplementation(() => {});
+  await beginMarketVisit(visit);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(document.querySelector("form")?.action).toBe(
+    "https://market-test.onrender.com/nilx-browser/exchange",
+  );
+});
+
+it("never sends a one-time code to a malformed or unsafe exchange", async () => {
+  const submit = vi
+    .spyOn(HTMLFormElement.prototype, "submit")
+    .mockImplementation(() => {});
+  for (const action of [
+    "http://market-test.onrender.com/nilx-browser/exchange",
+    "https://evil.example/another-endpoint",
+    "https://user:pass@market-test.onrender.com/nilx-browser/exchange",
+    "https://market-test.onrender.com/nilx-browser/exchange?redirect=evil",
+    "https://market-test.onrender.com/nilx-browser/exchange#token",
+  ]) {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(action)));
+    await expect(beginMarketVisit(visit)).rejects.toThrow(
+      "Invalid Market exchange",
+    );
+  }
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("fails closed when an older or malformed Identity omits exchange action", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ code: "a".repeat(43) }), { status: 201 }),
+      ),
+  );
+  const submit = vi
+    .spyOn(HTMLFormElement.prototype, "submit")
+    .mockImplementation(() => {});
+  await expect(beginMarketVisit(visit)).rejects.toThrow(
+    "Missing Market exchange",
+  );
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it("does not preserve a stale xPing return route after a manual Market visit", async () => {
+  sessionStorage.setItem(
+    "nilx-one.market.trip",
+    JSON.stringify({ version: 1, plan }),
+  );
+  const request = vi.fn().mockResolvedValue(response());
+  vi.stubGlobal("fetch", request);
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  await beginMarketVisit({
+    point: "zoloti-vorota",
+    avaia: { longitude: 30.5, latitude: 50.4 },
+    pickupOrderId: "paid-order-123",
+  });
+  expect(sessionStorage.getItem("nilx-one.market.trip")).toBeNull();
+  expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+    point: "zoloti-vorota",
+    avaia: { longitude: 30.5, latitude: 50.4 },
+    pickup_order_id: "paid-order-123",
+    return_path: "/",
+  });
 });

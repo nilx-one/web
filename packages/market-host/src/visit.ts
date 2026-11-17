@@ -13,6 +13,28 @@ export function createMarketVisit(
   return (input) => beginMarketVisit(input, authorization?.());
 }
 
+/**
+ * The trusted same-origin Identity endpoint supplies the exact Market action.
+ * The browser does not invent a production URL when TEST Identity is in use.
+ * Treat response fields as untrusted until the HTTPS exchange route is checked.
+ */
+export function marketExchangeAction(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Missing Market exchange");
+  const action = new URL(value);
+  if (
+    action.protocol !== "https:" ||
+    !action.hostname ||
+    action.username ||
+    action.password ||
+    action.pathname !== "/nilx-browser/exchange" ||
+    action.search ||
+    action.hash
+  ) {
+    throw new Error("Invalid Market exchange");
+  }
+  return action.href;
+}
+
 async function beginMarketVisit(
   input: Parameters<NonNullable<EmbeddedMarketCatalogPort["beginVisit"]>>[0],
   authorization: string | undefined,
@@ -20,10 +42,16 @@ async function beginMarketVisit(
   // The optional return-trip hint is not required to authenticate at Market.
   // Blocked storage must not prevent an otherwise valid server handoff.
   try {
-    sessionStorage.setItem(
-      "nilx-one.market.trip",
-      JSON.stringify({ version: 1, plan: input.plan }),
-    );
+    if (input.plan) {
+      sessionStorage.setItem(
+        "nilx-one.market.trip",
+        JSON.stringify({ version: 1, plan: input.plan }),
+      );
+    } else {
+      // An Avaia/Bond visit is not an xPing flight. A previous trip in this
+      // tab must not send a courier home from a manual pickup.
+      sessionStorage.removeItem("nilx-one.market.trip");
+    }
   } catch {
     // This tab can still browse Market; return-flight integration is separate.
   }
@@ -47,7 +75,12 @@ async function beginMarketVisit(
         point: input.point,
         // The server reads seeds from the authoritative Identity wallet.
         // Never ship a browser inventory amount across the market handoff.
-        avaia: input.avaia,
+        // Identity refuses unknown fields. A remembered position also
+        // carries a bearing, so name the two the contract takes.
+        avaia: {
+          longitude: input.avaia.longitude,
+          latitude: input.avaia.latitude,
+        },
         ...(input.pickupOrderId
           ? { pickup_order_id: input.pickupOrderId }
           : {}),
@@ -57,14 +90,17 @@ async function beginMarketVisit(
       }),
     });
     if (!response.ok) throw new Error("Market handoff unavailable");
-    const body = (await response.json()) as { code?: unknown };
+    const body = (await response.json()) as {
+      code?: unknown;
+      action?: unknown;
+    };
     if (typeof body.code !== "string" || !/^[\w-]{43}$/.test(body.code))
       throw new Error("Invalid handoff");
     // Do not navigate after a changed selection cancels the old request.
     if (controller.signal.aborted) throw new Error("Market visit cancelled");
     const form = document.createElement("form");
     form.method = "POST";
-    form.action = "https://0xda-market.nilx.one/nilx-browser/exchange";
+    form.action = marketExchangeAction(body.action);
     const code = document.createElement("input");
     code.type = "hidden";
     code.name = "code";

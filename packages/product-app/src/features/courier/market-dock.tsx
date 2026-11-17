@@ -50,7 +50,8 @@ export interface EmbeddedMarketCatalogPort {
     point: string;
     pickupOrderId?: string;
     avaia: { longitude: number; latitude: number };
-    plan: CourierPlan;
+    /** Present only when an actual xPing flight is the visit's origin. */
+    plan?: CourierPlan;
     /** Abort a stale handoff if the selected arrival changes. */
     signal?: AbortSignal;
   }): Promise<void>;
@@ -119,6 +120,7 @@ const messages = {
     browseOnly: "Придбання за seeds ще не підключено.",
     license: "0xda-market · ліцензія MIT",
     buy: "Купити за {amount} seeds",
+    seeds: "{amount} seeds",
     placing: "Оформлюємо замовлення…",
     waiting: "Очікуємо підтвердження від 0x1…",
     purchased: "Придбано. Повертаємось до 0x1…",
@@ -138,6 +140,7 @@ const messages = {
     browseOnly: "Покупка за seeds ещё не подключена.",
     license: "0xda-market · лицензия MIT",
     buy: "Купить за {amount} seeds",
+    seeds: "{amount} seeds",
     placing: "Оформляем заказ…",
     waiting: "Ожидаем подтверждения от 0x1…",
     purchased: "Куплено. Возвращаемся в 0x1…",
@@ -157,6 +160,7 @@ const messages = {
     browseOnly: "Purchases with seeds are not connected yet.",
     license: "0xda-market · MIT License",
     buy: "Buy for {amount} seeds",
+    seeds: "{amount} seeds",
     placing: "Placing the order…",
     waiting: "Waiting for 0x1 to confirm…",
     purchased: "Purchased. Returning to 0x1…",
@@ -185,6 +189,7 @@ export function MarketDock({
   plan,
   catalog,
   checkout,
+  note,
   onPurchased,
   onClose,
 }: {
@@ -192,6 +197,8 @@ export function MarketDock({
   catalog: EmbeddedMarketCatalogPort;
   /** Absent, the Dock only browses: no purchase is offered. */
   checkout?: EmbeddedMarketCheckoutPort;
+  /** A line the host wants inside the Dock, under the point's own notice. */
+  note?: string;
   /** A fulfilled order; the host takes the tab back to 0x1. */
   onPurchased?(order: EmbeddedMarketOrder): void;
   onClose(): void;
@@ -243,6 +250,15 @@ export function MarketDock({
       ? state.products.find((product) => product.id === selectedId)
       : undefined;
   const offer = selected && offers.find((item) => item.sku === selected.id);
+  // A product sold for seeds has no fiat price in the catalog: it is priced by
+  // its offer, which is what the Buy button charges.
+  const priceOf = (product: EmbeddedMarketProduct) => {
+    if (product.price !== null) return product.price;
+    const seeds = offers.find((item) => item.sku === product.id);
+    return seeds
+      ? copy.seeds.replace("{amount}", String(seeds.amountMinor))
+      : copy.unavailable;
+  };
   // Another product is another purchase: its attempt and outcome start over.
   const select = (id: string | undefined) => {
     attempt.current = undefined;
@@ -298,6 +314,7 @@ export function MarketDock({
         {!plan.destination.isVerified && (
           <p className="market-dock__notice">{copy.preview}</p>
         )}
+        {note !== undefined && <p className="market-dock__notice">{note}</p>}
         <div className="market-dock__body">
           <h2 className="market-dock__category">0x1</h2>
           {state.kind === "loading" && <p role="status">{copy.loading}</p>}
@@ -332,7 +349,7 @@ export function MarketDock({
                   }
                 >
                   <strong>{product.name}</strong>
-                  <span>{product.price ?? copy.unavailable}</span>
+                  <span>{priceOf(product)}</span>
                 </button>
               ))}
             </div>
@@ -340,7 +357,7 @@ export function MarketDock({
           {selected && (
             <section className="market-dock__detail" aria-live="polite">
               <h3>{selected.name}</h3>
-              <p>{selected.price ?? copy.unavailable}</p>
+              <p>{priceOf(selected)}</p>
               {offer ? (
                 <>
                   {purchase.kind !== "purchased" && (

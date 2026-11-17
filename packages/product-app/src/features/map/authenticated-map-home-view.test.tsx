@@ -698,6 +698,22 @@ describe("AuthenticatedMapHomeView", () => {
     expect(onNavigate).toHaveBeenCalledExactlyOnceWith("/identity");
   });
 
+  it("hands the renderer its pinned landmarks once, not again on every render", () => {
+    const mapRenderer = renderer();
+    renderView({ mapRenderer });
+    const handed = vi.mocked(mapRenderer.setPinnedLandmarks!).mock.calls.length;
+    expect(handed).toBeGreaterThan(0);
+
+    // Any state change renders the surface again. With no host projection the
+    // pins are the same pins, and resetting the map source would keep the
+    // opening scene from ever settling.
+    fireEvent.click(
+      screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+    );
+
+    expect(mapRenderer.setPinnedLandmarks).toHaveBeenCalledTimes(handed);
+  });
+
   it("opens the Bond edit surface from the Header block's pen", () => {
     const onNavigate = vi.fn();
 

@@ -491,10 +491,21 @@ async fn main() {
         telegram_state.repository.clone(),
         Arc::clone(&surfaces),
     ));
-    // The 0x1 issuer for Market's Special orders paid in seeds. Off unless
-    // MARKET_ISSUER_WORKER=1; a misconfigured worker stops start-up loudly.
-    if let Some(config) = identity_bot::market_issuer::MarketIssuerConfig::from_environment() {
-        let config = config.expect("MARKET_ISSUER_WORKER must satisfy the market issuer contract");
+    // A service that can hand a Bond to Market also settles what that Bond
+    // buys there: the issuer worker follows the handoff secret, with no switch
+    // of its own. A development service must still target its isolated TEST
+    // Market, never production's.
+    if let Some(config) = identity_bot::market_issuer_config() {
+        if std::env::var("DEPLOY_ENV").as_deref() == Ok("development") {
+            let browser = std::env::var("NILX_MARKET_BROWSER_ORIGIN").unwrap_or_default();
+            let issuer = std::env::var("MARKET_ISSUER_URL").unwrap_or_default();
+            assert!(
+                identity_bot::development_market_issuer_endpoint_allowed(&browser, &issuer),
+                "development issuer must target its isolated TEST Market origin"
+            );
+        }
+        let config =
+            config.expect("NILX_BROWSER_HANDOFF_TOKEN must satisfy the market issuer contract");
         let interval = config.poll_interval;
         info!(market = %config.base_url, "starting market issuer worker");
         let market = identity_bot::market_issuer::HttpMarketIssuer::new(config)
@@ -504,13 +515,9 @@ async fn main() {
             market,
             Arc::new(identity_bot::market_issuer::system_now_ms),
         );
-        let worker = if std::env::var("DEPLOY_ENV").as_deref() == Ok("development")
-            && std::env::var("MARKET_SPECIAL_ITEM_DELIVERY").as_deref() == Ok("1")
-        {
-            worker.with_paid_items()
-        } else {
-            worker
-        };
+        // A paid Special becomes an item the Bond collects and activates, not
+        // time granted at payment.
+        let worker = worker.with_paid_items();
         tokio::spawn(identity_bot::market_issuer::run_market_issuer_worker(
             worker, interval,
         ));

@@ -1,0 +1,33 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.special-pickup {
+  display: grid;
+  gap: 0.5rem;
+  width: min(100%, 26rem);
+}
+
+.special-pickup__item {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--glass-line, rgba(140, 130, 170, 0.34));
+  border-radius: 1rem;
+  background: var(--glass-background, rgba(20, 19, 28, 0.86));
+  color: inherit;
+}
+
+.special-pickup__item p {
+  margin: 0;
+}
+
+.special-pickup__item button {
+  justify-self: start;
+  font: inherit;
+  cursor: pointer;
+}
+
+.special-pickup__item button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

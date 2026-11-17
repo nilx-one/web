@@ -10,7 +10,10 @@ import type {
 import { useEffect, useMemo, useRef } from "react";
 
 import { prefersReducedMotion } from "../../shell/motion";
-import { offsetMeters } from "../ambient-drones/ambient-drone-schedule";
+import {
+  metersBetween,
+  offsetMeters,
+} from "../ambient-drones/ambient-drone-schedule";
 import {
   ANIMAL_MIN_ZOOM,
   EMPTY_GROUND,
@@ -23,8 +26,23 @@ import {
   type EagleSpec,
 } from "./ambient-animal-schedule";
 
-/** How often the animals around the camera, and their ground, are read again. */
+/**
+ * How soon the animals around the camera, and their ground, may be read
+ * again once something they depend on has changed: the camera moved on, tiles
+ * arrived, or fog lifted.
+ */
 const RESELECT_MS = 1_000;
+/**
+ * How often they are read again when nothing is known to have changed. The
+ * read walks every building, pond and footway around the camera, so a view
+ * that stands still must not pay for it every second to get the same animals.
+ */
+export const RESELECT_AT_REST_MS = 10_000;
+/**
+ * A camera that has moved less than this since the animals were chosen still
+ * looks at the same ones. The ground is read this far past their reach.
+ */
+export const RESELECT_METERS = 20;
 /** Ground animals are looked for this far around the middle of the view. */
 const GROUND_REACH_METERS = 220;
 /** An eagle is seen from further off: it is high up and large. */
@@ -134,6 +152,9 @@ export function useAmbientAnimals({
     let eagles: readonly EagleSpec[] = [];
     let ground: AnimalGround = EMPTY_GROUND;
     let selectedAt = -Infinity;
+    let selectedCentre: readonly [number, number] | undefined;
+    // Tiles arrived or fog lifted since the animals were chosen.
+    let groundChanged = true;
     let frame: number | undefined;
     let stopped = false;
 
@@ -178,7 +199,7 @@ export function useAmbientAnimals({
       const centre = view.center;
       ground = groundWithin(
         renderer,
-        boundsAround(centre, GROUND_REACH_METERS + 20),
+        boundsAround(centre, GROUND_REACH_METERS + RESELECT_METERS),
       );
       animals = animalsAround(
         centre,
@@ -189,11 +210,28 @@ export function useAmbientAnimals({
       );
       eagles = eaglesAround(centre, SKY_REACH_METERS);
       selectedAt = now;
+      selectedCentre = centre;
+      groundChanged = false;
       const kept = new Set([
         ...animals.map((animal) => animal.id),
         ...eagles.map((eagle) => eagle.id),
       ]);
       for (const id of [...shown]) if (!kept.has(id)) take(id);
+    };
+
+    // Who lives around the camera depends on where it looks, the ground the
+    // tiles describe and the fog over it, and on nothing else: the same three
+    // give the same animals, and only their poses move with the clock.
+    const selectionDue = (now: number): boolean => {
+      const age = now - selectedAt;
+      if (age < RESELECT_MS) return false;
+      if (groundChanged || selectedCentre === undefined) return true;
+      if (age >= RESELECT_AT_REST_MS) return true;
+      const view = camera();
+      return (
+        view !== undefined &&
+        metersBetween(selectedCentre, view.center) >= RESELECT_METERS
+      );
     };
 
     const draw = (now: number) => {
@@ -202,7 +240,7 @@ export function useAmbientAnimals({
         clear();
         return;
       }
-      if (now - selectedAt >= RESELECT_MS) select(now);
+      if (selectionDue(now)) select(now);
       const time = clock();
       try {
         for (const handle of [
@@ -229,7 +267,11 @@ export function useAmbientAnimals({
     const unsubscribeCamera = renderer.subscribeCamera(wake);
     // Tiles arriving can turn a spot green or wet: read the ground again.
     const unsubscribeTiles = renderer.subscribeLandmarksChanged?.(() => {
-      selectedAt = -Infinity;
+      groundChanged = true;
+    });
+    // Fog lifting lets the animals of that ground be seen.
+    const unsubscribeFog = renderer.fog?.subscribe(() => {
+      groundChanged = true;
     });
     const onVisibility = () => {
       if (pageVisible()) {
@@ -247,6 +289,7 @@ export function useAmbientAnimals({
       if (frame !== undefined) globalThis.cancelAnimationFrame(frame);
       unsubscribeCamera();
       unsubscribeTiles?.();
+      unsubscribeFog?.();
       globalThis.document?.removeEventListener(
         "visibilitychange",
         onVisibility,
