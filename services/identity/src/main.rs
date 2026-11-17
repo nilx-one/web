@@ -495,6 +495,14 @@ async fn main() {
     // but purchasing is never authorized solely by configuring that secret.
     // The issuer worker is an explicit deployment gate.
     if std::env::var("MARKET_ISSUER_WORKER").as_deref() == Ok("1") {
+        if std::env::var("DEPLOY_ENV").as_deref() == Ok("development") {
+            let browser = std::env::var("NILX_MARKET_BROWSER_ORIGIN").unwrap_or_default();
+            let issuer = std::env::var("MARKET_ISSUER_URL").unwrap_or_default();
+            assert!(
+                identity_bot::development_market_issuer_endpoint_allowed(&browser, &issuer),
+                "development issuer must target its isolated TEST Market origin"
+            );
+        }
         let config = identity_bot::market_issuer_config()
             .expect("MARKET_ISSUER_WORKER needs NILX_BROWSER_HANDOFF_TOKEN");
         let config = config.expect("MARKET_ISSUER_WORKER config must be valid");
