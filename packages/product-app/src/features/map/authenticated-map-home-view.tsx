@@ -11,6 +11,7 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useSpecialItems } from "../courier/use-special-items";
+import { SpecialPickupNotice } from "../courier/special-pickup-notice";
 import { useCourier } from "../courier/use-courier";
 import { withMarketInventory } from "../courier/market-inventory-core";
 import { useMarketReturn, useReturnFlight } from "../courier/use-market-return";
@@ -2107,50 +2108,23 @@ export function AuthenticatedMapHomeView({
     suspended: courierSuspended,
   });
   const [pickupOrder, setPickupOrder] = useState<string>();
-  const attemptedPickups = useRef(new Set<string>());
   const { accept: acceptCourier, returnHome: flyHome } = courier;
   const { arrive: deliverSpecial } = special;
+  // A paid order is an invitation, never authorization to launch the courier
+  // automatically. Identity remains the source of truth for pickup notices.
   const pickup = useCallback(
     (id: string) => {
-      attemptedPickups.current.add(id);
+      if (courier.flyover.active || courier.busy || courierSuspended) return;
       setPickupOrder(id);
       void acceptCourier("special");
     },
-    [acceptCourier],
+    [acceptCourier, courier.flyover.active, courier.busy, courierSuspended],
   );
-  useEffect(() => {
-    if (
-      !marketReturn.checked ||
-      !observedPosition ||
-      courierSuspended ||
-      courier.flyover.active ||
-      courier.busy ||
-      courier.offer ||
-      (marketReturn.result && !marketReturn.result.confirmed) ||
-      (marketReturn.result?.itemId &&
-        special.items.some(
-          (item) =>
-            item.order_id === marketReturn.result?.itemId &&
-            item.state === "in_transit",
-        ))
-    )
-      return;
-    const item = special.items.find(
-      (item) =>
-        item.state === "paid" && !attemptedPickups.current.has(item.order_id),
-    );
-    if (item) pickup(item.order_id);
-  }, [
-    special.items,
-    marketReturn.checked,
-    marketReturn.result,
-    observedPosition,
-    courierSuspended,
-    courier.flyover.active,
-    courier.busy,
-    courier.offer,
-    pickup,
-  ]);
+  const pendingPickupOrder = special.items.some(
+    (item) => item.order_id === pickupOrder && item.state === "paid",
+  )
+    ? pickupOrder
+    : undefined;
   const deliveryId = marketReturn.result?.itemId;
   const returnHome = useCallback(
     (trip: Parameters<typeof flyHome>[0]) => {
@@ -3859,6 +3833,17 @@ export function AuthenticatedMapHomeView({
       }
       toasts={
         <>
+          <SpecialPickupNotice
+            items={special.items}
+            locale={locale}
+            dispatching={
+              courier.flyover.active ||
+              courier.busy ||
+              courierSuspended ||
+              special.busy
+            }
+            onSendXping={pickup}
+          />
           {(special.retry ||
             (marketReturn.notice?.itemId &&
               special.items.some(
@@ -4966,7 +4951,7 @@ export function AuthenticatedMapHomeView({
               <MarketDeparture
                 catalog={marketCatalog}
                 plan={courier.arrival}
-                pickupOrderId={pickupOrder}
+                pickupOrderId={pendingPickupOrder}
                 avaia={
                   avaiaWalk.stance(globalThis.performance.now())?.point ??
                   readWorldMemory(pubDress).avaia

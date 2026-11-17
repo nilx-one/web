@@ -58,10 +58,14 @@ it("authorizes with signed initData and never with an empty credential", () => {
 });
 
 it("opens the Market handoff for an arrival with the Telegram credential", async () => {
+  const handoff = {
+    code: "a".repeat(43),
+    action: "https://0xda-market.nilx.one/nilx-browser/exchange",
+  };
   const request = vi
     .fn()
     .mockResolvedValue(
-      new Response(JSON.stringify({ code: "a".repeat(43) }), { status: 201 }),
+      new Response(JSON.stringify(handoff), { status: 201 }),
     );
   vi.stubGlobal("fetch", request);
   const submit = vi
