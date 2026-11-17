@@ -64,9 +64,7 @@ it("opens the Market handoff for an arrival with the Telegram credential", async
   };
   const request = vi
     .fn()
-    .mockResolvedValue(
-      new Response(JSON.stringify(handoff), { status: 201 }),
-    );
+    .mockResolvedValue(new Response(JSON.stringify(handoff), { status: 201 }));
   vi.stubGlobal("fetch", request);
   const submit = vi
     .spyOn(HTMLFormElement.prototype, "submit")
