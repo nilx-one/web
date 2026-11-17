@@ -110,6 +110,23 @@ fn return_refused(refusal: ReturnRefusal, message: &'static str) -> Response {
     )
 }
 
+/// Every way a Market visit fails before the browser can leave answers 503,
+/// as before, but now names the step in the log and in the error code, so a
+/// broken handoff is read off one log line rather than guessed from the client.
+fn visit_unavailable(stage: &'static str, market_status: Option<u16>) -> Response {
+    tracing::warn!(stage, market_status, "market-visit unavailable");
+    api_error(
+        StatusCode::SERVICE_UNAVAILABLE,
+        match stage {
+            "market_refused" => "market_handoff_refused",
+            "market_unreachable" => "market_unreachable",
+            "market_body" | "market_code" => "market_handoff_invalid",
+            _ => "identity_service_unavailable",
+        },
+        "The Market is temporarily unavailable.",
+    )
+}
+
 async fn create_market_visit(
     State(state): State<ApiState>,
     headers: HeaderMap,
@@ -120,7 +137,7 @@ async fn create_market_visit(
     }
     let now = match now(&state) {
         Ok(value) => value,
-        Err(_) => return unavailable(),
+        Err(_) => return visit_unavailable("clock", None),
     };
     let (identity, active, session_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
@@ -131,20 +148,25 @@ async fn create_market_visit(
     }
     let return_path = match request.validate() {
         Ok(path) => path.to_owned(),
-        Err(refusal) => return visit_refused(refusal, "Invalid market visit context."),
+        Err(refusal) => {
+            tracing::info!(code = refusal.code(), "market-visit refused: invalid context");
+            return visit_refused(refusal, "Invalid market visit context.");
+        }
     };
     if state.limiter.consume(format!("market-visit:{}", identity.pub_dress), now, 10, 60).is_err() {
+        tracing::info!("market-visit refused: rate limited");
         return visit_refused(VisitRefusal::MarketVisitLimit, "Please retry later.");
     }
     let owner = match PubDress::from_str(&identity.pub_dress) {
         Ok(owner) => owner,
-        Err(_) => return unavailable(),
+        Err(_) => return visit_unavailable("owner", None),
     };
     if let Some(id) = &request.pickup_order_id {
         let items = match state.repository.special_items(&owner).await {
-            Ok(items) => items, Err(_) => return unavailable(),
+            Ok(items) => items, Err(_) => return visit_unavailable("pickup_items", None),
         };
         if !items.iter().any(|item| item.order_id == *id && item.state == "paid") {
+            tracing::info!("market-visit refused: pickup item is not paid and waiting");
             return visit_refused(VisitRefusal::ItemNotAvailable, "Paid item is not available for pickup.");
         }
     }
@@ -154,17 +176,17 @@ async fn create_market_visit(
         Ok(balance) => balance.to_string(),
         Err(error) => {
             tracing::error!(%error, "market-visit seeds lookup failed");
-            return unavailable();
+            return visit_unavailable("seeds", None);
         }
     };
     let token = match std::env::var("NILX_BROWSER_HANDOFF_TOKEN") {
         Ok(value) if value.len() >= 32 => value,
-        _ => return unavailable(),
+        _ => return visit_unavailable("handoff_token", None),
     };
     // Derive a partner-specific identifier. Never disclose the private subject.
     let subject = match state.repository.market_pairwise_subject(&identity.pub_dress, &state.secret_digester).await {
         Ok(value) => value,
-        Err(_) => return unavailable(),
+        Err(_) => return visit_unavailable("pairwise_subject", None),
     };
     let subject = subject.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     let mut handoff = serde_json::json!({"subject": subject, "point": request.point,
@@ -177,14 +199,14 @@ async fn create_market_visit(
     let mut bound_visit = None;
     if session_hash.len() == 32 {
         let Ok(visit_id) = crate::market_visit::new_market_visit_id() else {
-            return unavailable();
+            return visit_unavailable("visit_id", None);
         };
         let created_ms = now.saturating_mul(1000);
         if let Err(error) = state.repository.create_market_visit(
             &visit_id, &owner, &session_hash, created_ms, created_ms + crate::market_visit::MARKET_VISIT_SPEND_WINDOW_MS,
         ).await {
             tracing::error!(%error, "market visit binding failed");
-            return unavailable();
+            return visit_unavailable("visit_binding", None);
         }
         handoff["visit_id"] = serde_json::Value::String(visit_id.clone());
         bound_visit = Some(visit_id);
@@ -196,25 +218,41 @@ async fn create_market_visit(
     let Some(endpoints) =
         market_browser_endpoints(deployment.as_deref(), market_origin.as_deref())
     else {
-        return unavailable();
+        return visit_unavailable("market_origin", None);
     };
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none()).build() {
         Ok(client) => client,
-        Err(_) => return unavailable(),
+        Err(_) => return visit_unavailable("http_client", None),
     };
     let result = client.post(endpoints.handoffs)
         .bearer_auth(token)
         .json(&handoff)
         .send().await;
+    // Market's answer is the one thing Identity cannot see from its own state,
+    // so a refused handoff names Market's status and error code in the log.
     let response = match result {
         Ok(response) if response.status().as_u16() == 201 => response,
-        _ => return unavailable(),
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let error = response
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .and_then(|body| body.get("error").and_then(|v| v.as_str()).map(str::to_owned))
+                .filter(|code| code.len() <= 64 && code.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'));
+            tracing::warn!(status, error = error.as_deref().unwrap_or("-"), "market-visit: Market refused the handoff");
+            return visit_unavailable("market_refused", Some(status));
+        }
+        Err(error) => {
+            tracing::warn!(timeout = error.is_timeout(), connect = error.is_connect(), "market-visit: Market handoff request failed");
+            return visit_unavailable("market_unreachable", None);
+        }
     };
     let body: serde_json::Value = match response.json().await {
         Ok(body) => body,
-        Err(_) => return unavailable(),
+        Err(_) => return visit_unavailable("market_body", None),
     };
     // A code Market answered with that is not shaped as the contract says is a
     // fault upstream, not something to hand to a browser.
@@ -223,7 +261,7 @@ async fn create_market_visit(
         .and_then(|v| v.as_str())
         .map(|code| HandoffCode::try_from(code.to_owned()))
     else {
-        return unavailable();
+        return visit_unavailable("market_code", None);
     };
     with_session_cookie(
         no_store_json(
