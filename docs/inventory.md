@@ -69,9 +69,8 @@ In the sealed `avaia-finds` journal, as `inventory.state` events: Core's whole s
 
 ## Paid subscription items
 
-Special purchases issue an authority-owned item when the development Identity
-worker has `MARKET_SPECIAL_ITEM_DELIVERY=1` and `DEPLOY_ENV=development`. Payment
-starts no subscription time. A verified Market visit collects the paid item.
+Every Special purchase issues an authority-owned item; Identity's issuer worker
+has no switch for it. Payment starts no subscription time. A verified Market visit collects the paid item.
 xPing flies to Avaia while the camera stays with her. The notice can activate
 Special in flight. Ignoring it stores a 2×2 item at arrival, or activates it if
 no contiguous square fits. Activation starts the shared Bond/Avaia term once.
@@ -89,5 +88,4 @@ any item. Activating the subscription releases its reservation.
 
 An older Identity deployment with no paid-items endpoint retains the existing
 local inventory engine. Authentication errors, malformed replies and temporary
-server failures do not enable that fallback. Deployment and enabling issuance
-are separate from merging this integration.
+server failures do not enable that fallback.
