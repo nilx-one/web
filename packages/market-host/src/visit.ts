@@ -27,6 +27,28 @@ async function beginMarketVisit(
   } catch {
     // This tab can still browse Market; return-flight integration is separate.
   }
+/**
+ * The trusted same-origin Identity endpoint supplies the exact Market action.
+ * The browser does not invent a production URL when TEST Identity is in use.
+ * Treat response fields as untrusted until the HTTPS exchange route is checked.
+ */
+export function marketExchangeAction(value: unknown): string {
+  if (typeof value !== "string") throw new Error("Missing Market exchange");
+  const action = new URL(value);
+  if (
+    action.protocol !== "https:" ||
+    !action.hostname ||
+    action.username ||
+    action.password ||
+    action.pathname !== "/nilx-browser/exchange" ||
+    action.search ||
+    action.hash
+  ) {
+    throw new Error("Invalid Market exchange");
+  }
+  return action.href;
+}
+
   const controller = new AbortController();
   const onCancel = () => controller.abort();
   input.signal?.addEventListener("abort", onCancel, { once: true });
@@ -62,14 +84,14 @@ async function beginMarketVisit(
       }),
     });
     if (!response.ok) throw new Error("Market handoff unavailable");
-    const body = (await response.json()) as { code?: unknown };
+    const body = (await response.json()) as { code?: unknown; action?: unknown };
     if (typeof body.code !== "string" || !/^[\w-]{43}$/.test(body.code))
       throw new Error("Invalid handoff");
     // Do not navigate after a changed selection cancels the old request.
     if (controller.signal.aborted) throw new Error("Market visit cancelled");
     const form = document.createElement("form");
     form.method = "POST";
-    form.action = "https://0xda-market.nilx.one/nilx-browser/exchange";
+    form.action = marketExchangeAction(body.action);
     const code = document.createElement("input");
     code.type = "hidden";
     code.name = "code";
