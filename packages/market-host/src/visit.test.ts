@@ -117,9 +117,11 @@ it("sends only the coordinates of a remembered Avaia position", async () => {
 });
 
 it("follows the signed-in TEST Identity's exchange origin without a production fallback", async () => {
-  const request = vi.fn().mockResolvedValue(
-    response("https://market-test.onrender.com/nilx-browser/exchange"),
-  );
+  const request = vi
+    .fn()
+    .mockResolvedValue(
+      response("https://market-test.onrender.com/nilx-browser/exchange"),
+    );
   vi.stubGlobal("fetch", request);
   const submit = vi
     .spyOn(HTMLFormElement.prototype, "submit")
@@ -153,9 +155,11 @@ it("never sends a one-time code to a malformed or unsafe exchange", async () => 
 it("fails closed when an older or malformed Identity omits exchange action", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ code: "a".repeat(43) }), { status: 201 }),
-    ),
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ code: "a".repeat(43) }), { status: 201 }),
+      ),
   );
   const submit = vi
     .spyOn(HTMLFormElement.prototype, "submit")
