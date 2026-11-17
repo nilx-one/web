@@ -72,6 +72,67 @@ pub use repository::{
 };
 pub use telegram_init_data::{TelegramInitDataError, TelegramInitDataVerifier};
 
+/// Development issuer traffic must use the same isolated HTTPS TEST Market as
+/// the browser handoff. A missing or production target cannot be a fallback.
+/// This is a deployment safety rule, never proof of a customer's purchase.
+#[must_use]
+pub fn development_market_issuer_endpoint_allowed(
+    browser_origin: &str,
+    issuer_url: &str,
+) -> bool {
+    let (Ok(browser), Ok(issuer)) = (
+        url::Url::parse(browser_origin),
+        url::Url::parse(issuer_url),
+    ) else {
+        return false;
+    };
+    browser.scheme() == "https"
+        && issuer.scheme() == "https"
+        && browser.host_str().is_some()
+        && browser.host_str() != Some("0xda-market.nilx.one")
+        && browser.path() == "/"
+        && issuer.path() == "/issuer"
+        && browser.origin() == issuer.origin()
+        && browser.username().is_empty()
+        && issuer.username().is_empty()
+        && browser.password().is_none()
+        && issuer.password().is_none()
+        && browser.query().is_none()
+        && issuer.query().is_none()
+        && browser.fragment().is_none()
+        && issuer.fragment().is_none()
+}
+
+#[cfg(test)]
+mod development_market_issuer_endpoint_tests {
+    use super::development_market_issuer_endpoint_allowed as allowed;
+
+    #[test]
+    fn requires_same_separate_test_market_origin() {
+        assert!(allowed(
+            "https://market-test.onrender.com",
+            "https://market-test.onrender.com/issuer"
+        ));
+        assert!(!allowed(
+            "https://market-test.onrender.com",
+            "https://0xda-market.nilx.one/issuer"
+        ));
+        assert!(!allowed(
+            "https://0xda-market.nilx.one",
+            "https://0xda-market.nilx.one/issuer"
+        ));
+        assert!(!allowed("", "https://market-test.onrender.com/issuer"));
+        assert!(!allowed(
+            "https://market-test.onrender.com",
+            "http://market-test.onrender.com/issuer"
+        ));
+        assert!(!allowed(
+            "https://market-test.onrender.com",
+            "https://market-test.onrender.com/issuer?token=abc"
+        ));
+    }
+}
+
 /// The Market issuer follows the handoff secret: a service that can hand a Bond
 /// to Market also settles what that Bond buys there. `None` without the secret;
 /// no separate switch turns the worker or the return check on.
