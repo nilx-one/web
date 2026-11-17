@@ -24,7 +24,9 @@ const visit = {
   plan,
 };
 const response = (action = "https://0xda-market.nilx.one/nilx-browser/exchange") =>
-  new Response(JSON.stringify({ code: "a".repeat(43), action }), { status: 201 });
+  new Response(JSON.stringify({ code: "a".repeat(43), action }), {
+    status: 201,
+  });
 
 afterEach(() => {
   document.querySelectorAll("form").forEach((form) => form.remove());
@@ -139,7 +141,9 @@ it("never sends a one-time code to a malformed or unsafe exchange", async () => 
     "https://market-test.onrender.com/nilx-browser/exchange#token",
   ]) {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(action)));
-    await expect(beginMarketVisit(visit)).rejects.toThrow("Invalid Market exchange");
+    await expect(beginMarketVisit(visit)).rejects.toThrow(
+      "Invalid Market exchange",
+    );
   }
   expect(submit).not.toHaveBeenCalled();
 });
@@ -154,6 +158,8 @@ it("fails closed when an older or malformed Identity omits exchange action", asy
   const submit = vi
     .spyOn(HTMLFormElement.prototype, "submit")
     .mockImplementation(() => {});
-  await expect(beginMarketVisit(visit)).rejects.toThrow("Missing Market exchange");
+  await expect(beginMarketVisit(visit)).rejects.toThrow(
+    "Missing Market exchange",
+  );
   expect(submit).not.toHaveBeenCalled();
 });
