@@ -8,6 +8,92 @@ use nilxone_api::market::{
     HandoffCode, ReturnAnswer, ReturnQuery, ReturnRefusal, VisitAnswer, VisitRefusal, VisitRequest,
 };
 
+// The browser Market handoff is a server-controlled outbound authority, not
+// an arbitrary redirect supplied by the game or Telegram. Development must
+// choose its own HTTPS origin rather than silently reaching production.
+const PRODUCTION_MARKET_BROWSER_ORIGIN: &str = "https://0xda-market.nilx.one";
+
+#[derive(Debug, PartialEq, Eq)]
+struct MarketBrowserEndpoints {
+    handoffs: url::Url,
+    exchange: url::Url,
+}
+
+fn market_browser_endpoints(
+    deploy_env: Option<&str>,
+    configured_origin: Option<&str>,
+) -> Option<MarketBrowserEndpoints> {
+    let origin = match (deploy_env, configured_origin) {
+        (Some("development"), Some(value))
+            if value != PRODUCTION_MARKET_BROWSER_ORIGIN => value,
+        (Some("development"), _) => return None,
+        (_, Some(_)) => return None,
+        (_, None) => PRODUCTION_MARKET_BROWSER_ORIGIN,
+    };
+    let url = url::Url::parse(origin).ok()?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || url.path() != "/"
+    {
+        return None;
+    }
+    Some(MarketBrowserEndpoints {
+        handoffs: url.join("/nilx-browser/handoffs").ok()?,
+        exchange: url.join("/nilx-browser/exchange").ok()?,
+    })
+}
+
+#[cfg(test)]
+mod market_browser_endpoints_tests {
+    use super::{market_browser_endpoints, PRODUCTION_MARKET_BROWSER_ORIGIN};
+
+    #[test]
+    fn production_is_fixed_and_disallows_override() {
+        let prod = market_browser_endpoints(Some("production"), None).expect("prod");
+        assert_eq!(
+            prod.handoffs.as_str(),
+            "https://0xda-market.nilx.one/nilx-browser/handoffs"
+        );
+        assert!(market_browser_endpoints(
+            Some("production"), Some("https://other.example")
+        ).is_none());
+    }
+
+    #[test]
+    fn development_requires_distinct_https_origin() {
+        assert!(market_browser_endpoints(Some("development"), None).is_none());
+        assert!(market_browser_endpoints(
+            Some("development"), Some(PRODUCTION_MARKET_BROWSER_ORIGIN)
+        ).is_none());
+        let dev = market_browser_endpoints(
+            Some("development"), Some("https://market-test.onrender.com")
+        ).expect("isolated test origin");
+        assert_eq!(
+            dev.exchange.as_str(),
+            "https://market-test.onrender.com/nilx-browser/exchange"
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_origins() {
+        for value in [
+            "http://market-test.onrender.com",
+            "https://user:pass@market-test.onrender.com",
+            "https://market-test.onrender.com/path",
+            "https://market-test.onrender.com/?token=1",
+            "https://market-test.onrender.com/#secret",
+            "https://0xda-market.nilx.one",
+            "javascript:alert(1)",
+        ] {
+            assert!(market_browser_endpoints(Some("development"), Some(value)).is_none());
+        }
+    }
+}
+
 fn visit_refused(refusal: VisitRefusal, message: &'static str) -> Response {
     api_error(
         StatusCode::from_u16(refusal.http_status()).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY),
@@ -105,13 +191,20 @@ async fn create_market_visit(
         handoff["recipient"] = serde_json::Value::String(owner.as_str().to_owned());
         handoff["return_path"] = serde_json::Value::String(return_path);
     }
+    let deployment = std::env::var("DEPLOY_ENV").ok();
+    let market_origin = std::env::var("NILX_MARKET_BROWSER_ORIGIN").ok();
+    let Some(endpoints) =
+        market_browser_endpoints(deployment.as_deref(), market_origin.as_deref())
+    else {
+        return unavailable();
+    };
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none()).build() {
         Ok(client) => client,
         Err(_) => return unavailable(),
     };
-    let result = client.post("https://0xda-market.nilx.one/nilx-browser/handoffs")
+    let result = client.post(endpoints.handoffs)
         .bearer_auth(token)
         .json(&handoff)
         .send().await;
@@ -139,7 +232,7 @@ async fn create_market_visit(
                 code,
                 visit_id: bound_visit,
                 owner: owner.as_str().to_owned(),
-                action: "https://0xda-market.nilx.one/nilx-browser/exchange".to_owned(),
+                action: endpoints.exchange.to_string(),
             },
         ),
         cookie,
