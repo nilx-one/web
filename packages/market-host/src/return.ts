@@ -8,6 +8,7 @@ import { readPaidItems, changePaidItem } from "./items";
 const VISIT = "market_visit";
 const ORDER = "market_order";
 const TRIP = "nilx-one.market.trip";
+const MANUAL_PENDING = "nilx-one.market.manual-pending";
 
 /** Where Market sends the tab back to after a fulfilled order. */
 export function marketReturnUrl(input: {
@@ -74,6 +75,7 @@ export function createMarketReturn(
     }
     const policy = await readPolicy(core);
     const record = await readTrip(core, policy);
+    const manualPending = record ? undefined : readManualPending(policy);
     let ask: Pending;
     if (queried) {
       if (
@@ -85,10 +87,15 @@ export function createMarketReturn(
       ask = { visitId, orderId, since: Date.now() };
     } else if (record?.pending) {
       ask = record.pending;
+    } else if (manualPending) {
+      ask = manualPending;
     } else {
       return undefined;
     }
 
+    // A manual visit retains only its opaque order/visit IDs for a bounded
+    // retry; it never invents a courier route.
+    if (!record && policy) writeManualPending(ask);
     const confirmed = await confirm(ask, authorization?.(), request);
     if (confirmed) {
       if (confirmed === "item") {
@@ -98,9 +105,11 @@ export function createMarketReturn(
           const item = items.find((item) => item.order_id === ask.orderId);
           if (!item || item.state === "stored") {
             removeTrip();
+            removeManualPending();
             return { confirmed: true };
           }
-          if (!record) return { confirmed: true };
+          // Identity checks the same paid owner and original Market visit for
+          // both xPing and self-collection. No browser assertion grants items.
           if (item.state === "paid")
             await changePaidItem(
               ask.orderId,
@@ -108,6 +117,11 @@ export function createMarketReturn(
               authorization?.(),
               request,
             );
+          if (!record) {
+            removeManualPending();
+            // A walking Bond/Avaia has no xPing trip to return along.
+            return { confirmed: true, itemId: ask.orderId };
+          }
           return { confirmed: true, trip: record.plan, itemId: ask.orderId };
         } catch {
           return {
@@ -117,6 +131,7 @@ export function createMarketReturn(
         }
       }
       removeTrip();
+      removeManualPending();
       return record
         ? { confirmed: true, trip: record.plan }
         : { confirmed: true };
@@ -127,8 +142,12 @@ export function createMarketReturn(
       writeTrip(
         open ? { ...record, pending: ask } : { version: 1, plan: record.plan },
       );
+    } else if (open) {
+      writeManualPending(ask);
+    } else {
+      removeManualPending();
     }
-    return record && open
+    return open && policy
       ? { confirmed, recheckMs: policy.recheckMs }
       : { confirmed };
   };
@@ -201,6 +220,38 @@ function isPending(
 }
 
 /** The tab's route out to Market if Core says it may be flown; else none. */
+function readManualPending(
+  policy: { pendingMs: number } | undefined,
+): Pending | undefined {
+  try {
+    const raw = sessionStorage.getItem(MANUAL_PENDING);
+    if (raw === null) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (isPending(parsed, policy)) return parsed;
+  } catch {
+    // Storage can be blocked. This never proves a collection.
+  }
+  removeManualPending();
+  return undefined;
+}
+
+function writeManualPending(pending: Pending) {
+  try {
+    sessionStorage.setItem(MANUAL_PENDING, JSON.stringify(pending));
+  } catch {
+    // Identity still owns the order.
+  }
+}
+
+function removeManualPending() {
+  try {
+    sessionStorage.removeItem(MANUAL_PENDING);
+  } catch {
+    // The server owns the paid-item lifecycle.
+  }
+}
+
+/** The manual return keeps no flight; Core alone validates xPing routes. */
 async function readTrip(
   core: MarketReturnCore | undefined,
   policy: { pendingMs: number } | undefined,

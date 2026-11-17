@@ -348,3 +348,102 @@ it("retains a paid pickup for retry when collection is refused", async () => {
   ).resolves.toEqual({ confirmed: false, recheckMs: RECHECK });
   expect(stored().pending.orderId).toBe(id);
 });
+
+it("collects an Identity-confirmed paid item manually without inventing xPing", async () => {
+  const id = "paid-order-123";
+  returnTo(`?market_visit=${visitId}&market_order=${id}`);
+  const request = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async (path, options) => {
+      if (String(path).includes("market-return"))
+        return new Response(
+          JSON.stringify({
+            confirmed: true,
+            order_id: id,
+            item_delivery: true,
+          }),
+        );
+      if (options?.method === "POST")
+        return new Response(JSON.stringify({ ok: true }));
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              order_id: id,
+              sku: "0x1_special_1m",
+              state: "paid",
+              slot_x: null,
+              slot_y: null,
+            },
+          ],
+        }),
+      );
+    });
+  await expect(
+    createMarketReturn(undefined, request, core())(),
+  ).resolves.toEqual({
+    confirmed: true,
+    itemId: id,
+  });
+  expect(sessionStorage.getItem(TRIP)).toBeNull();
+  expect(sessionStorage.getItem("nilx-one.market.manual-pending")).toBeNull();
+  expect(
+    request.mock.calls.filter(([, options]) => options?.method === "POST"),
+  ).toHaveLength(1);
+});
+
+it("keeps only a manual order reference for retry if collection was refused", async () => {
+  const id = "paid-order-123";
+  returnTo(`?market_visit=${visitId}&market_order=${id}`);
+  let refuse = true;
+  const request = vi
+    .fn<typeof fetch>()
+    .mockImplementation(async (path, options) => {
+      if (String(path).includes("market-return"))
+        return new Response(
+          JSON.stringify({
+            confirmed: true,
+            order_id: id,
+            item_delivery: true,
+          }),
+        );
+      if (options?.method === "POST")
+        return refuse
+          ? new Response("{}", { status: 409 })
+          : new Response(JSON.stringify({ ok: true }));
+      return new Response(
+        JSON.stringify({
+          items: [
+            {
+              order_id: id,
+              sku: "0x1_special_1m",
+              state: "paid",
+              slot_x: null,
+              slot_y: null,
+            },
+          ],
+        }),
+      );
+    });
+  const confirm = createMarketReturn(undefined, request, core());
+  await expect(confirm()).resolves.toEqual({
+    confirmed: false,
+    recheckMs: RECHECK,
+  });
+  expect(
+    JSON.parse(
+      sessionStorage.getItem("nilx-one.market.manual-pending") ?? "null",
+    ),
+  ).toEqual({
+    visitId,
+    orderId: id,
+    since: expect.any(Number),
+  });
+  expect(sessionStorage.getItem(TRIP)).toBeNull();
+  refuse = false;
+  await expect(confirm()).resolves.toEqual({ confirmed: true, itemId: id });
+  expect(sessionStorage.getItem("nilx-one.market.manual-pending")).toBeNull();
+  expect(
+    request.mock.calls.filter(([, options]) => options?.method === "POST"),
+  ).toHaveLength(2);
+});

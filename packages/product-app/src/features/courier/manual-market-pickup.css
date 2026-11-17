@@ -1,0 +1,28 @@
+/* © 2026 aiaiaiai · aiaiaiai.org */
+/* SPDX-License-Identifier: MPL-2.0 */
+
+.manual-market-pickup {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 26rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--glass-line, rgba(140, 130, 170, 0.34));
+  border-radius: 1rem;
+  background: var(--glass-background, rgba(20, 19, 28, 0.86));
+  color: inherit;
+}
+
+.manual-market-pickup p {
+  margin: 0;
+}
+
+.manual-market-pickup button {
+  justify-self: start;
+  font: inherit;
+  cursor: pointer;
+}
+
+.manual-market-pickup button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

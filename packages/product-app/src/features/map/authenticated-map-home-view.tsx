@@ -11,6 +11,7 @@ import type { ObservedGeolocation } from "@nilx-one/host-contract";
 
 import type { CourierDirectoryPort } from "@nilx-one/application";
 import { useSpecialItems } from "../courier/use-special-items";
+import { ManualMarketPickup } from "../courier/manual-market-pickup";
 import { SpecialPickupNotice } from "../courier/special-pickup-notice";
 import { useCourier } from "../courier/use-courier";
 import { withMarketInventory } from "../courier/market-inventory-core";
@@ -31,6 +32,7 @@ import {
   type AvaiaTravelResult,
   type AvatarModelResult,
   type AvatarSelection,
+  type BusinessPoint,
   type BondProviderConnections,
   type BondProviderType,
   type CommittedAwardAccessPort,
@@ -236,6 +238,7 @@ import { pinnedLandmarks } from "./pinned-landmarks";
 import {
   marketMapPoints,
   marketPointTitle,
+  KYIV_MARKET_BUSINESS_POINTS,
   seededMarketDirectory,
   MARKET_MARKER_ONLY_OWNERS,
 } from "../courier/market-points";
@@ -2125,6 +2128,56 @@ export function AuthenticatedMapHomeView({
   )
     ? pickupOrder
     : undefined;
+  const [manualPickupBusy, setManualPickupBusy] = useState(false);
+  const [manualPickupError, setManualPickupError] = useState(false);
+  const manualVisitStarted = useRef(false);
+  const beginManualPickup = useCallback(
+    (orderId: string, point: BusinessPoint) => {
+      if (manualVisitStarted.current || !marketCatalog?.beginVisit) return;
+      // The Avaia coordinate is context for Market presentation; it is never
+      // a receipt or a claim that the Bond physically stood at this point.
+      const avaia =
+        avaiaWalk.stance(globalThis.performance.now())?.point ??
+        readWorldMemory(pubDress).avaia;
+      if (!avaia) {
+        setManualPickupError(true);
+        return;
+      }
+      manualVisitStarted.current = true;
+      setManualPickupBusy(true);
+      setManualPickupError(false);
+      void marketCatalog
+        .beginVisit({
+          point: point.pub_dress.replace(/^0xda-market-/, ""),
+          pickupOrderId: orderId,
+          avaia: { longitude: avaia.longitude, latitude: avaia.latitude },
+          // No courier plan: do not fabricate xPing travel on the way back.
+        })
+        .catch(() => {
+          manualVisitStarted.current = false;
+          setManualPickupBusy(false);
+          setManualPickupError(true);
+        });
+    },
+    [avaiaWalk, marketCatalog, pubDress],
+  );
+  const manualDeliveryAttempted = useRef(new Set<string>());
+  useEffect(() => {
+    const result = marketReturn.result;
+    if (!result?.confirmed || !result.itemId || result.trip) return;
+    const item = special.items.find(
+      (candidate) => candidate.order_id === result.itemId,
+    );
+    if (
+      item?.state !== "in_transit" ||
+      manualDeliveryAttempted.current.has(result.itemId)
+    )
+      return;
+    manualDeliveryAttempted.current.add(result.itemId);
+    // Identity already validated/collected this item. Only now may the
+    // existing inventory delivery path resolve it without a courier flight.
+    special.arrive(result.itemId);
+  }, [marketReturn.result, special.items, special.arrive]);
   const deliveryId = marketReturn.result?.itemId;
   const returnHome = useCallback(
     (trip: Parameters<typeof flyHome>[0]) => {
@@ -3843,6 +3896,32 @@ export function AuthenticatedMapHomeView({
               special.busy
             }
             onSendXping={pickup}
+          />
+          <ManualMarketPickup
+            items={special.items}
+            position={
+              wheel === "avaia"
+                ? (avaiaWalk.stance(globalThis.performance.now())?.point ??
+                  readWorldMemory(pubDress).avaia)
+                : observedPosition?.declared === true
+                  ? (manualBondPoint(globalThis.performance.now()) ??
+                    observedPosition)
+                  : observedPosition
+            }
+            points={KYIV_MARKET_BUSINESS_POINTS}
+            locale={locale}
+            disabled={
+              !marketCatalog?.beginVisit ||
+              section !== "world" ||
+              courierSuspended ||
+              courier.busy ||
+              courier.flyover.active ||
+              handover !== undefined ||
+              special.busy
+            }
+            busy={manualPickupBusy}
+            failed={manualPickupError}
+            onVisit={beginManualPickup}
           />
           {(special.retry ||
             (marketReturn.notice?.itemId &&

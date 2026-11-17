@@ -34,6 +34,7 @@ afterEach(() => {
   document.querySelectorAll("form").forEach((form) => form.remove());
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 it("continues the one-time handoff if sessionStorage is restricted", async () => {
@@ -168,4 +169,26 @@ it("fails closed when an older or malformed Identity omits exchange action", asy
     "Missing Market exchange",
   );
   expect(submit).not.toHaveBeenCalled();
+});
+
+it("does not preserve a stale xPing return route after a manual Market visit", async () => {
+  sessionStorage.setItem(
+    "nilx-one.market.trip",
+    JSON.stringify({ version: 1, plan }),
+  );
+  const request = vi.fn().mockResolvedValue(response());
+  vi.stubGlobal("fetch", request);
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  await beginMarketVisit({
+    point: "zoloti-vorota",
+    avaia: { longitude: 30.5, latitude: 50.4 },
+    pickupOrderId: "paid-order-123",
+  });
+  expect(sessionStorage.getItem("nilx-one.market.trip")).toBeNull();
+  expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toEqual({
+    point: "zoloti-vorota",
+    avaia: { longitude: 30.5, latitude: 50.4 },
+    pickup_order_id: "paid-order-123",
+    return_path: "/",
+  });
 });
