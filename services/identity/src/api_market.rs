@@ -133,6 +133,7 @@ async fn create_market_visit(
     Json(request): Json<VisitRequest>,
 ) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) {
+        tracing::info!("market-visit refused: missing CSRF header");
         return response;
     }
     let now = match now(&state) {
@@ -141,9 +142,13 @@ async fn create_market_visit(
     };
     let (identity, active, session_hash, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value,
-        Err(error) => return error.into_response(),
+        Err(error) => {
+            tracing::info!("market-visit refused: the Bond could not be authenticated");
+            return error.into_response();
+        }
     };
     if !active {
+        tracing::info!("market-visit refused: this client is not the Bond's active client");
         return with_session_cookie(session_inactive(), cookie);
     }
     let return_path = match request.validate() {
