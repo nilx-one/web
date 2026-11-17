@@ -372,7 +372,7 @@ wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
   snapshot. The binding allows a new debit for one hour; Market never sees the
   private subject or a session hash. A session that could not be minted
   browses without a purchase binding.
-- With `MARKET_ISSUER_WORKER=1`, a background worker polls Market's issuer API
+- Wherever `NILX_BROWSER_HANDOFF_TOKEN` is set, a background worker polls Market's issuer API
   (`MARKET_ISSUER_URL`, default `https://0xda-market.nilx.one/issuer`). It
   authenticates with lowercase hex HMAC-SHA256 of `nilx-market-issuer-v1` keyed
   by `NILX_BROWSER_HANDOFF_TOKEN`, as Market derives it. It recovers
@@ -393,8 +393,9 @@ wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
   purchase extends the first. The receipt keeps the duration granted. A replay
   compares SKU, price and amount and never recomputes it.
 
-The worker is off by default and has no HTTP route. Enabling it, crediting
-wallets and activating the Market catalog are separate, authorized steps.
+The worker has no switch of its own and no HTTP route: it follows the handoff
+secret. Crediting wallets and activating the Market catalog are separate,
+authorized steps.
 
 ## Secret boundary
 
@@ -474,8 +475,8 @@ read-only completion check. It requires the caller's visit and committed debit
 receipt, then reads the order through the private issuer API. Only a matching
 fulfilled order returns `confirmed: true`; redirects, browser storage, another
 Bond's receipt, pending/cancelled orders and network failures do not confirm a
-purchase. It works after visit expiry and owner rename. `MARKET_ISSUER_WORKER=1`
-and the existing issuer configuration must be present for this read.
+purchase. It works after visit expiry and owner rename. It needs only
+`NILX_BROWSER_HANDOFF_TOKEN`, the same secret the worker uses.
 
 `GET /api/v1/identity/subscription` returns the authenticated Bond's Core clock
 snapshot with a 30-second refresh deadline and `Cache-Control: no-store`.

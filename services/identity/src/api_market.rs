@@ -150,7 +150,7 @@ async fn create_market_visit(
 /// receipt and the authenticated Market fulfilment, tied to this owner's visit.
 async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
     Query(query): Query<ReturnQuery>) -> Response {
-    use crate::market_issuer::{HttpMarketIssuer, MarketIssuerConfig};
+    use crate::market_issuer::HttpMarketIssuer;
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
     let (identity, _, _, cookie) = match authenticated_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
@@ -169,7 +169,7 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
     if state.limiter.consume(format!("market-return:{}", owner.as_str()), now, 30, 60).is_err() {
         return return_refused(ReturnRefusal::MarketReturnLimit, "Please retry later.");
     }
-    let Some(Ok(config)) = MarketIssuerConfig::from_environment() else { return unavailable(); };
+    let Some(Ok(config)) = crate::market_issuer_config() else { return unavailable(); };
     let market = match HttpMarketIssuer::new(config) { Ok(client) => client, Err(_) => return unavailable() };
     let order = match market.read_order(&query.order_id).await {
         Ok(order) => order, Err(_) => return unavailable(),
