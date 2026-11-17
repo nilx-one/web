@@ -2176,8 +2176,8 @@ export function AuthenticatedMapHomeView({
     manualDeliveryAttempted.current.add(result.itemId);
     // Identity already validated/collected this item. Only now may the
     // existing inventory delivery path resolve it without a courier flight.
-    special.arrive(result.itemId);
-  }, [marketReturn.result, special.items, special.arrive]);
+    deliverSpecial(result.itemId);
+  }, [marketReturn.result, special.items, deliverSpecial]);
   const deliveryId = marketReturn.result?.itemId;
   const returnHome = useCallback(
     (trip: Parameters<typeof flyHome>[0]) => {
