@@ -449,6 +449,20 @@ export interface MapLibreRendererOptions {
   readonly fetchLandmarkTile?: FetchLandmarkTile;
 }
 
+/**
+ * A narrow map opens its attribution expanded and folds it on the first drag.
+ * This world follows a body, so nobody drags and the credits stayed spread
+ * over the Dock. Start folded; the button still opens them.
+ */
+function collapseAttribution(container: HTMLElement): void {
+  for (const control of container.querySelectorAll(
+    ".maplibregl-ctrl-attrib.maplibregl-compact-show",
+  )) {
+    control.classList.remove("maplibregl-compact-show");
+    control.removeAttribute("open");
+  }
+}
+
 function createMapLibreLabelMarker(
   map: MapLibreMap,
   element: HTMLElement,
@@ -459,6 +473,9 @@ function createMapLibreLabelMarker(
     anchor: "bottom",
     pitchAlignment: "viewport",
     rotationAlignment: "viewport",
+    // A label names what stands at the point. MapLibre fades a marker it
+    // believes is behind terrain to 0.2, which left the name unreadable.
+    opacityWhenCovered: "1",
   })
     .setLngLat(center)
     .addTo(map);
@@ -2671,7 +2688,11 @@ export function createMapLibreRenderer(
           styleResolved = true;
           styleReadyForPaint = true;
           completeFirstPaint(mountedMap, container);
+          collapseAttribution(container);
         });
+        // The control settles its compact form when the map adds it, and may
+        // again once the style has loaded.
+        collapseAttribution(container);
       } catch {
         map = undefined;
         publish({ kind: "unavailable", reason: "renderer-init-failed" });

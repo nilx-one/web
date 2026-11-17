@@ -47,7 +47,12 @@ async function beginMarketVisit(
         point: input.point,
         // The server reads seeds from the authoritative Identity wallet.
         // Never ship a browser inventory amount across the market handoff.
-        avaia: input.avaia,
+        // Identity refuses unknown fields. A remembered position also
+        // carries a bearing, so name the two the contract takes.
+        avaia: {
+          longitude: input.avaia.longitude,
+          latitude: input.avaia.latitude,
+        },
         ...(input.pickupOrderId
           ? { pickup_order_id: input.pickupOrderId }
           : {}),
