@@ -92,3 +92,36 @@ it("retries a real handoff failure explicitly", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   await waitFor(() => expect(beginVisit).toHaveBeenCalledTimes(2));
 });
+
+it("says why Identity refused the visit instead of a blind retry", async () => {
+  const refused = Object.assign(new Error("refused"), {
+    code: "session_inactive",
+  });
+  const beginVisit = vi.fn().mockRejectedValue(refused);
+  const catalog = { load: vi.fn().mockResolvedValue([]), beginVisit };
+  render(<MarketDeparture catalog={catalog} plan={plan} avaia={avaia} />);
+  expect(
+    await screen.findByText(
+      "This device is not your Bond's active client. Make it active and retry.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+});
+
+it("offers no retry for a Special that is no longer waiting", async () => {
+  const gone = Object.assign(new Error("gone"), { code: "item_not_available" });
+  const beginVisit = vi.fn().mockRejectedValue(gone);
+  const catalog = { load: vi.fn().mockResolvedValue([]), beginVisit };
+  render(
+    <MarketDeparture
+      catalog={catalog}
+      plan={plan}
+      avaia={avaia}
+      pickupOrderId="order-item1"
+    />,
+  );
+  expect(
+    await screen.findByText("This Special is no longer waiting for pickup."),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+});

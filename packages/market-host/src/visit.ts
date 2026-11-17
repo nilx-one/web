@@ -14,6 +14,20 @@ export function createMarketVisit(
 }
 
 /**
+ * Identity refused to open the Market. The code is Identity's own error code,
+ * so the departure screen can say why instead of asking for a blind retry.
+ */
+export class MarketVisitRefused extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | undefined,
+  ) {
+    super(`Market visit refused: ${code ?? status}`);
+    this.name = "MarketVisitRefused";
+  }
+}
+
+/**
  * The trusted same-origin Identity endpoint supplies the exact Market action.
  * The browser does not invent a production URL when TEST Identity is in use.
  * Treat response fields as untrusted until the HTTPS exchange route is checked.
@@ -89,7 +103,15 @@ async function beginMarketVisit(
           : "/",
       }),
     });
-    if (!response.ok) throw new Error("Market handoff unavailable");
+    if (!response.ok) {
+      const code = await response
+        .json()
+        .then((body: { error?: { code?: unknown } }) =>
+          typeof body?.error?.code === "string" ? body.error.code : undefined,
+        )
+        .catch(() => undefined);
+      throw new MarketVisitRefused(response.status, code);
+    }
     const body = (await response.json()) as {
       code?: unknown;
       action?: unknown;
