@@ -45,7 +45,11 @@ it("delivers the committed grid and refreshes the stored item", async () => {
   const catalog = { load: vi.fn(), items, changeItem };
   const hook = renderHook(() => useSpecialItems("0x0sky", catalog, id));
   await waitFor(() => expect(hook.result.current.items).toHaveLength(1));
-  act(() => hook.result.current.arrive(id));
+  let delivered: boolean | undefined;
+  await act(async () => {
+    delivered = await hook.result.current.arrive(id);
+  });
+  expect(delivered).toBe(true);
   await waitFor(() =>
     expect(hook.result.current.items[0]?.state).toBe("stored"),
   );
@@ -67,7 +71,12 @@ it("keeps a failed delivery retryable without inventing an empty inventory", asy
   await act(async () => {
     await Promise.resolve();
   });
-  act(() => hook.result.current.arrive(id));
+  let delivered: boolean | undefined;
+  await act(async () => {
+    delivered = await hook.result.current.arrive(id);
+  });
+  // Nothing was delivered, so nothing is asked about it.
+  expect(delivered).toBe(false);
   await waitFor(() => expect(hook.result.current.retry).toBeTypeOf("function"));
   expect(catalog.changeItem).not.toHaveBeenCalled();
   act(() => hook.result.current.retry?.());
@@ -87,9 +96,11 @@ it("activates without starting another delivery", async () => {
     changeItem: vi.fn(async () => {}),
   };
   const hook = renderHook(() => useSpecialItems("0x0sky", catalog, id));
+  let activated: boolean | undefined;
   await act(async () => {
-    hook.result.current.activate(id);
+    activated = await hook.result.current.activate(id);
   });
+  expect(activated).toBe(true);
   expect(catalog.changeItem).toHaveBeenCalledWith(id, { op: "activate" });
   expect(deliver).not.toHaveBeenCalled();
 });
