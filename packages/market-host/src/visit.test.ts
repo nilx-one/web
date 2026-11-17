@@ -99,3 +99,15 @@ it("sends no empty credential when the host has none", async () => {
     "authorization",
   );
 });
+
+it("sends only the coordinates of a remembered Avaia position", async () => {
+  const request = vi.fn().mockResolvedValue(response());
+  vi.stubGlobal("fetch", request);
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => {});
+  const remembered = { longitude: 30.5, latitude: 50.4, bearingDeg: 90 };
+  await beginMarketVisit({ ...visit, avaia: remembered });
+  const requestBody = JSON.parse(String(request.mock.calls[0]?.[1]?.body)) as {
+    avaia: unknown;
+  };
+  expect(requestBody.avaia).toEqual({ longitude: 30.5, latitude: 50.4 });
+});

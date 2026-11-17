@@ -21,6 +21,18 @@
   color: var(--map-ink);
   cursor: pointer;
 }
+/* A long destination keeps one line and gives way to the follow button,
+   instead of dropping its unit onto a second line. */
+.activity-stack__row button:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-stack__row button + button {
+  flex: none;
+  white-space: nowrap;
+}
 .activity-stack__row button:focus-visible {
   outline: 2px solid #00bfd4;
   outline-offset: 2px;
