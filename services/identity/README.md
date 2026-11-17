@@ -378,7 +378,8 @@ wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
   by `NILX_BROWSER_HANDOFF_TOKEN`, as Market derives it. It recovers
   `processing` orders first, then claims `pending` ones, and settles each
   Special order in one SQLite transaction keyed by the order id: seeds debit,
-  Special grant on the Core subscription clock, receipt. Then it fulfils with
+  a paid item for the Bond to collect and activate, receipt. Payment starts no
+  subscription time; activation does. Then it fulfils with
   `identity:<order id>` and the order's `term_months`, or rejects with
   `insufficient_seeds`, `session_changed`, `visit_expired`, `visit_unknown`,
   `recipient_mismatch` or `invalid_terms`.
