@@ -1374,9 +1374,13 @@ export function createMapLibreRenderer(
    * none.
    */
   function syncDroneBeacons(mounted: MapLibreMap): void {
+    const xpings = [...droneHandles.values()].filter(
+      (handle) => handle.kind === undefined || handle.kind === "xping",
+    );
+    // No xPing in the air means nothing to mark, and nothing to ask the map.
+    if (xpings.length === 0) return;
     const far = mounted.getZoom() < MAP_BODY_HANDOVER_ZOOM;
-    for (const handle of droneHandles.values()) {
-      if (handle.kind !== undefined && handle.kind !== "xping") continue;
+    for (const handle of xpings) {
       const center: [number, number] = [handle.lngLat[0], handle.lngLat[1]];
       let beacon = droneBeacons.get(handle.id);
       if (beacon === undefined) {
