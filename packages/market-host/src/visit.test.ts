@@ -23,7 +23,9 @@ const visit = {
   avaia: { longitude: 30.5, latitude: 50.4 },
   plan,
 };
-const response = (action = "https://0xda-market.nilx.one/nilx-browser/exchange") =>
+const response = (
+  action = "https://0xda-market.nilx.one/nilx-browser/exchange",
+) =>
   new Response(JSON.stringify({ code: "a".repeat(43), action }), {
     status: 201,
   });
