@@ -455,17 +455,12 @@ export interface MapLibreRendererOptions {
  * over the Dock. Start folded; the button still opens them.
  */
 function collapseAttribution(container: HTMLElement): void {
-  const fold = () => {
-    for (const control of container.querySelectorAll(
-      ".maplibregl-ctrl-attrib.maplibregl-compact-show",
-    )) {
-      control.classList.remove("maplibregl-compact-show");
-      control.removeAttribute("open");
-    }
-  };
-  fold();
-  // The control decides its compact form on its first layout pass.
-  globalThis.requestAnimationFrame?.(fold);
+  for (const control of container.querySelectorAll(
+    ".maplibregl-ctrl-attrib.maplibregl-compact-show",
+  )) {
+    control.classList.remove("maplibregl-compact-show");
+    control.removeAttribute("open");
+  }
 }
 
 function createMapLibreLabelMarker(
@@ -2693,7 +2688,10 @@ export function createMapLibreRenderer(
           styleResolved = true;
           styleReadyForPaint = true;
           completeFirstPaint(mountedMap, container);
+          collapseAttribution(container);
         });
+        // The control settles its compact form when the map adds it, and may
+        // again once the style has loaded.
         collapseAttribution(container);
       } catch {
         map = undefined;
