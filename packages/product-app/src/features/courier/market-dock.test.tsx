@@ -183,3 +183,48 @@ it("keeps browsing without a Buy button when Market offers no price", async () =
   ).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Buy/ })).toBeNull();
 });
+
+it("prices a seeds-only Special by its offer and shows the host's note inside the Dock", async () => {
+  chooseLocale("en");
+  render(
+    <MarketDock
+      plan={plan}
+      catalog={{
+        load: vi.fn().mockResolvedValue([{ ...product, price: null }]),
+      }}
+      checkout={{
+        offers: vi.fn().mockResolvedValue([{ ...offer, amountMinor: 640 }]),
+        order: vi.fn(),
+        read: vi.fn(),
+      }}
+      note="50000 seeds · balance at handoff"
+      onClose={() => {}}
+    />,
+  );
+  const card = await screen.findByRole("button", { name: /Special/ });
+  await waitFor(() => expect(card).toHaveTextContent("640 seeds"));
+  expect(card).not.toHaveTextContent("Price unavailable");
+  fireEvent.click(card);
+  expect(
+    await screen.findByRole("button", { name: "Buy for 640 seeds" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("50000 seeds · balance at handoff")).toHaveClass(
+    "market-dock__notice",
+  );
+});
+
+it("keeps saying a price is unavailable when there is neither a fiat price nor an offer", async () => {
+  chooseLocale("en");
+  render(
+    <MarketDock
+      plan={plan}
+      catalog={{
+        load: vi.fn().mockResolvedValue([{ ...product, price: null }]),
+      }}
+      onClose={() => {}}
+    />,
+  );
+  expect(
+    await screen.findByRole("button", { name: /Price unavailable/ }),
+  ).toBeInTheDocument();
+});

@@ -48,8 +48,17 @@ vi.mock("@nilx-one/market-host", () => ({
 }));
 vi.mock("@nilx-one/product-app/business", () => ({
   BusinessWorld: ({ content }: { content: ReactNode }) => <div>{content}</div>,
-  MarketDock: ({ plan }: { plan: { destination: { pub_dress: string } } }) => (
-    <div>Market point: {plan.destination.pub_dress}</div>
+  MarketDock: ({
+    plan,
+    note,
+  }: {
+    plan: { destination: { pub_dress: string } };
+    note?: string;
+  }) => (
+    <div>
+      Market point: {plan.destination.pub_dress}
+      {note === undefined ? null : <p>{note}</p>}
+    </div>
   ),
   seededMarketDirectory: {
     points: async () => ({
@@ -234,7 +243,11 @@ it("retains Identity balance and visited point from the current server handoff",
   expect(
     await screen.findByText("Market point: 0xda-market-batkivshchyna"),
   ).toBeInTheDocument();
-  expect(screen.getByText(/9360 seeds/)).toBeInTheDocument();
+  // Inside the Dock it is said once, by the Dock, not again around it.
+  expect(screen.getAllByText(/9360 seeds/)).toHaveLength(1);
+  expect(screen.getByText(/9360 seeds/)).toHaveTextContent(
+    "balance at handoff; checked again before purchase",
+  );
 });
 
 it.each([
