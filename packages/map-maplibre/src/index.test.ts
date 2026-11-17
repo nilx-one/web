@@ -51,6 +51,7 @@ import {
   type MapLabelMarker,
   type MapLabelBodyPreview,
   type MapLabelMarkerFactory,
+  XPING_BEACON_CLASS,
 } from "./index";
 
 type FakeListener = (event: {
@@ -2459,4 +2460,59 @@ it("anchors an independent Avaia label without a device observation", () => {
   expect(markers[0]?.removed).toBe(false);
   renderer.setObservedPositionLabel(null);
   expect(markers[0]?.removed).toBe(true);
+});
+
+describe("xPing far-view beacon", () => {
+  const drone = (
+    lngLat: readonly [number, number],
+    kind?: "xping" | "street" | "yard",
+  ) => ({
+    id:
+      kind === undefined || kind === "xping"
+        ? "system:xPing"
+        : `ambient:${kind}`,
+    lngLat,
+    bearingDeg: 0,
+    phase: 0,
+    reducedMotion: true,
+    ...(kind === undefined ? {} : { kind }),
+  });
+
+  it("marks xPing where its true-size body is too small to see, and hands back closer in", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = readyRenderer(fakeMap, createLabelMarker);
+    fakeMap.camera.zoom = 15;
+
+    renderer.systemDrone!.upsert(drone([30.45, 50.45]));
+
+    const beacon = markers.find((m) =>
+      m.element.classList.contains(XPING_BEACON_CLASS),
+    );
+    expect(beacon?.center).toEqual([30.45, 50.45]);
+    expect(beacon?.element.hidden).toBe(false);
+
+    renderer.systemDrone!.upsert(drone([30.46, 50.46]));
+    expect(beacon?.center).toEqual([30.46, 50.46]);
+
+    fakeMap.camera.zoom = MAP_BODY_HANDOVER_ZOOM + 1;
+    fakeMap.emit("zoom");
+    expect(beacon?.element.hidden).toBe(true);
+
+    renderer.systemDrone!.remove("system:xPing");
+    expect(beacon?.removed).toBe(true);
+  });
+
+  it("gives ambient drones no beacon", () => {
+    const fakeMap = makeFakeMap();
+    const { markers, createLabelMarker } = labelMarkers();
+    const renderer = readyRenderer(fakeMap, createLabelMarker);
+    fakeMap.camera.zoom = 15;
+
+    renderer.systemDrone!.upsert(drone([30.45, 50.45], "street"));
+
+    expect(
+      markers.some((m) => m.element.classList.contains(XPING_BEACON_CLASS)),
+    ).toBe(false);
+  });
 });
