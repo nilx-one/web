@@ -13,20 +13,6 @@ export function createMarketVisit(
   return (input) => beginMarketVisit(input, authorization?.());
 }
 
-async function beginMarketVisit(
-  input: Parameters<NonNullable<EmbeddedMarketCatalogPort["beginVisit"]>>[0],
-  authorization: string | undefined,
-): Promise<void> {
-  // The optional return-trip hint is not required to authenticate at Market.
-  // Blocked storage must not prevent an otherwise valid server handoff.
-  try {
-    sessionStorage.setItem(
-      "nilx-one.market.trip",
-      JSON.stringify({ version: 1, plan: input.plan }),
-    );
-  } catch {
-    // This tab can still browse Market; return-flight integration is separate.
-  }
 /**
  * The trusted same-origin Identity endpoint supplies the exact Market action.
  * The browser does not invent a production URL when TEST Identity is in use.
@@ -49,6 +35,20 @@ export function marketExchangeAction(value: unknown): string {
   return action.href;
 }
 
+async function beginMarketVisit(
+  input: Parameters<NonNullable<EmbeddedMarketCatalogPort["beginVisit"]>>[0],
+  authorization: string | undefined,
+): Promise<void> {
+  // The optional return-trip hint is not required to authenticate at Market.
+  // Blocked storage must not prevent an otherwise valid server handoff.
+  try {
+    sessionStorage.setItem(
+      "nilx-one.market.trip",
+      JSON.stringify({ version: 1, plan: input.plan }),
+    );
+  } catch {
+    // This tab can still browse Market; return-flight integration is separate.
+  }
   const controller = new AbortController();
   const onCancel = () => controller.abort();
   input.signal?.addEventListener("abort", onCancel, { once: true });
