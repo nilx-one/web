@@ -162,8 +162,8 @@ behavior.
 
 ## Seeds
 
-Today the identity issuer worker is the only debit. With
-`MARKET_ISSUER_WORKER=1` it polls Market's issuer API and settles each Special
+Today the identity issuer worker is the only debit. Wherever
+`NILX_BROWSER_HANDOFF_TOKEN` is set it polls Market's issuer API and settles each Special
 order in one transaction keyed by the order id: seeds debit, Special grant,
 receipt. It authenticates with lowercase hex HMAC-SHA256 of
 `nilx-market-issuer-v1`, keyed by `NILX_BROWSER_HANDOFF_TOKEN`.

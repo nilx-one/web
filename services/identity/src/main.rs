@@ -491,10 +491,11 @@ async fn main() {
         telegram_state.repository.clone(),
         Arc::clone(&surfaces),
     ));
-    // The 0x1 issuer for Market's Special orders paid in seeds. Off unless
-    // MARKET_ISSUER_WORKER=1; a misconfigured worker stops start-up loudly.
-    if let Some(config) = identity_bot::market_issuer::MarketIssuerConfig::from_environment() {
-        let config = config.expect("MARKET_ISSUER_WORKER must satisfy the market issuer contract");
+    // The 0x1 issuer for Market's Special orders paid in seeds. It runs wherever
+    // the handoff secret is set; a misconfigured worker stops start-up loudly.
+    if let Some(config) = identity_bot::market_issuer_config() {
+        let config =
+            config.expect("NILX_BROWSER_HANDOFF_TOKEN must satisfy the market issuer contract");
         let interval = config.poll_interval;
         info!(market = %config.base_url, "starting market issuer worker");
         let market = identity_bot::market_issuer::HttpMarketIssuer::new(config)
