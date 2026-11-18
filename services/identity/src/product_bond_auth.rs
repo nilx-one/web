@@ -17,7 +17,7 @@ use std::str::FromStr as _;
 
 use nilxone_identity::{
     IdentityRecord, IdentityRepository, PubDress, SecretDigester,
-    public_info::{LegacyBondMigrationRepository, ProvisionError},
+    public_info::{LegacyBondMigrationRepository, ProvisionError, PublicInfoRepository},
 };
 
 use crate::{
@@ -61,12 +61,38 @@ impl ProvisionFailure {
 #[derive(Clone)]
 pub struct ProductBondAuth {
     store: LegacyBondMigrationRepository,
+    product: PublicInfoRepository,
     digester: SecretDigester,
 }
 
 impl ProductBondAuth {
-    pub fn new(store: LegacyBondMigrationRepository, digester: SecretDigester) -> Self {
-        Self { store, digester }
+    pub fn new(
+        store: LegacyBondMigrationRepository,
+        product: PublicInfoRepository,
+        digester: SecretDigester,
+    ) -> Self {
+        Self {
+            store,
+            product,
+            digester,
+        }
+    }
+
+    /// Ends the request's product session, if it has one. Idempotent: an
+    /// unknown or expired session is not an error. Core also ends the
+    /// session's part in an open activation request.
+    pub(crate) async fn sign_out(&self, headers: &HeaderMap, now: u64) -> Result<(), ()> {
+        let Some(token) = read_cookie(headers, PRODUCT_SESSION_COOKIE) else {
+            return Ok(());
+        };
+        let digest = self.digester.digest(PRODUCT_SESSION_DOMAIN, &token);
+        let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        self.product
+            .close_session(&hex, now)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "product session sign-out failed");
+            })
     }
 
     /// Gives a person's AIS profile its Bond on their first sign-in, or

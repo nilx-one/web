@@ -36,6 +36,7 @@ struct Fixture {
     repository: IdentityRepository,
     links: ProviderLinkRepository,
     store: LegacyBondMigrationRepository,
+    product: PublicInfoRepository,
 }
 
 /// One database holding the legacy Bond `0x0sky` and an AIS profile with a
@@ -47,7 +48,7 @@ async fn fixture(bound: bool, active: bool) -> Fixture {
     let repository = IdentityRepository::connect(&url).await.expect("identity");
     let links = ProviderLinkRepository::connect(&url).await.expect("links");
     let product = PublicInfoRepository::connect(&url).await.expect("product");
-    let store = LegacyBondMigrationRepository::prepare(product)
+    let store = LegacyBondMigrationRepository::prepare(product.clone())
         .await
         .expect("migration store");
     let pool = sqlx::SqlitePool::connect(&url).await.expect("pool");
@@ -93,14 +94,20 @@ async fn fixture(bound: bool, active: bool) -> Fixture {
         repository,
         links,
         store,
+        product,
     }
 }
 
 impl Fixture {
     /// The router that serves xPing and the finds and crafts routes.
     fn pub_info(&self, enabled: bool) -> Router {
-        let product = enabled
-            .then(|| ProductBondAuth::new(self.store.clone(), native_auth().secret_digester()));
+        let product = enabled.then(|| {
+            ProductBondAuth::new(
+                self.store.clone(),
+                self.product.clone(),
+                native_auth().secret_digester(),
+            )
+        });
         crate::api::pub_info_router_with_product_bonds(
             self.repository.clone(),
             self.links.clone(),
@@ -112,8 +119,13 @@ impl Fixture {
     }
 
     fn router(&self, enabled: bool) -> Router {
-        let product = enabled
-            .then(|| ProductBondAuth::new(self.store.clone(), native_auth().secret_digester()));
+        let product = enabled.then(|| {
+            ProductBondAuth::new(
+                self.store.clone(),
+                self.product.clone(),
+                native_auth().secret_digester(),
+            )
+        });
         crate::api::router_with_product_bonds(
             self.repository.clone(),
             self.links.clone(),
@@ -254,7 +266,8 @@ async fn an_attached_bonds_product_session_works_across_the_game_routes() {
     // It reads the Bond the binding names and nothing a request supplies.
     let (_, body) = send(&app, get("/api/v1/identity", Some(&product_cookie()))).await;
     assert!(body.contains("0x0sky"), "{body}");
-    // The native context stays anonymous: it is the native session's own route.
+    // The native context, which the site reads to know who is signed in,
+    // names the Bond too.
     let (status, body) = send(
         &app,
         get("/api/v1/auth/native/context", Some(&product_cookie())),
@@ -262,7 +275,7 @@ async fn an_attached_bonds_product_session_works_across_the_game_routes() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert!(
-        body.contains("anonymous") && !body.contains("0x0sky"),
+        body.contains("authenticated") && body.contains("0x0sky"),
         "{body}"
     );
     // Not attached, or a cookie that is not a session of this store: still 401.
@@ -369,6 +382,7 @@ async fn the_map_and_location_control_accept_it_too() {
         native_auth(),
         Some(ProductBondAuth::new(
             fixture.store.clone(),
+            fixture.product.clone(),
             native_auth().secret_digester(),
         )),
     );
@@ -387,4 +401,36 @@ async fn the_map_and_location_control_accept_it_too() {
     )
     .await;
     assert_ne!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn signing_out_ends_the_aiaiaiai_sign_in_too() {
+    let fixture = fixture(true, true).await;
+    let app = fixture.router(true);
+    let (status, _) = send(&app, get("/api/v1/identity", Some(&product_cookie()))).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let logout = Request::post("/api/v1/auth/native/logout")
+        .header(header::COOKIE, product_cookie())
+        .header("x-0x1-csrf", "1")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.clone().oneshot(logout).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let cleared: Vec<String> = response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok().map(str::to_owned))
+        .collect();
+    assert!(
+        cleared
+            .iter()
+            .any(|cookie| cookie.starts_with("__Host-0x1_product=;")),
+        "{cleared:?}"
+    );
+
+    // The session is gone on the server, not just in the browser.
+    let (status, _) = send(&app, get("/api/v1/identity", Some(&product_cookie()))).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

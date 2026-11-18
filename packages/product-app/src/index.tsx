@@ -88,6 +88,10 @@ export {
   type SystemNotice,
 } from "./features/system-informer/system-informer";
 import { FailureNoticeProvider } from "./features/failures/failure-toast-region";
+import {
+  aisSignInHref,
+  readAisSignInFailure,
+} from "./features/identity/ais-sign-in";
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
   createIdentityFoundationViewModel,
@@ -370,6 +374,16 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [selection, setSelection] = useState<PubDressSelection>({
     ...DEFAULT_AUTH_SELECTION,
   });
+  // A return from aiaiaiai that did not sign the person in says why, once.
+  const [aisFailure] = useState(() =>
+    browserHost ? readAisSignInFailure(window.location.search) : undefined,
+  );
+  useEffect(() => {
+    if (aisFailure === undefined) return;
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("auth_error");
+    window.history.replaceState(window.history.state, "", clean);
+  }, [aisFailure]);
   const [password, setPassword] = useState("");
   // A verified external provider must never attach to a stored native session
   // without the person's explicit create/connect decision.
@@ -1438,6 +1452,9 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     );
   }
 
+  const aisSignIn = browserHost
+    ? { href: aisSignInHref(), failure: aisFailure }
+    : undefined;
   const providerContext = browserProviderContextQuery.data;
   const browserProviderAuth = browserHost
     ? {
@@ -1480,6 +1497,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       selection={selection}
       viewModel={viewModel}
       browserProviderAuth={browserProviderAuth}
+      aisSignIn={aisSignIn}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);

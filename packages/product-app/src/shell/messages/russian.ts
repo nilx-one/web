@@ -368,6 +368,16 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.provider.signInWith": "Войти через",
   "identity.provider.signInWithNamed": "Войти через {provider}",
   "identity.provider.web": "веб",
+  "identity.ais.signIn": "Войти через aiaiaiai",
+  "identity.ais.note":
+    "Один аккаунт для всех продуктов aiaiaiai. Bond создастся сам при первом входе.",
+  "identity.ais.failure.addressTaken":
+    "Это имя уже принадлежит другому Bond. Если это ваш Bond, войдите ниже и перенесите его в aiaiaiai.",
+  "identity.ais.failure.addressMissing":
+    "aiaiaiai не передал имя для вашего Bond. Попробуйте ещё раз.",
+  "identity.ais.failure.unavailable":
+    "Вход сейчас недоступен. Попробуйте чуть позже.",
+  "identity.ais.failure.other": "Вход не завершился. Попробуйте ещё раз.",
   "identity.provider.verified":
     "{provider} подтверждён. Выберите: создать новую идентичность или войти в существующую.",
   "identity.provider.suggested": "Создать {pubDress}",

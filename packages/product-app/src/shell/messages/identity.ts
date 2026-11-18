@@ -36,6 +36,16 @@ export const IDENTITY_EN = {
   "identity.provider.signInWith": "Sign in with",
   "identity.provider.signInWithNamed": "Sign in with {provider}",
   "identity.provider.web": "web",
+  "identity.ais.signIn": "Sign in with aiaiaiai",
+  "identity.ais.note":
+    "One account for every aiaiaiai product. Your Bond is created for you the first time.",
+  "identity.ais.failure.addressTaken":
+    "That name already belongs to another Bond. If it is yours, sign in below and move it to aiaiaiai.",
+  "identity.ais.failure.addressMissing":
+    "aiaiaiai did not give a name for your Bond. Try again.",
+  "identity.ais.failure.unavailable":
+    "Sign-in is unavailable right now. Try again shortly.",
+  "identity.ais.failure.other": "Sign-in did not complete. Try again.",
   "identity.provider.verified":
     "{provider} verified. Choose whether to create a new identity or sign in to your existing one.",
   "identity.provider.suggested": "Create {pubDress}",
@@ -221,6 +231,16 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.provider.signInWith": "Увійти через",
   "identity.provider.signInWithNamed": "Увійти через {provider}",
   "identity.provider.web": "веб",
+  "identity.ais.signIn": "Увійти через aiaiaiai",
+  "identity.ais.note":
+    "Один акаунт для всіх продуктів aiaiaiai. Bond створиться сам під час першого входу.",
+  "identity.ais.failure.addressTaken":
+    "Це ім’я вже належить іншому Bond. Якщо це ваш Bond, увійдіть нижче й перенесіть його до aiaiaiai.",
+  "identity.ais.failure.addressMissing":
+    "aiaiaiai не передав ім’я для вашого Bond. Спробуйте ще раз.",
+  "identity.ais.failure.unavailable":
+    "Вхід зараз недоступний. Спробуйте трохи згодом.",
+  "identity.ais.failure.other": "Вхід не завершився. Спробуйте ще раз.",
   "identity.provider.verified":
     "{provider} підтверджено. Оберіть: створити нову ідентичність або увійти до наявної.",
   "identity.provider.suggested": "Створити {pubDress}",
