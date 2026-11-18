@@ -1054,5 +1054,153 @@ async fn migration_routes_are_closed_unless_enabled() {
     );
 }
 
+/// A site whose own database (like production's 0x1 store) holds `legacy` and
+/// product tables, signing people in through the fixture's issuer.
+async fn provisioning_site(
+    fixture: &Fixture,
+    url: &str,
+) -> (Router, crate::ProductBondAuth, sqlx::SqlitePool) {
+    use crate::{
+        product_sign_in::ProductSignIn,
+        public_info::{LegacyBondMigrationRepository, PublicInfoRepository, PublicInfoService},
+    };
+    let _legacy = IdentityRepository::connect(url)
+        .await
+        .expect("0x1 legacy tables");
+    let product = PublicInfoRepository::connect(url).await.expect("product");
+    let service = PublicInfoService::new(
+        SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
+        product.clone(),
+    )
+    .expect("nilx-one client");
+    let store = LegacyBondMigrationRepository::prepare(product)
+        .await
+        .expect("one store");
+    let bonds = crate::ProductBondAuth::new(store, native_auth().secret_digester());
+    let site = crate::product_sign_in::router_with_bonds(
+        Some(ProductSignIn::new(service, &native_auth())),
+        None,
+        Some(bonds.clone()),
+    );
+    let pool = sqlx::SqlitePool::connect(url).await.expect("pool");
+    (site, bonds, pool)
+}
+
+async fn first_sign_in(site: &Router, fixture: &Fixture) -> (StatusCode, axum::http::HeaderMap) {
+    let (_, headers, _) = send(
+        site,
+        Request::get("/api/v1/auth/aiaiaiai/start?return=/")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let transaction = cookie_pair(&headers, "__Host-0x1_aiaiaiai");
+    let back = issuer_sign_in(fixture, &location(&headers)).await;
+    let (status, headers, _) = send(
+        site,
+        Request::get(path_and_query(&back))
+            .header(header::COOKIE, &transaction)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    (status, headers)
+}
+
+/// A person new to 0x1 signs in through the issuer and gets a Bond at the
+/// address AIS assigned; the same sign-in again changes nothing.
+#[tokio::test]
+async fn a_first_sign_in_through_the_issuer_creates_the_bond_and_a_working_session() {
+    use crate::product_sign_in::PRODUCT_SESSION_COOKIE;
+    let fixture = fixture().await;
+    let other = tempfile::NamedTempFile::new().expect("0x1 database");
+    let url = format!("sqlite://{}", other.path().display());
+    let (site, bonds, pool) = provisioning_site(&fixture, &url).await;
+
+    let (status, headers) = first_sign_in(&site, &fixture).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers.get(header::LOCATION).unwrap(), "/");
+    let session = cookie_pair(&headers, PRODUCT_SESSION_COOKIE);
+
+    let kind: String =
+        sqlx::query_scalar("SELECT identity_kind FROM identities WHERE pub_dress = '0x0sky'")
+            .fetch_one(&pool)
+            .await
+            .expect("the Bond now exists in 0x1");
+    assert_eq!(kind, "human");
+    let bound: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM legacy_bond_bindings")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(bound, 1);
+
+    // The session acts for the new Bond on the routes that accept it.
+    let api = crate::api::router_with_product_bonds(
+        IdentityRepository::connect(&url).await.unwrap(),
+        crate::provider_link::ProviderLinkRepository::connect(&url)
+            .await
+            .unwrap(),
+        crate::TelegramInitDataVerifier::new("123:test-token".to_owned(), 300),
+        None,
+        native_auth(),
+        Some(bonds),
+    );
+    let (status, body) = {
+        let (status, _, body) = send(
+            &api,
+            Request::get("/api/v1/identity/special-items")
+                .header(header::COOKIE, &session)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        (status, body)
+    };
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // Signing in again is a no-op for the Bond.
+    let (status, _) = first_sign_in(&site, &fixture).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let identities: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM identities WHERE identity_kind = 'human'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(identities, 1);
+}
+
+/// An address that already has a Bond is never linked by name: the person
+/// gets a coded error and no session.
+#[tokio::test]
+async fn a_first_sign_in_for_an_address_that_already_has_a_bond_gets_no_session() {
+    use crate::product_sign_in::PRODUCT_SESSION_COOKIE;
+    let fixture = fixture().await;
+    // The 0x1 store is the fixture's own database, where Bond 0x0sky already
+    // exists and is not attached to this AIS profile.
+    let (site, _bonds, pool) = provisioning_site(&fixture, &fixture.url).await;
+    let (status, headers) = first_sign_in(&site, &fixture).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        headers.get(header::LOCATION).unwrap(),
+        "/?auth_error=bond_address_taken"
+    );
+    assert!(
+        !headers
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .any(
+                |cookie| cookie.starts_with(&format!("{PRODUCT_SESSION_COOKIE}="))
+                    && !cookie.starts_with(&format!("{PRODUCT_SESSION_COOKIE}=;"))
+            ),
+        "no session is opened"
+    );
+    let bound: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM legacy_bond_bindings")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(bound, 0, "nothing was attached by name");
+}
+
 #[path = "product_activation_tests.rs"]
 mod product_activation;

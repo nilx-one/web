@@ -365,13 +365,22 @@ async fn main() {
     );
     let product_sign_in =
         product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
-    let (legacy_migration, product_bonds) = match product_sign_in {
+    let bond_setup = match product_sign_in {
         Some(_) => {
-            legacy_migration_from_environment(&public_origin, &database_url, &native_auth).await
+            product_bonds_from_environment(&public_origin, &database_url, &native_auth).await
         }
-        None => (None, None),
+        None => ProductBondSetup {
+            migration: None,
+            bonds: None,
+            provisioning: None,
+        },
     };
-    let product_api = product_sign_in::router_with_migration(product_sign_in, legacy_migration);
+    let product_bonds = bond_setup.bonds;
+    let product_api = product_sign_in::router_with_bonds(
+        product_sign_in,
+        bond_setup.migration,
+        bond_setup.provisioning,
+    );
     let provider_api = browser_web_auth::router(
         repository.clone(),
         provider_links.clone(),
@@ -603,48 +612,74 @@ async fn product_sign_in_from_environment(
     Some(product_sign_in::ProductSignIn::new(service, native_auth))
 }
 
-/// The opt-in legacy Bond migration (#621). Off unless the operator sets
-/// `NILXONE_LEGACY_BOND_MIGRATION=enabled`; it shares the product client and
-/// callback but uses Core's migration-only OIDC transaction. Core refuses to
-/// prepare its store unless legacy and product tables share this database.
-async fn legacy_migration_from_environment(
+/// What the opt-in Bond features need once enabled. Both share Core's store,
+/// which refuses to prepare unless legacy and product tables share this
+/// database.
+struct ProductBondSetup {
+    /// `NILXONE_LEGACY_BOND_MIGRATION=enabled`: attach an AIS identity to an
+    /// existing Bond. It shares the product client and callback but uses Core's
+    /// migration-only OIDC transaction.
+    migration: Option<product_sign_in::LegacyMigration>,
+    /// Lets the Special, xPing and craft routes accept a Bond's product session.
+    /// Present when either feature is enabled.
+    bonds: Option<identity_bot::ProductBondAuth>,
+    /// `NILXONE_AIS_NEW_BONDS=enabled`: a person's first AIS sign-in creates
+    /// their Bond.
+    provisioning: Option<identity_bot::ProductBondAuth>,
+}
+
+async fn product_bonds_from_environment(
     public_origin: &Url,
     database_url: &str,
     native_auth: &NativeAuthConfig,
-) -> (
-    Option<product_sign_in::LegacyMigration>,
-    Option<identity_bot::ProductBondAuth>,
-) {
-    if env::var("NILXONE_LEGACY_BOND_MIGRATION").as_deref() != Ok("enabled") {
-        info!("legacy Bond migration is off");
-        return (None, None);
+) -> ProductBondSetup {
+    let enabled = |key: &str| env::var(key).as_deref() == Ok("enabled");
+    let (migration_on, new_bonds_on) = (
+        enabled("NILXONE_LEGACY_BOND_MIGRATION"),
+        enabled("NILXONE_AIS_NEW_BONDS"),
+    );
+    let off = ProductBondSetup {
+        migration: None,
+        bonds: None,
+        provisioning: None,
+    };
+    if !migration_on && !new_bonds_on {
+        info!("AIS Bond features are off");
+        return off;
     }
     let Some(issuer) = env::var("AIAIAIAI_SIGN_IN_ISSUER").ok() else {
-        return (None, None);
+        return off;
     };
-    let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
-        .ok()
-        .filter(|value| !value.is_empty());
-    let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
-        .unwrap_or_else(|error| panic!("legacy migration sign-in configuration: {error}"));
-    let flow = aiaiaiai_sign_in::SignInFlow::legacy_migration(
-        aiaiaiai_sign_in::SignInClient::new(config),
-        native_auth.secret_digester(),
-    )
-    .expect("legacy migration proves only the nilx-one client");
     let repository = public_info::PublicInfoRepository::connect(database_url)
         .await
         .expect("the 0x1 product tables must initialize");
     let store = public_info::LegacyBondMigrationRepository::prepare(repository)
         .await
-        .expect("legacy migration needs legacy and product tables in one SQLite store");
-    info!("legacy Bond migration enabled");
-    let product_bonds =
-        identity_bot::ProductBondAuth::new(store.clone(), native_auth.secret_digester());
-    (
-        product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester()),
-        Some(product_bonds),
-    )
+        .expect("AIS Bonds need legacy and product tables in one SQLite store");
+    let bonds = identity_bot::ProductBondAuth::new(store.clone(), native_auth.secret_digester());
+    let migration = migration_on.then(|| {
+        let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
+            .ok()
+            .filter(|value| !value.is_empty());
+        let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
+            .unwrap_or_else(|error| panic!("legacy migration sign-in configuration: {error}"));
+        let flow = aiaiaiai_sign_in::SignInFlow::legacy_migration(
+            aiaiaiai_sign_in::SignInClient::new(config),
+            native_auth.secret_digester(),
+        )
+        .expect("legacy migration proves only the nilx-one client");
+        product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester())
+    });
+    info!(
+        migration = migration_on,
+        new_bonds = new_bonds_on,
+        "AIS Bond features enabled"
+    );
+    ProductBondSetup {
+        migration: migration.flatten(),
+        provisioning: new_bonds_on.then(|| bonds.clone()),
+        bonds: Some(bonds),
+    }
 }
 
 /// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.

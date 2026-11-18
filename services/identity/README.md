@@ -185,6 +185,24 @@ production:
 
 Deploying AIS and the site's "Sign in" button are separate steps.
 
+### New people: first sign-in creates the Bond (opt-in, off)
+
+`NILXONE_AIS_NEW_BONDS=enabled` (with sign-in on) makes the AIS callback give a
+person's first sign-in its Bond before any session exists. Core's
+`provision_new_bond` creates the human Bond at the address AIS assigned and
+binds it to the profile in one transaction; from then on the product session
+acts for it on the routes that accept one (see below). A repeat sign-in
+changes nothing.
+
+An address that already belongs to another Bond (a legacy Bond, or one made
+for another AIS account) is **never linked by name**: no Bond is created, no
+session is opened, and the callback redirects to `/?auth_error=` with
+`bond_address_taken` (owners of existing Bonds use the migration below),
+`bond_address_missing` (the sign-in carried no usable address) or
+`bond_unavailable` (storage). Needs legacy and product tables in one SQLite
+store, like migration. The feature also enables the product-session routes
+listed below, without the migration routes.
+
 ### Legacy Bond migration (opt-in, off)
 
 `NILXONE_LEGACY_BOND_MIGRATION=enabled` (with sign-in on) adds the #621 host

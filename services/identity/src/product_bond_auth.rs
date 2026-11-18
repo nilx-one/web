@@ -13,7 +13,10 @@
 //! session resolves to nothing, exactly as if no cookie had been sent.
 
 use axum::http::HeaderMap;
-use nilxone_identity::{SecretDigester, public_info::LegacyBondMigrationRepository};
+use nilxone_identity::{
+    SecretDigester,
+    public_info::{LegacyBondMigrationRepository, ProvisionError},
+};
 
 use crate::{
     browser_web_auth::read_cookie,
@@ -31,6 +34,27 @@ pub(crate) struct ProductBond {
     pub session_hash: Vec<u8>,
 }
 
+/// Why a first sign-in could not be given a Bond; the callback turns each into
+/// a coded error for the site, never a session.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ProvisionFailure {
+    /// The address AIS assigned already belongs to another Bond.
+    AddressTaken,
+    /// The sign-in carried no usable address.
+    NoAddress,
+    Unavailable,
+}
+
+impl ProvisionFailure {
+    pub(crate) const fn code(self) -> &'static str {
+        match self {
+            Self::AddressTaken => "bond_address_taken",
+            Self::NoAddress => "bond_address_missing",
+            Self::Unavailable => "bond_unavailable",
+        }
+    }
+}
+
 /// Built only when AIS sign-in and the migration store are both configured.
 #[derive(Clone)]
 pub struct ProductBondAuth {
@@ -41,6 +65,27 @@ pub struct ProductBondAuth {
 impl ProductBondAuth {
     pub fn new(store: LegacyBondMigrationRepository, digester: SecretDigester) -> Self {
         Self { store, digester }
+    }
+
+    /// Gives a person's AIS profile its Bond on their first sign-in, or
+    /// confirms it already has one. Never links an existing Bond by name:
+    /// Core refuses an address another Bond already holds.
+    pub(crate) async fn provision(
+        &self,
+        profile_id: &str,
+        now: u64,
+    ) -> Result<(), ProvisionFailure> {
+        match self.store.provision_new_bond(profile_id, now).await {
+            Ok(_) => Ok(()),
+            Err(ProvisionError::AddressTaken) => Err(ProvisionFailure::AddressTaken),
+            Err(ProvisionError::NoAddress | ProvisionError::NoProfile) => {
+                Err(ProvisionFailure::NoAddress)
+            }
+            Err(error) => {
+                tracing::error!(%error, "creating the Bond of an AIS sign-in failed");
+                Err(ProvisionFailure::Unavailable)
+            }
+        }
     }
 
     /// `Ok(None)` when the request carries no product session that resolves
