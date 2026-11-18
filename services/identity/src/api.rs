@@ -2275,6 +2275,7 @@ mod tests {
         let app = app().await;
         for (path, body) in [
             ("/api/v1/identity/special-items/test-order", r#"{"op":"activate"}"#),
+            ("/api/v1/identity/special-items/test-order", r#"{"op":"activate","confirm":true}"#),
             ("/api/v1/identity/special-items/test-order", r#"{"op":"deliver","carry":"pocket","things":[]}"#),
             ("/api/v1/identity/special-items/test-order", r#"{"op":"collect","visit_id":"x"}"#),
             ("/api/v1/identity/special-inventory", r#"{"state":"","command":{"op":"normalize"}}"#),
@@ -2286,6 +2287,16 @@ mod tests {
                 assert_eq!(response.status(), if csrf { StatusCode::UNAUTHORIZED } else { StatusCode::FORBIDDEN });
             }
         }
+    }
+
+    #[test]
+    fn activation_is_unconfirmed_unless_the_client_says_so() {
+        use super::SpecialItemCommand;
+        let parse = |body: &str| serde_json::from_str::<SpecialItemCommand>(body);
+        assert!(matches!(parse(r#"{"op":"activate"}"#), Ok(SpecialItemCommand::Activate { confirm: false })));
+        assert!(matches!(parse(r#"{"op":"activate","confirm":true}"#), Ok(SpecialItemCommand::Activate { confirm: true })));
+        assert!(parse(r#"{"op":"activate","confirm":"yes"}"#).is_err());
+        assert!(parse(r#"{"op":"activate","extend":true}"#).is_err());
     }
 
     async fn create_avaia(app: &axum::Router, cookies: &str, pub_dress: &str) {
