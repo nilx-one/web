@@ -25,4 +25,8 @@ it("walks nowhere until Core's walking graph is installed", async () => {
   expect(walk.surfaceOf("path", "footway")).toBeNull();
   expect(walk.snapDistanceM()).toBe(0);
   expect(walk.grassWeight()).toBe(Infinity);
+  // No road is read without Core either: a tile cache counts it as failed.
+  expect(() =>
+    walk.decodeTileRoads(new Uint8Array(), { z: 14, x: 0, y: 0 }),
+  ).toThrow("not installed");
 });

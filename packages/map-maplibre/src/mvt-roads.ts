@@ -1,56 +1,12 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import type { MapRoad } from "@nilx-one/map-contract";
-
-/**
- * Reads the line features of one layer of a Mapbox Vector Tile into
- * `MapRoad`s: `kind`, `kind_detail` and `is_bridge` verbatim, lines in
- * `[longitude, latitude]`. Only what a walking graph needs is decoded, with no
- * dependency beyond the platform, the way `deploy/web/landmark-kinds.mjs`
- * reads `pois`.
+/*
+ * Reads the point and polygon features of named layers of a Mapbox Vector
+ * Tile, attributes verbatim, in `[longitude, latitude]`, with no dependency
+ * beyond the platform, the way `deploy/web/landmark-kinds.mjs` reads `pois`.
+ * Roads are Core's to read: `decodeTileRoads` of `@nilx-one/walk-graph`.
  */
-export function decodeTileRoads(
-  bytes: Uint8Array,
-  tile: { readonly z: number; readonly x: number; readonly y: number },
-  layerName: string,
-): MapRoad[] {
-  const reader = protobuf(bytes);
-  while (!reader.done) {
-    const { field, wire } = reader.key();
-    if (field !== 3) {
-      reader.skip(wire);
-      continue;
-    }
-    const bytesOfLayer = reader.bytes();
-    // The name is read first; any other layer is skipped whole, undecoded.
-    if (nameOfLayer(bytesOfLayer) !== layerName) continue;
-    const layer = decodeLayer(bytesOfLayer);
-    const roads: MapRoad[] = [];
-    for (const feature of layer.features) {
-      if (feature.type !== LINESTRING) continue;
-      const kind = feature.properties["kind"];
-      if (typeof kind !== "string") continue;
-      const lines = linesOf(feature.geometry)
-        .filter((line) => line.length >= 2)
-        .map((line) =>
-          line.map(([px, py]) =>
-            toLonLat(tile, px / layer.extent, py / layer.extent),
-          ),
-        );
-      if (lines.length === 0) continue;
-      const detail = feature.properties["kind_detail"];
-      roads.push({
-        kind,
-        ...(typeof detail === "string" ? { kindDetail: detail } : {}),
-        ...(feature.properties["is_bridge"] === true ? { isBridge: true } : {}),
-        lines,
-      });
-    }
-    return roads;
-  }
-  return [];
-}
 
 /** One point feature of a layer: its id, its attributes, where it stands. */
 export interface TilePoint {
@@ -216,7 +172,6 @@ function layerOf(bytes: Uint8Array, layerName: string): Layer | undefined {
 }
 
 const POINT = 1;
-const LINESTRING = 2;
 const POLYGON = 3;
 
 type Value = string | number | boolean;

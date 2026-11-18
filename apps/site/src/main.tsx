@@ -1,7 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { installWalkGraphCore } from "@nilx-one/walk-graph";
+import { decodeTileRoads, installWalkGraphCore } from "@nilx-one/walk-graph";
 import { createBrowserReporter } from "@aiaiaiai/4x-errors-browser";
 import {
   createCoreWasmClient,
@@ -228,6 +228,7 @@ if (window.location.hostname === "0xda-market.nilx.one") {
   const fog = createFogField(localPresence);
   const [anchorLng, anchorLat] = MAP_BOOTSTRAP_CAMERA.center;
   const mapRenderer = createMapLibreRenderer({
+    decodeRoadTile: decodeTileRoads,
     createMap: createShadeMapFactory({
       runtime: fog.runtime,
       anchor: { lng: anchorLng, lat: anchorLat },

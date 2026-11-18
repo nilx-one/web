@@ -8,8 +8,6 @@ import type {
 } from "@nilx-one/map-contract";
 import { PMTiles } from "pmtiles";
 
-import { decodeTileRoads } from "./mvt-roads";
-
 /**
  * Road tiles read ahead of an outing (docs/avaia-outings.md §0.5, #312).
  *
@@ -37,6 +35,16 @@ export interface TileId {
 }
 
 export type FetchRoadTile = (tile: TileId) => Promise<readonly MapRoad[]>;
+
+/**
+ * Reads the `roads` layer of one decompressed tile. Core reads it
+ * (`decodeTileRoads` of `@nilx-one/walk-graph`); the composition root hands
+ * it over, as this package may not depend on Core. It throws when it cannot.
+ */
+export type DecodeRoadTile = (
+  bytes: Uint8Array,
+  tile: TileId,
+) => readonly MapRoad[];
 
 export interface RoadTileCache {
   /**
@@ -339,19 +347,18 @@ function clipSegmentToBounds(
 
 /**
  * Fetches road tiles from the self-hosted PMTiles archive at `url`: range
- * requests to that one file, nothing else. The archive is opened on the first
- * tile asked for.
+ * requests to that one file, nothing else, each tile's `roads` read by
+ * `decode`. The archive is opened on the first tile asked for.
  */
-export function pmtilesRoadTiles(url: string): FetchRoadTile {
+export function pmtilesRoadTiles(
+  url: string,
+  decode: DecodeRoadTile,
+): FetchRoadTile {
   let archive: PMTiles | undefined;
   return async (tile) => {
     archive ??= new PMTiles(url);
     const response = await archive.getZxy(tile.z, tile.x, tile.y);
     if (response === undefined) return [];
-    return decodeTileRoads(
-      new Uint8Array(response.data),
-      tile,
-      ROAD_SOURCE_LAYER,
-    );
+    return decode(new Uint8Array(response.data), tile);
   };
 }
