@@ -130,6 +130,15 @@ describe("shell layout contract", () => {
     expect(toasts).toContain("overflow-y: auto");
   });
 
+  it("passes map touches between notices but lets every notice be tapped", () => {
+    expect(rule(shellCss, ".app-shell__toasts")).toContain(
+      "pointer-events: none",
+    );
+    expect(rule(shellCss, ".app-shell__toasts > *")).toContain(
+      "pointer-events: auto",
+    );
+  });
+
   it("anchors a shell-less toast region to the top as well", () => {
     const region = rule(toastCss, ".toast-region");
 
