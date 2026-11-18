@@ -206,6 +206,16 @@ tables and, from then on, refuses native logins for attached Bonds. The flag
 stays off in production until the hostile E2E in #621 and a separately
 authorized rollout.
 
+With the flag on, the **Special routes only** (`/api/v1/identity/subscription`,
+`special-items`, `special-inventory`, `special-items/{order_id}`, the market
+visit and its return) also accept the AIS product session cookie
+`__Host-0x1_product` of an attached Bond. The Bond comes solely from Core's
+durable `legacy_bond_bindings` link (`resolve_session_bond`); a native session
+or provider proof is tried first and a product session never mints a native
+cookie. The `active` flag is an early answer: Core re-checks `active = 1`
+atomically at the wallet write (Core #145). Every other route still answers
+401 to a product session.
+
 ## Bond roles and location modes
 
 All hexadecimal prefixes `0`–`f` are available for new human registrations.

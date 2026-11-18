@@ -1,0 +1,75 @@
+// © 2026 aiaiaiai · aiaiaiai.org
+// SPDX-License-Identifier: MPL-2.0
+
+//! The AIS product session as an actor for an attached legacy Bond (#621,
+//! Core `docs/ais-legacy-bond-migration.md`).
+//!
+//! Only Core's durable `legacy_bond_bindings` link can turn a product session
+//! into a Bond, through `resolve_session_bond`; a public name, display name or
+//! pairwise subject never does. This module only presents the request's
+//! product cookie. The session's activity is reported, never assumed: Core
+//! re-checks `active = 1` atomically at every write it guards. A request
+//! with no, an unknown, an expired, a signed-out or an unbound product
+//! session resolves to nothing, exactly as if no cookie had been sent.
+
+use axum::http::HeaderMap;
+use nilxone_identity::{SecretDigester, public_info::LegacyBondMigrationRepository};
+
+use crate::{
+    browser_web_auth::read_cookie,
+    product_sign_in::{PRODUCT_SESSION_COOKIE, PRODUCT_SESSION_DOMAIN},
+};
+
+/// A product session's route to its attached legacy Bond.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ProductBond {
+    /// The Bond's current legacy address, as Core resolved it.
+    pub pub_dress: String,
+    /// Whether this session is the active client (early answer only).
+    pub active: bool,
+    /// The session digest bytes Core's atomic spend check takes.
+    pub session_hash: Vec<u8>,
+}
+
+/// Built only when AIS sign-in and the migration store are both configured.
+#[derive(Clone)]
+pub struct ProductBondAuth {
+    store: LegacyBondMigrationRepository,
+    digester: SecretDigester,
+}
+
+impl ProductBondAuth {
+    pub fn new(store: LegacyBondMigrationRepository, digester: SecretDigester) -> Self {
+        Self { store, digester }
+    }
+
+    /// `Ok(None)` when the request carries no product session that resolves
+    /// to an attached Bond; `Err` only when Core's store is unavailable.
+    pub(crate) async fn resolve(
+        &self,
+        headers: &HeaderMap,
+        now: u64,
+    ) -> Result<Option<ProductBond>, ()> {
+        let Some(token) = read_cookie(headers, PRODUCT_SESSION_COOKIE) else {
+            return Ok(None);
+        };
+        let digest = self.digester.digest(PRODUCT_SESSION_DOMAIN, &token);
+        let hex: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        match self.store.resolve_session_bond(&hex, now).await {
+            Ok(Some(bond)) => Ok(Some(ProductBond {
+                pub_dress: bond.pub_dress,
+                active: bond.active,
+                session_hash: digest,
+            })),
+            Ok(None) => Ok(None),
+            Err(error) => {
+                tracing::error!(%error, "product session Bond lookup failed");
+                Err(())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "product_bond_auth_tests.rs"]
+mod tests;

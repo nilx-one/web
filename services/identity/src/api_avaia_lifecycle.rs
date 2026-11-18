@@ -45,6 +45,7 @@ fn avaia_router_with_clock(
         limiter: AttemptLimiter::default(),
         provider_links,
         dummy_password_hash,
+        product: None,
     };
 
     Router::new()

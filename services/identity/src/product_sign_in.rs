@@ -40,7 +40,7 @@ use crate::{
 /// sign-in must never be mistaken for one.
 pub const PRODUCT_SESSION_COOKIE: &str = "__Host-0x1_product";
 const CSRF_HEADER: &str = "x-0x1-csrf";
-const SESSION_DOMAIN: &str = "product-session";
+pub(crate) const PRODUCT_SESSION_DOMAIN: &str = "product-session";
 const MAX_REQUEST_BYTES: usize = 1024;
 
 /// Everything the routes need once AIS sign-in is configured.
@@ -63,7 +63,7 @@ impl ProductSignIn {
     /// Only this digest reaches the database, never the token.
     fn token_hash(&self, token: &str) -> String {
         self.digester
-            .digest(SESSION_DOMAIN, token)
+            .digest(PRODUCT_SESSION_DOMAIN, token)
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect()
