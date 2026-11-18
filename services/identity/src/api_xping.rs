@@ -59,7 +59,7 @@ async fn read_xping_engine(State(state): State<ApiState>, headers: HeaderMap) ->
         Err(_) => return unavailable(),
     };
     let (identity, _active, _token_hash, cookie) =
-        match authenticated_bond(&state, &headers, now).await {
+        match authenticated_attached_bond(&state, &headers, now).await {
             Ok(value) => value,
             Err(error) => return error.into_response(),
         };
@@ -104,7 +104,7 @@ async fn command_xping_engine(
         Err(_) => return unavailable(),
     };
     let (identity, active, token_hash, cookie) =
-        match authenticated_bond(&state, &headers, now).await {
+        match authenticated_attached_bond(&state, &headers, now).await {
             Ok(value) => value,
             Err(error) => return error.into_response(),
         };

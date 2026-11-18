@@ -206,9 +206,10 @@ tables and, from then on, refuses native logins for attached Bonds. The flag
 stays off in production until the hostile E2E in #621 and a separately
 authorized rollout.
 
-With the flag on, the **Special routes only** (`/api/v1/identity/subscription`,
-`special-items`, `special-inventory`, `special-items/{order_id}`, the market
-visit and its return) also accept the AIS product session cookie
+With the flag on, the **routes whose Core writes re-check the session
+atomically** (Special: `/api/v1/identity/subscription`, `special-items`,
+`special-inventory`, `special-items/{order_id}`, the market visit and its
+return; xPing: `xping/engine`; crafts: `crafts`) also accept the AIS product session cookie
 `__Host-0x1_product` of an attached Bond. The Bond comes solely from Core's
 durable `legacy_bond_bindings` link (`resolve_session_bond`); a native session
 or provider proof is tried first and a product session never mints a native

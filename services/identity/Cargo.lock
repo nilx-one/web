@@ -1442,7 +1442,7 @@ dependencies = [
 [[package]]
 name = "nilxone-api"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=c7f117927532f9f7a5eb5299c663e4c49b3a00fd#c7f117927532f9f7a5eb5299c663e4c49b3a00fd"
+source = "git+https://github.com/nilx-one/core?rev=5d02690f899a9255271526bcdeca3135d2635c24#5d02690f899a9255271526bcdeca3135d2635c24"
 dependencies = [
  "serde",
  "serde_json",
@@ -1452,7 +1452,7 @@ dependencies = [
 [[package]]
 name = "nilxone-contracts"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=c7f117927532f9f7a5eb5299c663e4c49b3a00fd#c7f117927532f9f7a5eb5299c663e4c49b3a00fd"
+source = "git+https://github.com/nilx-one/core?rev=5d02690f899a9255271526bcdeca3135d2635c24#5d02690f899a9255271526bcdeca3135d2635c24"
 dependencies = [
  "idna",
  "idna_adapter",
@@ -1470,7 +1470,7 @@ dependencies = [
 [[package]]
 name = "nilxone-identity"
 version = "0.1.0"
-source = "git+https://github.com/nilx-one/core?rev=c7f117927532f9f7a5eb5299c663e4c49b3a00fd#c7f117927532f9f7a5eb5299c663e4c49b3a00fd"
+source = "git+https://github.com/nilx-one/core?rev=5d02690f899a9255271526bcdeca3135d2635c24#5d02690f899a9255271526bcdeca3135d2635c24"
 dependencies = [
  "argon2",
  "base64 0.22.1",

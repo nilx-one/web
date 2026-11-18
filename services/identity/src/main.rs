@@ -396,12 +396,13 @@ async fn main() {
         discord_activity_oauth.clone(),
         native_auth.clone(),
     );
-    let pub_info_api = api::pub_info_router(
+    let pub_info_api = api::pub_info_router_with_product_bonds(
         repository.clone(),
         provider_links.clone(),
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
+        product_bonds.clone(),
     );
     let speech_api = speech_config.map(|config| {
         info!("spoken lines enabled");

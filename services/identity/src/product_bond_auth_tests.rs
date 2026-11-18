@@ -95,6 +95,20 @@ async fn fixture(bound: bool, active: bool) -> Fixture {
 }
 
 impl Fixture {
+    /// The router that serves xPing and the finds and crafts routes.
+    fn pub_info(&self, enabled: bool) -> Router {
+        let product = enabled
+            .then(|| ProductBondAuth::new(self.store.clone(), native_auth().secret_digester()));
+        crate::api::pub_info_router_with_product_bonds(
+            self.repository.clone(),
+            self.links.clone(),
+            TelegramInitDataVerifier::new("123:test-token".to_owned(), 300),
+            None,
+            native_auth(),
+            product,
+        )
+    }
+
     fn router(&self, enabled: bool) -> Router {
         let product = enabled
             .then(|| ProductBondAuth::new(self.store.clone(), native_auth().secret_digester()));
@@ -247,4 +261,85 @@ async fn only_the_special_routes_accept_a_product_session() {
         body.contains("anonymous") && !body.contains("0x0sky"),
         "{body}"
     );
+}
+
+fn post_json(uri: &str, cookie: &str, body: &str) -> Request<Body> {
+    Request::post(uri)
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-0x1-csrf", "1")
+        .body(Body::from(body.to_owned()))
+        .unwrap()
+}
+
+const CRAFT: &str = r#"{"craft_id":"craft-0001","recipe":"nonsense","inputs":[]}"#;
+const ATTEST: &str = r#"{"artifact_id":"art:seg:1:2:e2961:1:0#a","finder":"bond","found_at_ms":1000,"longitude":30.5,"latitude":50.4}"#;
+const SELL: &str = r#"{"attestation_id":"nope"}"#;
+
+#[tokio::test]
+async fn xping_and_craft_start_accept_an_attached_bonds_active_product_session() {
+    let fixture = fixture(true, true).await;
+    let app = fixture.pub_info(true);
+    let (status, body) = send(
+        &app,
+        get("/api/v1/identity/xping/engine", Some(&product_cookie())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // The craft reaches Core's recipe check; it is not turned away as unauthenticated.
+    let (status, body) = send(
+        &app,
+        post_json("/api/v1/identity/crafts", &product_cookie(), CRAFT),
+    )
+    .await;
+    assert!(
+        status != StatusCode::UNAUTHORIZED && status != StatusCode::FORBIDDEN,
+        "{status}: {body}"
+    );
+}
+
+#[tokio::test]
+async fn an_inactive_product_session_cannot_start_a_craft() {
+    let fixture = fixture(true, false).await;
+    let app = fixture.pub_info(true);
+    let (status, body) = send(
+        &app,
+        post_json("/api/v1/identity/crafts", &product_cookie(), CRAFT),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert!(body.contains("session_inactive"), "{body}");
+}
+
+#[tokio::test]
+async fn attest_sell_and_the_rest_of_pub_info_stay_native_only() {
+    let fixture = fixture(true, true).await;
+    let app = fixture.pub_info(true);
+    for (uri, body) in [
+        ("/api/v1/identity/finds/attest", ATTEST),
+        ("/api/v1/identity/finds/sell", SELL),
+    ] {
+        let (status, text) = send(&app, post_json(uri, &product_cookie(), body)).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri}: {text}");
+    }
+    let (status, _) = send(
+        &app,
+        get(nilxone_api::wallet::SEEDS_PATH, Some(&product_cookie())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // Without the operator's opt-in nothing is accepted.
+    let off = fixture.pub_info(false);
+    let (status, _) = send(
+        &off,
+        get("/api/v1/identity/xping/engine", Some(&product_cookie())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, _) = send(
+        &off,
+        post_json("/api/v1/identity/crafts", &product_cookie(), CRAFT),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
