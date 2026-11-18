@@ -722,5 +722,337 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_a_product_session() {
     assert_eq!(links, 0);
 }
 
+/// Signs `0x0sky` in on the issuer page the site sent the browser to and
+/// returns the callback URL AIS redirects back with.
+async fn issuer_sign_in(fixture: &Fixture, to_issuer: &Url) -> Url {
+    let (_, page_headers, html) = send(&fixture.issuer, get(&path_and_query(to_issuer))).await;
+    let request = hidden_request(&html);
+    let browser = cookie_pair(&page_headers, BROWSER_COOKIE);
+    let (status, headers, _) = send(
+        &fixture.issuer,
+        post_form(
+            "/authorize",
+            &browser,
+            &[
+                ("request", &request),
+                ("step", "sign_in"),
+                ("pub_dress", "0x0sky"),
+                ("password", PASSWORD),
+            ],
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    location(&headers)
+}
+
+/// #621: the owner of a fresh native Bond session proves the same person in
+/// AIS through a migration-only transaction, confirms explicitly, and Core
+/// attaches the existing Bond. Afterwards an ordinary AIS sign-in restores
+/// the attached profile and the legacy session is gone.
+#[tokio::test]
+async fn an_existing_bond_owner_attaches_an_ais_identity_through_the_migration_flow() {
+    use crate::{
+        TokenFactory,
+        product_sign_in::{
+            LegacyMigration, MIGRATION_HANDLE_COOKIE, PRODUCT_SESSION_COOKIE, ProductSignIn,
+        },
+        public_info::{LegacyBondMigrationRepository, PublicInfoRepository, PublicInfoService},
+    };
+
+    let fixture = fixture().await;
+    let product = PublicInfoRepository::connect(&fixture.url)
+        .await
+        .expect("product repository");
+    let service = PublicInfoService::new(
+        SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
+        product.clone(),
+    )
+    .expect("nilx-one client");
+    let store = LegacyBondMigrationRepository::prepare(product)
+        .await
+        .expect("one SQLite store");
+    let migration = LegacyMigration::new(
+        SignInFlow::legacy_migration(fixture.client.clone(), native_auth().secret_digester())
+            .expect("nilx-one migration flow"),
+        store,
+        native_auth().secret_digester(),
+    )
+    .expect("a migration flow");
+    // An ordinary product flow is never accepted as the migration flow.
+    assert!(
+        LegacyMigration::new(
+            SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
+            LegacyBondMigrationRepository::prepare(
+                PublicInfoRepository::connect(&fixture.url).await.unwrap()
+            )
+            .await
+            .unwrap(),
+            native_auth().secret_digester(),
+        )
+        .is_none()
+    );
+    let site = crate::product_sign_in::router_with_migration(
+        Some(ProductSignIn::new(service, &native_auth())),
+        Some(migration),
+    );
+
+    // A fresh, password-authenticated native session for the existing Bond.
+    let now = crate::browser_web_auth::now_unix_seconds().unwrap();
+    let native = TokenFactory::session().unwrap();
+    let native_hash = native_auth()
+        .secret_digester()
+        .digest("native-session", &native);
+    assert!(
+        fixture
+            .repository
+            .create_native_session(
+                &native_hash,
+                "0x0sky",
+                now,
+                now + 3600,
+                "Browser",
+                true,
+                None
+            )
+            .await
+            .expect("native session"),
+        "the only session is the active one"
+    );
+    let native_cookie = format!("__Host-0x1_session={native}");
+
+    let start = |cookie: Option<&str>, csrf: bool| {
+        let mut request = Request::post("/api/v1/auth/aiaiaiai/migrate/start");
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        if csrf {
+            request = request.header("x-0x1-csrf", "1");
+        }
+        request.body(Body::empty()).unwrap()
+    };
+    let (status, _, _) = send(&site, start(Some(&native_cookie), false)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "start needs CSRF");
+    let (status, _, body) = send(&site, start(None, true)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert!(body.contains("fresh_bond_sign_in_required"), "{body}");
+
+    let (status, headers, body) = send(&site, start(Some(&native_cookie), true)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let handle = cookie_pair(&headers, MIGRATION_HANDLE_COOKIE);
+    let transaction = cookie_pair(&headers, "__Host-0x1_aiaiaiai_migration");
+    let set_cookies: Vec<&str> = headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    assert!(
+        set_cookies
+            .iter()
+            .any(|cookie| cookie.starts_with("__Host-0x1_aiaiaiai=;")),
+        "starting migration clears an ordinary sign-in transaction: {set_cookies:?}"
+    );
+    let started: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let to_issuer = Url::parse(started["authorization_url"].as_str().unwrap()).unwrap();
+    assert_eq!(to_issuer.origin().ascii_serialization(), ORIGIN);
+
+    // A second start for the same native proof is refused while one is live.
+    let (status, _, body) = send(&site, start(Some(&native_cookie), true)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+
+    // Confirming before AIS has verified anything attaches nothing.
+    let all = format!("{native_cookie}; {handle}; {transaction}");
+    let confirm = |cookie: &str, csrf: bool| {
+        let mut request =
+            Request::post("/api/v1/auth/aiaiaiai/migrate/confirm").header(header::COOKIE, cookie);
+        if csrf {
+            request = request.header("x-0x1-csrf", "1");
+        }
+        request.body(Body::empty()).unwrap()
+    };
+    let (status, _, body) = send(&site, confirm(&all, true)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert!(body.contains("aiaiaiai_proof_invalid"), "{body}");
+
+    let back = issuer_sign_in(&fixture, &to_issuer).await;
+    let callback = |cookie: &str| {
+        Request::get(path_and_query(&back))
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .unwrap()
+    };
+    // Without the handle the callback proves nothing and spends nothing.
+    let (status, headers, _) =
+        send(&site, callback(&format!("{native_cookie}; {transaction}"))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        headers.get(header::LOCATION).unwrap(),
+        "/?migration_error=migration_expired"
+    );
+    let (status, headers, body) = send(&site, callback(&all)).await;
+    assert_eq!(status, StatusCode::SEE_OTHER, "{body}");
+    assert_eq!(
+        headers.get(header::LOCATION).unwrap(),
+        "/?migration=confirm"
+    );
+    assert!(
+        !headers
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .any(|cookie| cookie.starts_with(PRODUCT_SESSION_COOKIE)),
+        "a migration callback opens no product session"
+    );
+    // The code is spent: a replay records nothing new.
+    let (_, headers, _) = send(&site, callback(&all)).await;
+    assert!(
+        headers
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("/?migration_error="),
+    );
+
+    let database = sqlx::SqlitePool::connect(&fixture.url)
+        .await
+        .expect("0x1 database");
+    let bindings = || async {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM legacy_bond_bindings")
+            .fetch_one(&database)
+            .await
+            .unwrap()
+    };
+    assert_eq!(bindings().await, 0, "verification alone is not consent");
+
+    let (status, _, _) = send(&site, confirm(&all, false)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "confirm needs CSRF");
+    assert_eq!(bindings().await, 0);
+    let (status, headers, body) = send(&site, confirm(&all, true)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("\"attached\":true"), "{body}");
+    let cleared: Vec<&str> = headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .collect();
+    assert!(
+        cleared
+            .iter()
+            .any(|c| c.starts_with("__Host-0x1_session=;")),
+        "{cleared:?}"
+    );
+    assert!(
+        cleared
+            .iter()
+            .any(|c| c.starts_with("__Host-0x1_migration=;")),
+        "{cleared:?}"
+    );
+    assert_eq!(bindings().await, 1);
+
+    // The legacy proof was revoked with the attachment; nothing repeats.
+    let revoked: Option<i64> =
+        sqlx::query_scalar("SELECT revoked_at FROM native_sessions WHERE token_hash = ?")
+            .bind(&native_hash)
+            .fetch_one(&database)
+            .await
+            .unwrap();
+    assert!(revoked.is_some());
+    let (status, _, _) = send(&site, confirm(&all, true)).await;
+    assert_ne!(status, StatusCode::OK);
+    assert_eq!(bindings().await, 1);
+
+    // An ordinary AIS sign-in now restores the attached profile.
+    let (_, headers, _) = send(
+        &site,
+        Request::get("/api/v1/auth/aiaiaiai/start?return=/")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let product_transaction = cookie_pair(&headers, "__Host-0x1_aiaiaiai");
+    let back = issuer_sign_in(&fixture, &location(&headers)).await;
+    let (status, headers, body) = send(
+        &site,
+        Request::get(path_and_query(&back))
+            .header(header::COOKIE, &product_transaction)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER, "{body}");
+    let session = cookie_pair(&headers, PRODUCT_SESSION_COOKIE);
+    let (status, _, body) = send(
+        &site,
+        Request::get("/api/v1/product/session")
+            .header(header::COOKIE, &session)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let profile: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let bound: String = sqlx::query_scalar(
+        "SELECT b.profile_id FROM legacy_bond_bindings b \
+         JOIN legacy_bond_keys k ON k.bond_id = b.bond_id WHERE k.legacy_pub_dress = '0x0sky'",
+    )
+    .fetch_one(&database)
+    .await
+    .unwrap();
+    assert_eq!(profile["profile"]["profile_id"], bound.as_str());
+}
+
+/// With migration off, the routes answer "not enabled" and the callback is
+/// the ordinary one even if a stale migration cookie is presented.
+#[tokio::test]
+async fn migration_routes_are_closed_unless_enabled() {
+    use crate::{
+        product_sign_in::ProductSignIn,
+        public_info::{PublicInfoRepository, PublicInfoService},
+    };
+    let fixture = fixture().await;
+    let service = PublicInfoService::new(
+        SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
+        PublicInfoRepository::connect(&fixture.url).await.unwrap(),
+    )
+    .unwrap();
+    let site = crate::product_sign_in::router(Some(ProductSignIn::new(service, &native_auth())));
+    for uri in [
+        "/api/v1/auth/aiaiaiai/migrate/start",
+        "/api/v1/auth/aiaiaiai/migrate/confirm",
+    ] {
+        let request = Request::post(uri)
+            .header("x-0x1-csrf", "1")
+            .header(
+                header::COOKIE,
+                "__Host-0x1_session=x; __Host-0x1_migration=y",
+            )
+            .body(Body::empty())
+            .unwrap();
+        let (status, _, body) = send(&site, request).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}: {body}");
+        assert!(body.contains("migration_not_enabled"), "{body}");
+    }
+    let (_, _, body) = send(
+        &site,
+        Request::get("/api/v1/auth/aiaiaiai/config")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(body.contains("\"legacy_migration\":false"), "{body}");
+    let database = sqlx::SqlitePool::connect(&fixture.url).await.unwrap();
+    let installed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name = 'legacy_bond_bindings'",
+    )
+    .fetch_one(&database)
+    .await
+    .unwrap();
+    assert_eq!(
+        installed, 0,
+        "the migration store is not installed by default"
+    );
+}
+
 #[path = "product_activation_tests.rs"]
 mod product_activation;

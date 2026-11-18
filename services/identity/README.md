@@ -185,6 +185,27 @@ production:
 
 Deploying AIS and the site's "Sign in" button are separate steps.
 
+### Legacy Bond migration (opt-in, off)
+
+`NILXONE_LEGACY_BOND_MIGRATION=enabled` (with sign-in on) adds the #621 host
+flow over Core's `LegacyBondMigrationRepository`:
+
+- `POST /api/v1/auth/aiaiaiai/migrate/start` — `x-0x1-csrf: 1`, a fresh
+  password-authenticated native `__Host-0x1_session`. Returns
+  `{"authorization_url"}` and sets the handle `__Host-0x1_migration` plus
+  Core's migration-only OIDC transaction cookie.
+- the shared `/api/v1/auth/aiaiaiai/callback` hands a migration transaction
+  to Core and redirects to `/?migration=confirm` (or `/?migration_error=…`).
+- `POST /api/v1/auth/aiaiaiai/migrate/confirm` — `x-0x1-csrf: 1`, the
+  explicit owner action. Core attaches the existing Bond atomically and
+  revokes the legacy session; the response clears both cookies and points to
+  an ordinary AIS sign-in, which restores the attached profile.
+
+Nothing is matched by `pub_dress`. Enabling it installs Core's migration
+tables and, from then on, refuses native logins for attached Bonds. The flag
+stays off in production until the hostile E2E in #621 and a separately
+authorized rollout.
+
 ## Bond roles and location modes
 
 All hexadecimal prefixes `0`–`f` are available for new human registrations.
