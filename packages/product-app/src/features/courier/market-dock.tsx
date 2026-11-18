@@ -27,13 +27,25 @@ export interface PaidSpecialItem {
   readonly slot_y: number | null;
 }
 
+/**
+ * Core would not activate: the Bond still holds this much Special, running or
+ * paused behind Exclusive. Nothing changed. Activating again with
+ * `confirm: true` adds the item's term to the end of it.
+ */
+export class SpecialStillRunning extends Error {
+  constructor(readonly remainingMs: number) {
+    super("Special is still running");
+    this.name = "SpecialStillRunning";
+  }
+}
+
 /** The host supplies only the 0x1 catalog projection. It owns the transport. */
 export interface EmbeddedMarketCatalogPort {
   items?(): Promise<readonly PaidSpecialItem[]>;
   changeItem?(
     id: string,
     command:
-      | { op: "activate" }
+      | { op: "activate"; confirm?: true }
       | {
           op: "deliver";
           carry: string;

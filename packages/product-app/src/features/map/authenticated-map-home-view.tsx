@@ -2117,6 +2117,9 @@ export function AuthenticatedMapHomeView({
   // xPing has put a purchased Special into the backpack: ask once whether to
   // activate it. The question follows a delivery that took, never precedes it.
   const [activationPrompt, setActivationPrompt] = useState<string>();
+  // Activating from anywhere (the prompt, the inventory) can come back with
+  // Core's question about a Special that still runs: ask it in the same place.
+  const askingToActivate = special.confirmation?.id ?? activationPrompt;
   const askToActivate = useCallback(
     (id: string) => {
       void deliverSpecial(id).then((delivered) => {
@@ -3935,21 +3938,35 @@ export function AuthenticatedMapHomeView({
             failed={manualPickupError}
             onVisit={beginManualPickup}
           />
-          {activationPrompt !== undefined &&
+          {askingToActivate !== undefined &&
             special.items.some(
               (item) =>
-                item.order_id === activationPrompt && item.state === "stored",
+                item.order_id === askingToActivate &&
+                (item.state === "stored" ||
+                  (item.state === "in_transit" &&
+                    special.confirmation !== undefined)),
             ) && (
               <SpecialActivationPrompt
                 locale={locale}
                 canSkip={subscriptionTier !== undefined}
                 busy={special.busy}
+                exclusive={subscriptionTier === "exclusive"}
+                {...(special.confirmation === undefined
+                  ? {}
+                  : { stillRunningMs: special.confirmation.remainingMs })}
                 onActivate={() => {
-                  void special.activate(activationPrompt).then((activated) => {
+                  void (
+                    special.confirmation === undefined
+                      ? special.activate(askingToActivate)
+                      : special.confirm()
+                  ).then((activated) => {
                     if (activated) setActivationPrompt(undefined);
                   });
                 }}
-                onSkip={() => setActivationPrompt(undefined)}
+                onSkip={() => {
+                  special.keepForLater();
+                  setActivationPrompt(undefined);
+                }}
               />
             )}
           {(special.retry ||

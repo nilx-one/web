@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MPL-2.0
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deliverToInventory } from "../inventory/inventory";
-import type { EmbeddedMarketCatalogPort, PaidSpecialItem } from "./market-dock";
+import {
+  SpecialStillRunning,
+  type EmbeddedMarketCatalogPort,
+  type PaidSpecialItem,
+} from "./market-dock";
 
 export function useSpecialItems(
   owner: string,
@@ -15,6 +19,12 @@ export function useSpecialItems(
   }>();
   const [failure, setFailure] = useState<() => void>();
   const [busy, setBusy] = useState(false);
+  // Core refused to activate because Special still runs: the question is
+  // whether to add this item's term to its end. Nothing has changed yet.
+  const [confirmation, setConfirmation] = useState<{
+    id: string;
+    remainingMs: number;
+  }>();
   const pending = useRef(false);
   const refresh = useCallback(async () => {
     if (catalog?.items) setSnapshot({ owner, items: await catalog.items() });
@@ -58,7 +68,11 @@ export function useSpecialItems(
 
   /** Whether the change took: the caller asks the next question only then. */
   const change = useCallback(
-    async function perform(id: string, delivery: boolean): Promise<boolean> {
+    async function perform(
+      id: string,
+      delivery: boolean,
+      confirm = false,
+    ): Promise<boolean> {
       if (!catalog?.changeItem) return false;
       setBusy(true);
       try {
@@ -72,14 +86,22 @@ export function useSpecialItems(
             await refresh();
           });
         else {
-          await catalog.changeItem(id, { op: "activate" });
+          await catalog.changeItem(
+            id,
+            confirm ? { op: "activate", confirm: true } : { op: "activate" },
+          );
           await refresh();
         }
         setFailure(undefined);
+        setConfirmation(undefined);
         return true;
-      } catch {
+      } catch (error) {
+        if (error instanceof SpecialStillRunning && !delivery) {
+          setConfirmation({ id, remainingMs: error.remainingMs });
+          return false;
+        }
         setFailure(() => () => {
-          void perform(id, delivery);
+          void perform(id, delivery, confirm);
         });
         return false;
       } finally {
@@ -89,22 +111,33 @@ export function useSpecialItems(
     [owner, catalog, refresh],
   );
   const activate = useCallback(
-    async (id: string): Promise<boolean> => {
+    async (id: string, confirm = false): Promise<boolean> => {
       if (pending.current) return false;
       pending.current = true;
       try {
-        return await change(id, false);
+        return await change(id, false, confirm);
       } finally {
         pending.current = false;
       }
     },
     [change],
   );
+  /** Adds the item's term to the end of the Special still running. */
+  const confirm = useCallback(
+    () =>
+      confirmation === undefined
+        ? Promise.resolve(false)
+        : activate(confirmation.id, true),
+    [activate, confirmation],
+  );
   const arrive = useCallback((id: string) => change(id, true), [change]);
   return {
     items: snapshot?.owner === owner ? snapshot.items : [],
     busy,
     activate,
+    confirmation,
+    confirm,
+    keepForLater: () => setConfirmation(undefined),
     arrive,
     retry: failure,
     dismissError: () => setFailure(undefined),

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 import { expect, it, vi } from "vitest";
 import { createNilxOneMarketCatalog } from "./catalog";
-import { readPaidItems } from "./items";
+import { SpecialStillRunning } from "@nilx-one/product-app/business";
+import { changePaidItem, readPaidItems } from "./items";
 
 it("keeps older Identity deployments usable without bypassing an unavailable authority", async () => {
   const local = vi.fn(async () => ({ ok: false as const, error: "no_room" }));
@@ -70,4 +71,37 @@ it("refuses malformed reserved geometry", async () => {
   await expect(readPaidItems(undefined, request)).rejects.toThrow(
     "Invalid paid inventory",
   );
+});
+
+it("reports a Special that is still running instead of a failed activation", async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        error: { code: "special_active", message: "…" },
+        special_remaining_ms: 7_200_000,
+      }),
+      { status: 409 },
+    ),
+  );
+  const error = await changePaidItem(
+    "order-item1",
+    { op: "activate" },
+    undefined,
+    request,
+  ).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(SpecialStillRunning);
+  expect((error as SpecialStillRunning).remainingMs).toBe(7_200_000);
+  request.mockResolvedValue(
+    new Response(JSON.stringify({ error: { code: "item_not_available" } }), {
+      status: 409,
+    }),
+  );
+  const other = await changePaidItem(
+    "order-item1",
+    { op: "activate" },
+    undefined,
+    request,
+  ).catch((caught: unknown) => caught);
+  expect(other).not.toBeInstanceOf(SpecialStillRunning);
+  expect(other).toBeInstanceOf(Error);
 });

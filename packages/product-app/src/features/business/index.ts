@@ -9,7 +9,7 @@ export type {
   EmbeddedMarketOffer,
   EmbeddedMarketOrder,
 } from "../courier/market-dock";
-export { MarketDock } from "../courier/market-dock";
+export { MarketDock, SpecialStillRunning } from "../courier/market-dock";
 export {
   KYIV_MARKET_POINTS,
   seededMarketDirectory,

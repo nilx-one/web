@@ -354,7 +354,9 @@ async fn read_special_items(State(state): State<ApiState>, headers: HeaderMap) -
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 enum SpecialItemCommand {
     Collect { visit_id: String },
-    Activate,
+    /// `confirm` adds the item's term to a Special that still has an hour or
+    /// more to run. Without it Core refuses and says how much is left.
+    Activate { #[serde(default)] confirm: bool },
     Deliver { carry: String, things: Vec<DeliveryThing> },
 }
 
@@ -384,7 +386,23 @@ async fn change_special_item(
             if !crate::market_visit::is_market_visit_id(&visit_id) { return invalid(); }
             state.repository.collect_special_item(&owner, &order_id, &visit_id, &session_hash, now_ms).await
         }
-        SpecialItemCommand::Activate => state.repository.activate_special_item(&owner, &order_id, &session_hash, now_ms).await,
+        SpecialItemCommand::Activate { confirm } => {
+            use nilxone_identity::repository::SpecialActivation;
+            match state.repository.activate_special_item_with(&owner, &order_id, &session_hash, now_ms, confirm).await {
+                Ok(SpecialActivation::NeedsConfirmation { special_remaining_ms }) => {
+                    // Nothing changed. The client asks before extending.
+                    return with_session_cookie(no_store_json(StatusCode::CONFLICT, serde_json::json!({
+                        "error": {
+                            "code": "special_active",
+                            "message": "Special is still running; confirm to add this term to its end.",
+                        },
+                        "special_remaining_ms": special_remaining_ms,
+                    })), cookie);
+                }
+                Ok(outcome) => Ok(outcome == SpecialActivation::Activated),
+                Err(error) => Err(error),
+            }
+        }
         SpecialItemCommand::Deliver { carry, things } => {
             use nilxone_contracts::{Backpack, Carry};
             let carry = match carry.as_str() {

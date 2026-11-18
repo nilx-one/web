@@ -57,3 +57,56 @@ it("disables both answers while activating", () => {
   expect(screen.getByRole("button", { name: "Activating…" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Skip" })).toBeDisabled();
 });
+
+it("asks to add the month after a Special that still runs, or keep it for later", () => {
+  const onActivate = vi.fn();
+  const onSkip = vi.fn();
+  render(
+    <SpecialActivationPrompt
+      {...props}
+      canSkip={false}
+      stillRunningMs={3 * 86_400_000 + 5}
+      onActivate={onActivate}
+      onSkip={onSkip}
+    />,
+  );
+  expect(
+    screen.getByText("Special ще діє 3 дн. — додати місяць після нього?"),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Пізніше" }));
+  expect(onSkip).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "Додати" }));
+  expect(onActivate).toHaveBeenCalledOnce();
+});
+
+it("counts hours when less than a day is left", () => {
+  render(
+    <SpecialActivationPrompt
+      {...props}
+      locale="en"
+      stillRunningMs={2 * 3_600_000}
+      onActivate={() => {}}
+      onSkip={() => {}}
+    />,
+  );
+  expect(
+    screen.getByText("Special still runs for 2 h — add the month after it?"),
+  ).toBeVisible();
+});
+
+it("says a Special waits paused while Exclusive runs", () => {
+  render(
+    <SpecialActivationPrompt
+      {...props}
+      exclusive
+      onActivate={() => {}}
+      onSkip={() => {}}
+    />,
+  );
+  expect(
+    screen.getByText(
+      "Exclusive діє: Special стане на паузу й почнеться після нього.",
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: "Так" })).toBeEnabled();
+});
