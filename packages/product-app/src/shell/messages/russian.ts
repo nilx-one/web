@@ -256,6 +256,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.studies":
     "Исследования используют один скелет и один набор клипов; выбор меняет тело, а не то, как оно двигается.",
   "header.signOut": "Выйти",
+  "header.moveToAis": "Перенести этот Bond в aiaiaiai",
   "shell.worldStatus": "Состояние мира",
   "settings.application": "Приложение",
   "settings.back": "Назад",
@@ -378,6 +379,28 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.ais.failure.unavailable":
     "Вход сейчас недоступен. Попробуйте чуть позже.",
   "identity.ais.failure.other": "Вход не завершился. Попробуйте ещё раз.",
+  "identity.migration.title": "Перенести этот Bond в aiaiaiai",
+  "identity.migration.lede":
+    "Ваш Bond сохраняет имя, Avaia, опыт и всё остальное; меняется только способ входа.",
+  "identity.migration.confirm":
+    "aiaiaiai подтвердил ваш аккаунт. Перенос прикрепляет этот Bond к нему: имя, Avaia, опыт, seeds и подписки остаются как есть, а дальше вы входите через aiaiaiai.",
+  "identity.migration.confirmAction": "Перенести этот Bond в aiaiaiai",
+  "identity.migration.cancel": "Не сейчас",
+  "identity.migration.back": "Назад",
+  "identity.migration.failure.freshSignIn":
+    "Войдите в этот Bond паролем ещё раз и начните перенос в течение десяти минут.",
+  "identity.migration.failure.alreadyAttached":
+    "Этот Bond уже прикреплён к аккаунту aiaiaiai. Войдите через aiaiaiai.",
+  "identity.migration.failure.alreadyAiaiaiai": "Вы уже вошли через aiaiaiai.",
+  "identity.migration.failure.inProgress": "Перенос для этого входа уже идёт.",
+  "identity.migration.failure.expired":
+    "Время переноса истекло. Начните заново.",
+  "identity.migration.failure.proofInvalid":
+    "Вход через aiaiaiai не удалось подтвердить. Начните заново.",
+  "identity.migration.failure.identityConflict":
+    "У этого аккаунта aiaiaiai уже есть профиль 0x1. Ничего не изменено.",
+  "identity.migration.failure.unavailable":
+    "Перенос сейчас недоступен. Попробуйте чуть позже.",
   "identity.provider.verified":
     "{provider} подтверждён. Выберите: создать новую идентичность или войти в существующую.",
   "identity.provider.suggested": "Создать {pubDress}",

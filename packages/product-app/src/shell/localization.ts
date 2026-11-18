@@ -261,6 +261,7 @@ const EN_MESSAGES = {
   "dock.studies":
     "The studies share one skeleton and one set of clips; choosing changes the body, not how it moves.",
   "header.signOut": "Sign out",
+  "header.moveToAis": "Move this Bond to aiaiaiai",
   "shell.worldStatus": "World status",
   "settings.application": "Application",
   "settings.back": "Back",
@@ -635,6 +636,7 @@ const UK_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "dock.studies":
     "Дослідження використовують один скелет і один набір кліпів; вибір змінює тіло, а не спосіб його руху.",
   "header.signOut": "Вийти",
+  "header.moveToAis": "Перенести цей Bond до aiaiaiai",
   "shell.worldStatus": "Стан світу",
   "settings.application": "Застосунок",
   "settings.back": "Назад",
