@@ -365,21 +365,16 @@ async fn main() {
     );
     let product_sign_in =
         product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
-    let bond_setup = match product_sign_in {
+    let (legacy_migration, product_bonds) = match product_sign_in {
         Some(_) => {
             product_bonds_from_environment(&public_origin, &database_url, &native_auth).await
         }
-        None => ProductBondSetup {
-            migration: None,
-            bonds: None,
-            provisioning: None,
-        },
+        None => (None, None),
     };
-    let product_bonds = bond_setup.bonds;
     let product_api = product_sign_in::router_with_bonds(
         product_sign_in,
-        bond_setup.migration,
-        bond_setup.provisioning,
+        legacy_migration,
+        product_bonds.clone(),
     );
     let provider_api = browser_web_auth::router(
         repository.clone(),
@@ -404,6 +399,7 @@ async fn main() {
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
+        product_bonds.clone(),
     );
     let pub_info_api = api::pub_info_router_with_product_bonds(
         repository.clone(),
@@ -427,6 +423,7 @@ async fn main() {
                 surfaces: Arc::clone(&surfaces),
             }),
             config,
+            product_bonds.clone(),
         )
     });
     let avaia_api = api::avaia_router(
@@ -435,6 +432,7 @@ async fn main() {
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
+        product_bonds.clone(),
     );
     let provider_self_service_api = provider_self_service_router(
         repository.clone(),
@@ -612,44 +610,34 @@ async fn product_sign_in_from_environment(
     Some(product_sign_in::ProductSignIn::new(service, native_auth))
 }
 
-/// What the opt-in Bond features need once enabled. Both share Core's store,
-/// which refuses to prepare unless legacy and product tables share this
-/// database.
-struct ProductBondSetup {
-    /// `NILXONE_LEGACY_BOND_MIGRATION=enabled`: attach an AIS identity to an
-    /// existing Bond. It shares the product client and callback but uses Core's
-    /// migration-only OIDC transaction.
-    migration: Option<product_sign_in::LegacyMigration>,
-    /// Lets the Special, xPing and craft routes accept a Bond's product session.
-    /// Present when either feature is enabled.
-    bonds: Option<identity_bot::ProductBondAuth>,
-    /// `NILXONE_AIS_NEW_BONDS=enabled`: a person's first AIS sign-in creates
-    /// their Bond.
-    provisioning: Option<identity_bot::ProductBondAuth>,
-}
-
+/// The AIS Bond features that come with AIS sign-in: attaching an AIS identity
+/// to an existing Bond, giving a person's first sign-in its Bond, and letting
+/// a Bond's product session act in the game. They need Core's store, which
+/// refuses to prepare unless legacy and product tables share this database.
 async fn product_bonds_from_environment(
     public_origin: &Url,
     database_url: &str,
     native_auth: &NativeAuthConfig,
-) -> ProductBondSetup {
-    let enabled = |key: &str| env::var(key).as_deref() == Ok("enabled");
-    let (migration_on, new_bonds_on) = (
-        enabled("NILXONE_LEGACY_BOND_MIGRATION"),
-        enabled("NILXONE_AIS_NEW_BONDS"),
-    );
-    let off = ProductBondSetup {
-        migration: None,
-        bonds: None,
-        provisioning: None,
+) -> (
+    Option<product_sign_in::LegacyMigration>,
+    Option<identity_bot::ProductBondAuth>,
+) {
+    let Some(issuer) = env::var("AIAIAIAI_SIGN_IN_ISSUER")
+        .ok()
+        .filter(|value| !value.is_empty())
+    else {
+        return (None, None);
     };
-    if !migration_on && !new_bonds_on {
-        info!("AIS Bond features are off");
-        return off;
-    }
-    let Some(issuer) = env::var("AIAIAIAI_SIGN_IN_ISSUER").ok() else {
-        return off;
-    };
+    let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
+        .unwrap_or_else(|error| panic!("AIS Bond sign-in configuration: {error}"));
+    let flow = aiaiaiai_sign_in::SignInFlow::legacy_migration(
+        aiaiaiai_sign_in::SignInClient::new(config),
+        native_auth.secret_digester(),
+    )
+    .expect("legacy migration proves only the nilx-one client");
     let repository = public_info::PublicInfoRepository::connect(database_url)
         .await
         .expect("the 0x1 product tables must initialize");
@@ -657,29 +645,11 @@ async fn product_bonds_from_environment(
         .await
         .expect("AIS Bonds need legacy and product tables in one SQLite store");
     let bonds = identity_bot::ProductBondAuth::new(store.clone(), native_auth.secret_digester());
-    let migration = migration_on.then(|| {
-        let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
-            .ok()
-            .filter(|value| !value.is_empty());
-        let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
-            .unwrap_or_else(|error| panic!("legacy migration sign-in configuration: {error}"));
-        let flow = aiaiaiai_sign_in::SignInFlow::legacy_migration(
-            aiaiaiai_sign_in::SignInClient::new(config),
-            native_auth.secret_digester(),
-        )
-        .expect("legacy migration proves only the nilx-one client");
-        product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester())
-    });
-    info!(
-        migration = migration_on,
-        new_bonds = new_bonds_on,
-        "AIS Bond features enabled"
-    );
-    ProductBondSetup {
-        migration: migration.flatten(),
-        provisioning: new_bonds_on.then(|| bonds.clone()),
-        bonds: Some(bonds),
-    }
+    info!("AIS Bonds enabled");
+    (
+        product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester()),
+        Some(bonds),
+    )
 }
 
 /// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.

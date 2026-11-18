@@ -30,6 +30,7 @@ fn native_auth() -> NativeAuthConfig {
 }
 
 struct Fixture {
+    url: String,
     _dir: tempfile::TempDir,
     pool: sqlx::SqlitePool,
     repository: IdentityRepository,
@@ -86,6 +87,7 @@ async fn fixture(bound: bool, active: bool) -> Fixture {
         .expect("binding");
     }
     Fixture {
+        url,
         _dir: dir,
         pool,
         repository,
@@ -242,15 +244,17 @@ async fn nothing_else_resolves_to_a_bond() {
 }
 
 #[tokio::test]
-async fn only_the_special_routes_accept_a_product_session() {
+async fn an_attached_bonds_product_session_works_across_the_game_routes() {
     let fixture = fixture(true, true).await;
     let app = fixture.router(true);
-    // Authenticated routes outside Special answer 401, as without a cookie.
     for uri in ["/api/v1/identity/organizations", "/api/v1/identity"] {
         let (status, body) = send(&app, get(uri, Some(&product_cookie()))).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri}: {body}");
+        assert_eq!(status, StatusCode::OK, "{uri}: {body}");
     }
-    // The native context stays anonymous: no Bond is revealed by it.
+    // It reads the Bond the binding names and nothing a request supplies.
+    let (_, body) = send(&app, get("/api/v1/identity", Some(&product_cookie()))).await;
+    assert!(body.contains("0x0sky"), "{body}");
+    // The native context stays anonymous: it is the native session's own route.
     let (status, body) = send(
         &app,
         get("/api/v1/auth/native/context", Some(&product_cookie())),
@@ -261,6 +265,13 @@ async fn only_the_special_routes_accept_a_product_session() {
         body.contains("anonymous") && !body.contains("0x0sky"),
         "{body}"
     );
+    // Not attached, or a cookie that is not a session of this store: still 401.
+    let (status, _) = send(
+        &app,
+        get("/api/v1/identity", Some("__Host-0x1_product=0x1s_forged")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
 fn post_json(uri: &str, cookie: &str, body: &str) -> Request<Body> {
@@ -312,34 +323,68 @@ async fn an_inactive_product_session_cannot_start_a_craft() {
 }
 
 #[tokio::test]
-async fn attest_sell_and_the_rest_of_pub_info_stay_native_only() {
-    let fixture = fixture(true, true).await;
-    let app = fixture.pub_info(true);
+async fn finds_seeds_and_the_rest_of_pub_info_accept_it_too_and_an_inactive_one_cannot_write() {
+    let active = fixture(true, true).await;
+    let app = active.pub_info(true);
     for (uri, body) in [
         ("/api/v1/identity/finds/attest", ATTEST),
         ("/api/v1/identity/finds/sell", SELL),
     ] {
         let (status, text) = send(&app, post_json(uri, &product_cookie(), body)).await;
-        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri}: {text}");
+        assert!(
+            status != StatusCode::UNAUTHORIZED && status != StatusCode::FORBIDDEN,
+            "{uri}: {status} {text}"
+        );
     }
     let (status, _) = send(
         &app,
         get(nilxone_api::wallet::SEEDS_PATH, Some(&product_cookie())),
     )
     .await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-    // Without the operator's opt-in nothing is accepted.
-    let off = fixture.pub_info(false);
-    let (status, _) = send(
-        &off,
-        get("/api/v1/identity/xping/engine", Some(&product_cookie())),
+    assert_eq!(status, StatusCode::OK);
+
+    let inactive = fixture(true, false).await;
+    let app = inactive.pub_info(true);
+    let (status, text) = send(
+        &app,
+        post_json("/api/v1/identity/finds/sell", &product_cookie(), SELL),
     )
     .await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-    let (status, _) = send(
-        &off,
-        post_json("/api/v1/identity/crafts", &product_cookie(), CRAFT),
+    assert_eq!(status, StatusCode::FORBIDDEN, "{text}");
+    assert!(text.contains("session_inactive"), "{text}");
+}
+
+#[tokio::test]
+async fn the_map_and_location_control_accept_it_too() {
+    let fixture = fixture(true, true).await;
+    let url = fixture.url.clone();
+    let locations = crate::BondLocationRepository::connect(&url)
+        .await
+        .expect("locations");
+    let app = crate::location_control_router(
+        fixture.repository.clone(),
+        locations,
+        TelegramInitDataVerifier::new("123:test-token".to_owned(), 300),
+        None,
+        native_auth(),
+        Some(ProductBondAuth::new(
+            fixture.store.clone(),
+            native_auth().secret_digester(),
+        )),
+    );
+    let (status, body) = send(
+        &app,
+        get("/api/v1/location-control", Some(&product_cookie())),
     )
     .await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, _) = send(
+        &app,
+        get(
+            "/api/v1/location-control",
+            Some("__Host-0x1_product=0x1s_forged"),
+        ),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK);
 }

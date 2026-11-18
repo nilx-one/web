@@ -13,8 +13,10 @@
 //! session resolves to nothing, exactly as if no cookie had been sent.
 
 use axum::http::HeaderMap;
+use std::str::FromStr as _;
+
 use nilxone_identity::{
-    SecretDigester,
+    IdentityRecord, IdentityRepository, PubDress, SecretDigester,
     public_info::{LegacyBondMigrationRepository, ProvisionError},
 };
 
@@ -84,6 +86,30 @@ impl ProductBondAuth {
             Err(error) => {
                 tracing::error!(%error, "creating the Bond of an AIS sign-in failed");
                 Err(ProvisionFailure::Unavailable)
+            }
+        }
+    }
+
+    /// The Bond a request's product session acts for, as the identity record
+    /// every game route works with. `Ok(None)` when there is no such session.
+    pub(crate) async fn bond(
+        &self,
+        repository: &IdentityRepository,
+        headers: &HeaderMap,
+        now: u64,
+    ) -> Result<Option<(IdentityRecord, ProductBond)>, ()> {
+        let Some(bond) = self.resolve(headers, now).await? else {
+            return Ok(None);
+        };
+        let Ok(pub_dress) = PubDress::from_str(&bond.pub_dress) else {
+            return Err(());
+        };
+        match repository.resolve_human_identity(&pub_dress).await {
+            Ok(Some(identity)) => Ok(Some((identity, bond))),
+            Ok(None) => Ok(None),
+            Err(error) => {
+                tracing::error!(%error, "product session identity resolution failed");
+                Err(())
             }
         }
     }

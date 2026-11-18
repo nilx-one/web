@@ -73,8 +73,7 @@ struct ApiState {
     limiter: AttemptLimiter,
     provider_links: ProviderLinkRepository,
     dummy_password_hash: String,
-    /// AIS product sessions of attached legacy Bonds (#621). `None` unless
-    /// the operator enabled migration; only the Special routes consult it.
+    /// AIS product sessions of attached Bonds (#621); `None` only in tests.
     product: Option<crate::product_bond_auth::ProductBondAuth>,
 }
 
@@ -1137,6 +1136,17 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
         }
     }
 
+    // The AIS product session of an attached Bond answers as that Bond.
+    if let Some(product) = state.product.as_ref() {
+        match product.bond(&state.repository, &headers, now).await {
+            Ok(Some((identity, bond))) => {
+                return identity_response(&state, identity, bond.active, None).await;
+            }
+            Ok(None) => {}
+            Err(()) => return unavailable(),
+        }
+    }
+
     let provider_identity = match authenticate(&state, &headers).await {
         Ok(identity) => identity,
         Err(error) => return error.into_response(),
@@ -1612,7 +1622,7 @@ fn renamed_response(
 /// flag. A caller that would act for the Bond must refuse when it is
 /// `false`. See `nilx-one/0x1` `documents/15-devices-and-recovery.md`,
 /// Single Active Client.
-async fn authenticated_bond(
+async fn authenticated_native_bond(
     state: &ApiState,
     headers: &HeaderMap,
     now: u64,
@@ -1654,41 +1664,27 @@ async fn authenticated_bond(
     }
 }
 
-/// [`authenticated_bond`] for the routes whose Core writes re-check the acting
-/// session atomically (Special, xPing, crafts), which also accept the AIS
-/// product session of an attached legacy Bond (#621). A native session or
-/// provider proof is tried first, exactly as before; the product session is
-/// consulted only when neither authenticates and the operator enabled it.
-/// The returned flag is an early answer: Core re-checks `active = 1`
-/// atomically at the write. A product session never mints a native session
-/// or cookie.
-async fn authenticated_attached_bond(
+/// Who is acting, as a Bond: a native session, a Telegram or Discord proof, or
+/// the AIS product session of a Bond attached to an AIS profile (#621). They
+/// are tried in that order and a product session never mints a native session
+/// or cookie. Core re-checks `active` atomically wherever it guards a write;
+/// the flag returned here is the early answer.
+async fn authenticated_bond(
     state: &ApiState,
     headers: &HeaderMap,
     now: u64,
 ) -> Result<(IdentityRecord, bool, Vec<u8>, Option<String>), AuthenticationFailure> {
-    match authenticated_bond(state, headers, now).await {
+    match authenticated_native_bond(state, headers, now).await {
         Err(AuthenticationFailure::Unauthorized) => {}
         other => return other,
     }
     let Some(product) = state.product.as_ref() else {
         return Err(AuthenticationFailure::Unauthorized);
     };
-    let bond = match product.resolve(headers, now).await {
-        Ok(Some(bond)) => bond,
-        Ok(None) => return Err(AuthenticationFailure::Unauthorized),
-        Err(()) => return Err(AuthenticationFailure::Unavailable),
-    };
-    let Ok(pub_dress) = PubDress::from_str(&bond.pub_dress) else {
-        return Err(AuthenticationFailure::Unavailable);
-    };
-    match state.repository.resolve_human_identity(&pub_dress).await {
-        Ok(Some(identity)) => Ok((identity, bond.active, bond.session_hash, None)),
+    match product.bond(&state.repository, headers, now).await {
+        Ok(Some((identity, bond))) => Ok((identity, bond.active, bond.session_hash, None)),
         Ok(None) => Err(AuthenticationFailure::Unauthorized),
-        Err(error) => {
-            tracing::error!(%error, "product session identity resolution failed");
-            Err(AuthenticationFailure::Unavailable)
-        }
+        Err(()) => Err(AuthenticationFailure::Unavailable),
     }
 }
 
