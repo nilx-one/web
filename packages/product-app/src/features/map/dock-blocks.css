@@ -274,8 +274,9 @@
   display: none;
 }
 
-/* Says in words what the ribbons show: who follows whom. Its colours run
-   the way the ribbons flow, from the leader's to the follower's. */
+/* Says in words who leads. The Bond only mirrors the person's physical
+   movement and never follows the Avaia; in the ordinary mode the Avaia may
+   walk along with the Bond. Its colours run the way the ribbons flow. */
 .authenticated-map-home .bond-dock__follow-caption {
   --caption-from: rgba(155, 108, 250, 0.34);
   --caption-to: rgba(55, 215, 229, 0.26);

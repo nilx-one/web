@@ -4161,15 +4161,11 @@ export function AuthenticatedMapHomeView({
                     data-leader={dock.wheel}
                     aria-hidden="true"
                   >
-                    {t("dock.followsCaption")
-                      .replace(
-                        "{leader}",
-                        dock.wheel === "avaia" ? "Avaia" : "Bond",
-                      )
-                      .replace(
-                        "{follower}",
-                        dock.wheel === "avaia" ? "Bond" : "Avaia",
-                      )}
+                    {t(
+                      dock.wheel === "avaia"
+                        ? "dock.caption.avaia"
+                        : "dock.caption.bond",
+                    )}
                   </p>
                 </div>
               </div>
