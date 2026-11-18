@@ -137,6 +137,9 @@
 
 .app-shell__toasts > * {
   width: min(var(--shell-toast-width), 100%);
+  /* The stack lets the map take touches between notices; each notice takes
+     its own, or its buttons (Send xPing, Activate) never receive a tap. */
+  pointer-events: auto;
 }
 
 .app-shell__notices:empty {
