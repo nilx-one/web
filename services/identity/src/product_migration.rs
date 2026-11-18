@@ -175,6 +175,14 @@ pub(super) async fn start(State(state): State<ProductState>, headers: HeaderMap)
         return rate_limited(retry_after);
     }
     let Some(native) = read_cookie(&headers, NATIVE_SESSION_COOKIE) else {
+        // Someone already signed in through aiaiaiai has nothing to move.
+        if read_cookie(&headers, super::PRODUCT_SESSION_COOKIE).is_some() {
+            return no_store_error(
+                StatusCode::CONFLICT,
+                "already_aiaiaiai",
+                "You are already signed in through aiaiaiai.",
+            );
+        }
         return failure(&LegacyMigrationError::InvalidLegacyProof);
     };
     let Ok(handle) = TokenFactory::session() else {

@@ -836,6 +836,10 @@ async fn an_existing_bond_owner_attaches_an_ais_identity_through_the_migration_f
     let (status, _, body) = send(&site, start(None, true)).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
     assert!(body.contains("fresh_bond_sign_in_required"), "{body}");
+    // Someone already signed in through aiaiaiai has nothing to move.
+    let (status, _, body) = send(&site, start(Some("__Host-0x1_product=0x1s_someone"), true)).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(body.contains("already_aiaiaiai"), "{body}");
 
     let (status, headers, body) = send(&site, start(Some(&native_cookie), true)).await;
     assert_eq!(status, StatusCode::OK, "{body}");

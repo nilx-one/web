@@ -529,6 +529,8 @@ export interface AuthenticatedMapHomeViewProps {
   /** Throws away an unsaved address draft, back to what the service holds. */
   readonly onSlugReset?: () => void;
   readonly onLogout?: () => void;
+  /** Starts moving this Bond to aiaiaiai Identity; offered to native sessions. */
+  readonly onMigrateToAis?: () => void;
   readonly onNavigate?: (route: ShellRoute) => void;
 }
 
@@ -1038,6 +1040,7 @@ export function AuthenticatedMapHomeView({
   onSlugReset,
   organizations,
   onLogout,
+  onMigrateToAis,
   onNavigate,
 }: AuthenticatedMapHomeViewProps) {
   const mapHostRef = useRef<HTMLDivElement>(null);
@@ -1537,10 +1540,20 @@ export function AuthenticatedMapHomeView({
     ...speech.toasts,
     ...sceneToasts,
   ];
-  const headerActions: readonly HeaderAction[] =
-    onLogout === undefined
+  const headerActions: readonly HeaderAction[] = [
+    ...(onMigrateToAis === undefined
       ? []
-      : [{ id: "sign-out", label: t("header.signOut"), perform: onLogout }];
+      : [
+          {
+            id: "move-to-aiaiaiai",
+            label: t("header.moveToAis"),
+            perform: onMigrateToAis,
+          },
+        ]),
+    ...(onLogout === undefined
+      ? []
+      : [{ id: "sign-out", label: t("header.signOut"), perform: onLogout }]),
+  ];
   // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
   // means no voice either: a card does not talk on behalf of nobody.
   const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
