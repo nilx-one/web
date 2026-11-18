@@ -29,6 +29,7 @@ pub use nilxone_identity::market_issuer;
 pub use nilxone_identity::market_visit;
 pub mod partner_account;
 pub mod partner_lookup;
+pub mod product_bond_auth;
 pub mod product_sign_in;
 pub use nilxone_identity::provider_link;
 pub use nilxone_identity::provider_secret;
@@ -58,6 +59,7 @@ pub use nilxone_contracts::{
 };
 pub use partner_account::partner_account_router;
 pub use partner_lookup::{PartnerLookupConfig, PartnerLookupConfigError, partner_lookup_router};
+pub use product_bond_auth::ProductBondAuth;
 pub use provider_link::{ProviderLinkOutcome, ProviderLinkRepository, SelfDisconnectOutcome};
 pub use provider_secret::{ProviderSecretCipher, ProviderSecretError};
 pub use provider_self_service::provider_self_service_router;

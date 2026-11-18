@@ -73,6 +73,9 @@ struct ApiState {
     limiter: AttemptLimiter,
     provider_links: ProviderLinkRepository,
     dummy_password_hash: String,
+    /// AIS product sessions of attached legacy Bonds (#621). `None` unless
+    /// the operator enabled migration; only the Special routes consult it.
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 }
 
 pub fn router(
@@ -100,6 +103,47 @@ fn router_with_clock(
     native_auth: NativeAuthConfig,
     clock: Arc<dyn Clock>,
 ) -> Router {
+    router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        clock,
+        None,
+    )
+}
+
+/// [`router`] whose Special routes also accept the active AIS product session
+/// of an attached legacy Bond.
+pub fn router_with_product_bonds(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
+    router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        Arc::new(SystemClock),
+        product,
+    )
+}
+
+fn router_with_product(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    clock: Arc<dyn Clock>,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
     let password_engine = native_auth.password_engine();
     let dummy_password_hash = password_engine
         .hash("0x1 constant-shape dummy password")
@@ -116,6 +160,7 @@ fn router_with_clock(
         limiter: AttemptLimiter::default(),
         provider_links,
         dummy_password_hash,
+        product,
     };
 
     Router::new()
@@ -1604,6 +1649,43 @@ async fn authenticated_bond(
         Ok(None) => Err(AuthenticationFailure::Unauthorized),
         Err(error) => {
             tracing::error!(%error, "provider identity lookup failed");
+            Err(AuthenticationFailure::Unavailable)
+        }
+    }
+}
+
+/// [`authenticated_bond`] for the Special routes, which also accept the AIS
+/// product session of an attached legacy Bond (#621). A native session or
+/// provider proof is tried first, exactly as before; the product session is
+/// consulted only when neither authenticates and the operator enabled it.
+/// The returned flag is an early answer: Core re-checks `active = 1`
+/// atomically at the write. A product session never mints a native session
+/// or cookie.
+async fn authenticated_special_bond(
+    state: &ApiState,
+    headers: &HeaderMap,
+    now: u64,
+) -> Result<(IdentityRecord, bool, Vec<u8>, Option<String>), AuthenticationFailure> {
+    match authenticated_bond(state, headers, now).await {
+        Err(AuthenticationFailure::Unauthorized) => {}
+        other => return other,
+    }
+    let Some(product) = state.product.as_ref() else {
+        return Err(AuthenticationFailure::Unauthorized);
+    };
+    let bond = match product.resolve(headers, now).await {
+        Ok(Some(bond)) => bond,
+        Ok(None) => return Err(AuthenticationFailure::Unauthorized),
+        Err(()) => return Err(AuthenticationFailure::Unavailable),
+    };
+    let Ok(pub_dress) = PubDress::from_str(&bond.pub_dress) else {
+        return Err(AuthenticationFailure::Unavailable);
+    };
+    match state.repository.resolve_human_identity(&pub_dress).await {
+        Ok(Some(identity)) => Ok((identity, bond.active, bond.session_hash, None)),
+        Ok(None) => Err(AuthenticationFailure::Unauthorized),
+        Err(error) => {
+            tracing::error!(%error, "product session identity resolution failed");
             Err(AuthenticationFailure::Unavailable)
         }
     }

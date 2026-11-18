@@ -365,11 +365,11 @@ async fn main() {
     );
     let product_sign_in =
         product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
-    let legacy_migration = match product_sign_in {
+    let (legacy_migration, product_bonds) = match product_sign_in {
         Some(_) => {
             legacy_migration_from_environment(&public_origin, &database_url, &native_auth).await
         }
-        None => None,
+        None => (None, None),
     };
     let product_api = product_sign_in::router_with_migration(product_sign_in, legacy_migration);
     let provider_api = browser_web_auth::router(
@@ -438,12 +438,13 @@ async fn main() {
         discord_activity_oauth.clone(),
         native_auth.clone(),
     );
-    let api = api::router(
+    let api = api::router_with_product_bonds(
         repository.clone(),
         provider_links.clone(),
         telegram_activity_verifier,
         discord_activity_oauth,
         native_auth,
+        product_bonds,
     )
     .merge(avaia_api)
     .merge(pub_info_api)
@@ -609,12 +610,17 @@ async fn legacy_migration_from_environment(
     public_origin: &Url,
     database_url: &str,
     native_auth: &NativeAuthConfig,
-) -> Option<product_sign_in::LegacyMigration> {
+) -> (
+    Option<product_sign_in::LegacyMigration>,
+    Option<identity_bot::ProductBondAuth>,
+) {
     if env::var("NILXONE_LEGACY_BOND_MIGRATION").as_deref() != Ok("enabled") {
         info!("legacy Bond migration is off");
-        return None;
+        return (None, None);
     }
-    let issuer = env::var("AIAIAIAI_SIGN_IN_ISSUER").ok()?;
+    let Some(issuer) = env::var("AIAIAIAI_SIGN_IN_ISSUER").ok() else {
+        return (None, None);
+    };
     let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
         .ok()
         .filter(|value| !value.is_empty());
@@ -632,7 +638,12 @@ async fn legacy_migration_from_environment(
         .await
         .expect("legacy migration needs legacy and product tables in one SQLite store");
     info!("legacy Bond migration enabled");
-    product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester())
+    let product_bonds =
+        identity_bot::ProductBondAuth::new(store.clone(), native_auth.secret_digester());
+    (
+        product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester()),
+        Some(product_bonds),
+    )
 }
 
 /// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.
