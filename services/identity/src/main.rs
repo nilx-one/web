@@ -363,9 +363,15 @@ async fn main() {
         discord_credentials,
         github_browser_oauth,
     );
-    let product_api = product_sign_in::router(
-        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await,
-    );
+    let product_sign_in =
+        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
+    let legacy_migration = match product_sign_in {
+        Some(_) => {
+            legacy_migration_from_environment(&public_origin, &database_url, &native_auth).await
+        }
+        None => None,
+    };
+    let product_api = product_sign_in::router_with_migration(product_sign_in, legacy_migration);
     let provider_api = browser_web_auth::router(
         repository.clone(),
         provider_links.clone(),
@@ -593,6 +599,40 @@ async fn product_sign_in_from_environment(
         .expect("the product service accepts the nilx-one client");
     info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
     Some(product_sign_in::ProductSignIn::new(service, native_auth))
+}
+
+/// The opt-in legacy Bond migration (#621). Off unless the operator sets
+/// `NILXONE_LEGACY_BOND_MIGRATION=enabled`; it shares the product client and
+/// callback but uses Core's migration-only OIDC transaction. Core refuses to
+/// prepare its store unless legacy and product tables share this database.
+async fn legacy_migration_from_environment(
+    public_origin: &Url,
+    database_url: &str,
+    native_auth: &NativeAuthConfig,
+) -> Option<product_sign_in::LegacyMigration> {
+    if env::var("NILXONE_LEGACY_BOND_MIGRATION").as_deref() != Ok("enabled") {
+        info!("legacy Bond migration is off");
+        return None;
+    }
+    let issuer = env::var("AIAIAIAI_SIGN_IN_ISSUER").ok()?;
+    let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
+        .unwrap_or_else(|error| panic!("legacy migration sign-in configuration: {error}"));
+    let flow = aiaiaiai_sign_in::SignInFlow::legacy_migration(
+        aiaiaiai_sign_in::SignInClient::new(config),
+        native_auth.secret_digester(),
+    )
+    .expect("legacy migration proves only the nilx-one client");
+    let repository = public_info::PublicInfoRepository::connect(database_url)
+        .await
+        .expect("the 0x1 product tables must initialize");
+    let store = public_info::LegacyBondMigrationRepository::prepare(repository)
+        .await
+        .expect("legacy migration needs legacy and product tables in one SQLite store");
+    info!("legacy Bond migration enabled");
+    product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester())
 }
 
 /// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.

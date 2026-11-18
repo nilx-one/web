@@ -73,16 +73,36 @@ impl ProductSignIn {
 #[derive(Clone)]
 struct ProductState {
     sign_in: Option<ProductSignIn>,
+    /// The opt-in legacy Bond migration (#621); `None` by default.
+    migration: Option<migration::LegacyMigration>,
     limiter: AttemptLimiter,
 }
 
 /// The routes exist whether or not sign-in is configured, so the site can
 /// ask `/config` and get an honest "not enabled" instead of a 404.
 pub fn router(sign_in: Option<ProductSignIn>) -> Router {
+    router_with_migration(sign_in, None)
+}
+
+/// [`router`] plus the opt-in legacy Bond migration routes. Migration without
+/// product sign-in is meaningless and is dropped.
+pub fn router_with_migration(
+    sign_in: Option<ProductSignIn>,
+    migration: Option<LegacyMigration>,
+) -> Router {
+    let migration = migration.filter(|_| sign_in.is_some());
     Router::new()
         .route("/api/v1/auth/aiaiaiai/config", get(config))
         .route("/api/v1/auth/aiaiaiai/start", get(start))
         .route("/api/v1/auth/aiaiaiai/callback", get(callback))
+        .route(
+            "/api/v1/auth/aiaiaiai/migrate/start",
+            post(migration::start),
+        )
+        .route(
+            "/api/v1/auth/aiaiaiai/migrate/confirm",
+            post(migration::confirm),
+        )
         .route("/api/v1/product/session", get(read_session))
         .route("/api/v1/product/session/sign-out", post(sign_out))
         .route("/api/v1/product/experience", post(publish_experience))
@@ -91,6 +111,7 @@ pub fn router(sign_in: Option<ProductSignIn>) -> Router {
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(ProductState {
             sign_in,
+            migration,
             limiter: AttemptLimiter::default(),
         })
 }
@@ -169,6 +190,7 @@ async fn config(State(state): State<ProductState>) -> Response {
         serde_json::json!({
             "enabled": state.sign_in.is_some(),
             "issuer": state.sign_in.as_ref().map(|sign_in| sign_in.service.issuer()),
+            "legacy_migration": state.migration.is_some(),
         }),
     )
 }
@@ -198,7 +220,14 @@ async fn start(
         return rate_limited(retry_after);
     }
     match sign_in.service.start(query.return_path.as_deref(), now) {
-        Ok(started) => redirect_with_cookies(started.location.as_str(), [started.set_cookie]),
+        Ok(started) => {
+            let mut response =
+                redirect_with_cookies(started.location.as_str(), [started.set_cookie]);
+            if state.migration.is_some() {
+                append_cookie(&mut response, migration::clear_migration_transaction());
+            }
+            response
+        }
         Err(_) => unavailable(),
     }
 }
@@ -229,6 +258,13 @@ async fn callback(
             .consume(format!("product:callback:{source}"), now, 30, 60)
     {
         return rate_limited(retry_after);
+    }
+    if let Some(migration) = state
+        .migration
+        .as_ref()
+        .filter(|_| migration::is_migration_callback(&state, &headers))
+    {
+        return migration::callback(migration, &headers, &query, now).await;
     }
     let cookie_header = headers.get(COOKIE).and_then(|value| value.to_str().ok());
     let finished = sign_in
@@ -446,6 +482,10 @@ async fn read_profile(
 
 #[path = "product_activation.rs"]
 mod activation;
+
+#[path = "product_migration.rs"]
+mod migration;
+pub use migration::{LegacyMigration, MIGRATION_HANDLE_COOKIE};
 
 #[cfg(test)]
 #[path = "product_sign_in_tests.rs"]
