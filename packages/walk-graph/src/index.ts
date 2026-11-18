@@ -89,6 +89,15 @@ export interface Reach {
   readonly lengthM: Float64Array;
 }
 
+/**
+ * One `roads` feature as Core reads it from a tile: a `RoadFeature` whose
+ * optional attributes are absent rather than `undefined`.
+ */
+export interface TileRoad extends RoadFeature {
+  readonly kindDetail?: string;
+  readonly isBridge?: true;
+}
+
 /** Core's walking graph object (`WalkGraph` in the Wasm runtime). */
 export interface CoreWalkGraphNative {
   node_coordinates(): Float64Array;
@@ -136,6 +145,14 @@ export interface CoreWalkReachNative {
   free(): void;
 }
 
+/** One tile's `roads` as Core reads them (`TileRoads` in the Wasm runtime). */
+export interface CoreTileRoadsNative {
+  features(): string;
+  line_points(): Uint32Array;
+  coordinates(): Float64Array;
+  free(): void;
+}
+
 /** The part of Core's Wasm runtime this package uses. */
 export interface WalkGraphCore {
   readonly WalkGraph: {
@@ -150,6 +167,17 @@ export interface WalkGraphCore {
   walk_surface_weights(): Float64Array;
   walk_grass_weight(): number;
   walk_snap_distance_m(): number;
+  /**
+   * Reads one decompressed vector tile's `roads` layer. Throws a stable code:
+   * `invalid_tile`, `compressed` or `malformed`. Absent from a runtime built
+   * before Core's vector tile roads.
+   */
+  decode_tile_roads?(
+    bytes: Uint8Array,
+    z: number,
+    x: number,
+    y: number,
+  ): CoreTileRoadsNative;
 }
 
 interface Installed {
@@ -245,6 +273,57 @@ const EMPTY: WalkGraph = Object.freeze({
   edges: [],
   adjacency: [],
 });
+
+/**
+ * The `roads` of one decompressed vector tile, read by Core (nilx-one/core
+ * `docs/vector-tile-roads.md`): line features with a string `kind`,
+ * `kindDetail` and `isBridge` verbatim, lines in `[longitude, latitude]`.
+ * Throws until Core is installed, and with Core's code for a tile it cannot
+ * read: a road tile cache then counts the tile as failed, not as empty.
+ */
+export function decodeTileRoads(
+  bytes: Uint8Array,
+  tile: { readonly z: number; readonly x: number; readonly y: number },
+): TileRoad[] {
+  const decode = installed?.core.decode_tile_roads;
+  if (decode === undefined)
+    throw new Error("0x1 Core's vector tile roads are not installed");
+  const native = decode.call(installed!.core, bytes, tile.z, tile.x, tile.y);
+  try {
+    const shapes = JSON.parse(native.features()) as {
+      readonly kind: string;
+      readonly kind_detail?: string;
+      readonly is_bridge?: boolean;
+      readonly lines: number;
+    }[];
+    const linePoints = native.line_points();
+    const coordinates = native.coordinates();
+    let line = 0;
+    let at = 0;
+    return shapes.map((shape) => {
+      const lines: LonLat[][] = [];
+      for (let n = 0; n < shape.lines; n++) {
+        const points: LonLat[] = [];
+        for (let p = 0; p < linePoints[line]!; p++) {
+          points.push([coordinates[at]!, coordinates[at + 1]!]);
+          at += 2;
+        }
+        line += 1;
+        lines.push(points);
+      }
+      return {
+        kind: shape.kind,
+        ...(shape.kind_detail === undefined
+          ? {}
+          : { kindDetail: shape.kind_detail }),
+        ...(shape.is_bridge === true ? { isBridge: true } : {}),
+        lines,
+      };
+    });
+  } finally {
+    native.free();
+  }
+}
 
 /** Core builds the graph; the result is plain data plus Core's own copy. */
 export function buildWalkGraph(features: readonly RoadFeature[]): WalkGraph {

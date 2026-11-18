@@ -90,6 +90,7 @@ import {
   createRoadTileCache,
   pmtilesRoadTiles,
   ROAD_SOURCE_LAYER,
+  type DecodeRoadTile,
   type FetchRoadTile,
 } from "./road-tiles";
 
@@ -229,6 +230,7 @@ export {
   MAX_ROAD_TILES,
   ROAD_SOURCE_LAYER,
   ROAD_TILE_ZOOM,
+  type DecodeRoadTile,
 } from "./road-tiles";
 export {
   OBSERVED_POSITION_LABEL_CLASS,
@@ -442,6 +444,13 @@ export interface MapLibreRendererOptions {
    * basemap archive at `MAP_BASEMAP_URL`; nothing else is ever fetched.
    */
   readonly fetchRoadTile?: FetchRoadTile;
+  /**
+   * How the default `fetchRoadTile` reads a tile's `roads`: Core's reader,
+   * `decodeTileRoads` of `@nilx-one/walk-graph`. Without it the archive is
+   * never read for roads and every preload counts its tiles as failed:
+   * nothing walks before Core does.
+   */
+  readonly decodeRoadTile?: DecodeRoadTile;
   /**
    * Where `preloadLandmarks` reads landmark tiles from. Defaults to the same
    * self-hosted archive; nothing else is ever fetched.
@@ -707,8 +716,14 @@ export function createMapLibreRenderer(
     fetchTile:
       options.fetchRoadTile ??
       ((tile) => {
+        const decode = options.decodeRoadTile;
+        if (decode === undefined)
+          return Promise.reject(
+            new Error("No road tile decoder: Core is not handed over"),
+          );
         archiveRoads ??= pmtilesRoadTiles(
           new URL(MAP_BASEMAP_URL, globalThis.location.href).href,
+          decode,
         );
         return archiveRoads(tile);
       }),

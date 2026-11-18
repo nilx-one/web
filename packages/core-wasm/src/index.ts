@@ -1008,6 +1008,8 @@ export interface GeneratedCoreWasmModule {
   walk_surface_weights?: WalkGraphCore["walk_surface_weights"];
   walk_grass_weight?: WalkGraphCore["walk_grass_weight"];
   walk_snap_distance_m?: WalkGraphCore["walk_snap_distance_m"];
+  /** Absent from a runtime built before Core's vector tile roads. */
+  decode_tile_roads?: WalkGraphCore["decode_tile_roads"];
   default(input: { module_or_path: string }): Promise<unknown>;
   contract_version(): string;
   fixture_corpus_version(): string;
@@ -1288,6 +1290,9 @@ export async function loadGeneratedCoreWasmBindings(
             walk_surface_weights: runtime.walk_surface_weights,
             walk_grass_weight: runtime.walk_grass_weight,
             walk_snap_distance_m: runtime.walk_snap_distance_m,
+            ...(runtime.decode_tile_roads === undefined
+              ? {}
+              : { decode_tile_roads: runtime.decode_tile_roads }),
           },
         }),
     ...(runtime.read_seeds_wallet === undefined
