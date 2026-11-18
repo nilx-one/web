@@ -330,7 +330,12 @@ alongside what the journal lit.
    ground — revealed, or the Bond's own cell. A tap on one asks first
    (“Reveal this patch of fog?”). A yes sends the Avaia up to the cell's
    edge — just outside it, on open ground, on the side nearest where the
-   Avaia stands — never into the fog. It works the cell open from there.
+   Avaia stands — never into the fog. The yes does not start the work: it
+   begins, with its full time, only once she stands within 15 m of the cell's
+   edge (at once, if she already does). Until then the cell is marked as
+   waiting, no clock runs, and the page being closed or Core holding her work
+   changes nothing; an unknown place for her is never near. She works the cell
+   open from there.
    Core decides whether she may and for how long: one to ten minutes,
    growing with the distance between the Bond and the Avaia and with the
    finds lying in the cell this week (the artifacts, rolled by the same public
@@ -342,8 +347,8 @@ alongside what the journal lit.
    runs on the wall clock and is kept per Bond under
    `nilx-one.fog.jobs.v1.<pub_dress>`, so reopening the page does not lose
    it — but time the page was closed, or Core held the work, is never worked:
-   a held reveal freezes with its remaining time and resumes from it. With the Bond at the wheel a tap still asks, and the Avaia still does
-   the work, but nothing walks.
+   a held reveal freezes with its remaining time and resumes from it. With the Bond at the wheel a tap still asks, but nothing walks: the
+   cell waits until the Avaia is brought within 15 m of it.
 2. **The person walks in.** When this device observes itself inside a fogged
    cell, with 50 m accuracy or better, that one cell opens at once. There is
    no Avaia and no wait.

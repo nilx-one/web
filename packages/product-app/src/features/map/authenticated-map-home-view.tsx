@@ -1852,13 +1852,14 @@ export function AuthenticatedMapHomeView({
   // Her place is what she stands at or was left at — never assumed to be the
   // Bond's device after that first putting-down, and unknown (not near)
   // whenever it cannot be read.
+  const avaiaBodyPoint = (): MapPointSelection | undefined =>
+    avaiaWalk.stance(globalThis.performance.now())?.point ??
+    readWorldMemory(pubDress).avaia;
   const avaiaProximity = useAvaiaProximity({
     core: findItems,
     owner: pubDress,
     bondPoint: observedPosition,
-    getAvaiaPoint: () =>
-      avaiaWalk.stance(globalThis.performance.now())?.point ??
-      readWorldMemory(pubDress).avaia,
+    getAvaiaPoint: avaiaBodyPoint,
   });
   // The avatar's true animation-frame position can cross the red boundary
   // between Core polling beats; feed those frames to the proximity guard.
@@ -1901,6 +1902,8 @@ export function AuthenticatedMapHomeView({
     bondPoint: observedPosition,
     enforceProximity: true,
     proximity: avaiaProximity,
+    // A yes only sends the Avaia: the cell opens once she is within 15 m.
+    getAvaiaPoint: avaiaBodyPoint,
     observed: deviceObservation,
     owner: pubDress,
     onRevealed: (cell, via) => {
@@ -3495,7 +3498,8 @@ export function AuthenticatedMapHomeView({
 
   /**
    * The Bond said yes: the Avaia walks up to the cell's edge, on open ground,
-   * and starts on it from there. It never walks into the fog.
+   * and starts on it from there — once she is within 15 m of it, not before.
+   * It never walks into the fog.
    */
   function confirmFogReveal(): void {
     const job = fogReveal.confirm();

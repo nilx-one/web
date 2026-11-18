@@ -17,6 +17,9 @@ import {
 
 import {
   approachPoint,
+  avaiaInReach,
+  awaitReveal,
+  beginReveal,
   FOG_APPROACH_ACCURACY_METERS,
   FOG_FRONTIER_RINGS,
   FOG_NEARBY_ACCURACY_METERS,
@@ -41,6 +44,8 @@ import type { AvaiaProximitySnapshot } from "./use-avaia-proximity";
 
 /** How often a cell being revealed repaints its progress. */
 export const FOG_PROGRESS_REFRESH_MS = 2_000;
+/** How often a cell awaiting the Avaia checks whether she has come near. */
+export const FOG_ARRIVAL_CHECK_MS = 1_000;
 /**
  * How often a running reveal records that Core still allows it. A page that
  * closes loses at most this much authorized time; it never gains any.
@@ -81,6 +86,12 @@ export interface FogRevealInput {
   /** Required in production; old isolated hook tests can omit it. */
   readonly enforceProximity?: boolean;
   readonly proximity?: AvaiaProximitySnapshot | undefined;
+  /**
+   * Where the Avaia's own body stands now, `undefined` when nothing says. When
+   * given, a yes only sends her: the work on a cell starts once she is within
+   * 15 m of its edge. Without it (isolated tests) the work starts at the yes.
+   */
+  readonly getAvaiaPoint?: (() => MapPointSelection | undefined) | undefined;
   readonly onRevealed?: (cell: MapFogCell, via: FogRevealVia) => void;
 }
 
@@ -92,7 +103,10 @@ export interface FogRevealState {
   readonly prompt: FogRevealPrompt | undefined;
   /** Answers a tap into the fog; `offered` opens the prompt. */
   handleFogTap(point: MapPointSelection): FogTapOutcome;
-  /** The Bond said yes: the reveal starts now. */
+  /**
+   * The Bond said yes: the reveal starts now if the Avaia is already within
+   * 15 m of the cell, and otherwise as soon as she comes there.
+   */
   confirm(): FogRevealJob | undefined;
   dismiss(): void;
   /**
@@ -124,6 +138,7 @@ export function useFogReveal({
   owner,
   enforceProximity = false,
   proximity,
+  getAvaiaPoint,
   onRevealed,
 }: FogRevealInput): FogRevealState {
   const fog = renderer.fog;
@@ -194,10 +209,16 @@ export function useFogReveal({
     [active, fog, storedJobs, version],
   );
   const [prompt, setPrompt] = useState<FogRevealPrompt | undefined>(undefined);
+  const jobsRef = useRef(jobs);
+  useEffect(() => {
+    jobsRef.current = jobs;
+  });
 
   const onRevealedRef = useRef(onRevealed);
+  const getAvaiaPointRef = useRef(getAvaiaPoint);
   useEffect(() => {
     onRevealedRef.current = onRevealed;
+    getAvaiaPointRef.current = getAvaiaPoint;
   });
 
   const updateJobs = useCallback(
@@ -266,7 +287,8 @@ export function useFogReveal({
   // While Core allows running work, say so now and on a beat: this is the
   // only evidence a reopened page has that the time before it was authorized.
   const running =
-    enforceProximity && jobs.some((job) => job.pausedAt === undefined);
+    enforceProximity &&
+    jobs.some((job) => job.waiting !== true && job.pausedAt === undefined);
   useEffect(() => {
     if (!running || !canReveal) return;
     writeAuthorizedAt(owner, Date.now());
@@ -282,10 +304,12 @@ export function useFogReveal({
   // Persist from an asynchronous effect callback to avoid render cascades.
   useEffect(() => {
     if (!enforceProximity || jobs.length === 0) return;
+    // A cell still waiting for the Avaia has no clock to stop or restart.
+    const timed = jobs.filter((job) => job.waiting !== true);
     const needsPause =
-      !canReveal && jobs.some((job) => job.pausedAt === undefined);
+      !canReveal && timed.some((job) => job.pausedAt === undefined);
     const needsResume =
-      canReveal && jobs.some((job) => job.pausedAt !== undefined);
+      canReveal && timed.some((job) => job.pausedAt !== undefined);
     if (!needsPause && !needsResume) return;
     const now = Date.now();
     let cancelled = false;
@@ -293,6 +317,7 @@ export function useFogReveal({
       if (cancelled) return;
       updateJobs((current) =>
         current.map((job) => {
+          if (job.waiting === true) return job;
           if (needsPause && job.pausedAt === undefined) {
             return { ...job, pausedAt: now };
           }
@@ -312,10 +337,50 @@ export function useFogReveal({
     };
   }, [enforceProximity, canReveal, jobs, updateJobs]);
 
+  // A yes only sends the Avaia. The work on a cell begins — with its full
+  // time — once she stands within 15 m of its edge, and not before; until
+  // then nothing runs, and a Core that holds her work holds this too.
+  const waitingKey = jobs
+    .filter((job) => job.waiting === true)
+    .map((job) => job.cell.id)
+    .join("|");
+  useEffect(() => {
+    if (waitingKey === "" || !canReveal) return;
+    const arrive = (): void => {
+      const at = getAvaiaPointRef.current?.();
+      if (at === undefined) return;
+      const arrived = new Set(
+        waitingKey
+          .split("|")
+          .filter((id) =>
+            jobsRef.current.some(
+              (job) =>
+                job.cell.id === id &&
+                job.waiting === true &&
+                avaiaInReach(at, job.cell),
+            ),
+          ),
+      );
+      if (arrived.size === 0) return;
+      const now = Date.now();
+      updateJobs((current) =>
+        current.map((job) =>
+          job.waiting === true && arrived.has(job.cell.id)
+            ? beginReveal(job, now)
+            : job,
+        ),
+      );
+    };
+    arrive();
+    const beat = globalThis.setInterval(arrive, FOG_ARRIVAL_CHECK_MS);
+    return () => globalThis.clearInterval(beat);
+  }, [canReveal, updateJobs, waitingKey]);
+
   // A reveal ends on the wall clock, so one that finished while the page was
   // closed lands the moment it is open again.
   useEffect(() => {
-    if (fog === undefined || jobs.length === 0 || !canReveal) return;
+    const timed = jobs.filter((job) => job.waiting !== true);
+    if (fog === undefined || timed.length === 0 || !canReveal) return;
     const finish = (): void => {
       const now = Date.now();
       const done = jobs.filter((job) => revealFinished(job, now));
@@ -327,7 +392,7 @@ export function useFogReveal({
       for (const job of done) onRevealedRef.current?.(job.cell, "avaia");
     };
     const next = Math.min(
-      ...jobs.map((job) => revealRemainingMs(job, Date.now())),
+      ...timed.map((job) => revealRemainingMs(job, Date.now())),
     );
     const timer = globalThis.setTimeout(finish, next);
     return () => globalThis.clearTimeout(timer);
@@ -448,15 +513,20 @@ export function useFogReveal({
     const offer = offerFor(livePrompt.cell.id, frontier, jobs);
     setPrompt(undefined);
     if (offer.kind !== "offer") return undefined;
-    const job = startReveal(
+    const now = Date.now();
+    // Under the Avaia's own place, a cell she is not yet near is only waited
+    // for; one she already stands beside starts at once.
+    const gated =
+      getAvaiaPoint !== undefined && !avaiaInReach(getAvaiaPoint(), offer.cell);
+    const job = (gated ? awaitReveal : startReveal)(
       offer.cell,
       livePrompt.landmarks,
-      Date.now(),
+      now,
       livePrompt.durationMs,
     );
     updateJobs((current) => [...current, job]);
     return job;
-  }, [canReveal, frontier, jobs, livePrompt, updateJobs]);
+  }, [canReveal, frontier, getAvaiaPoint, jobs, livePrompt, updateJobs]);
 
   const dismiss = useCallback(() => setPrompt(undefined), []);
 
