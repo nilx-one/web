@@ -75,6 +75,8 @@ struct ProductState {
     sign_in: Option<ProductSignIn>,
     /// The opt-in legacy Bond migration (#621); `None` by default.
     migration: Option<migration::LegacyMigration>,
+    /// Creates the Bond of a person's first AIS sign-in (#621); `None` by default.
+    provisioning: Option<crate::product_bond_auth::ProductBondAuth>,
     limiter: AttemptLimiter,
 }
 
@@ -90,7 +92,18 @@ pub fn router_with_migration(
     sign_in: Option<ProductSignIn>,
     migration: Option<LegacyMigration>,
 ) -> Router {
+    router_with_bonds(sign_in, migration, None)
+}
+
+/// [`router_with_migration`] that also gives a person's first AIS sign-in its
+/// Bond when `provisioning` is set.
+pub fn router_with_bonds(
+    sign_in: Option<ProductSignIn>,
+    migration: Option<LegacyMigration>,
+    provisioning: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
     let migration = migration.filter(|_| sign_in.is_some());
+    let provisioning = provisioning.filter(|_| sign_in.is_some());
     Router::new()
         .route("/api/v1/auth/aiaiaiai/config", get(config))
         .route("/api/v1/auth/aiaiaiai/start", get(start))
@@ -112,6 +125,7 @@ pub fn router_with_migration(
         .with_state(ProductState {
             sign_in,
             migration,
+            provisioning,
             limiter: AttemptLimiter::default(),
         })
 }
@@ -286,6 +300,15 @@ async fn callback(
         Ok(signed_in) => signed_in,
         Err(failure) => return failed(failure.as_str(), finished.clear_cookie),
     };
+    // A first sign-in has a profile but no Bond. Core creates it before any
+    // session exists, so a refused address never leaves a half-signed-in person.
+    if let Some(provisioning) = state.provisioning.as_ref()
+        && let Err(failure) = provisioning
+            .provision(&signed_in.owner.public_profile().profile_id, now)
+            .await
+    {
+        return failed(failure.code(), finished.clear_cookie);
+    }
     let Ok(token) = TokenFactory::session() else {
         return failed("aiaiaiai_sign_in_unavailable", finished.clear_cookie);
     };
