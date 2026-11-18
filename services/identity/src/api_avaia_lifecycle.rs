@@ -10,17 +10,20 @@ pub fn avaia_router(
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 ) -> Router {
-    avaia_router_with_clock(
+    avaia_router_with_product(
         repository,
         provider_links,
         telegram_verifier,
         discord_oauth,
         native_auth,
         Arc::new(SystemClock),
+        product,
     )
 }
 
+#[cfg(test)]
 fn avaia_router_with_clock(
     repository: IdentityRepository,
     provider_links: ProviderLinkRepository,
@@ -28,6 +31,26 @@ fn avaia_router_with_clock(
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
     clock: Arc<dyn Clock>,
+) -> Router {
+    avaia_router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        clock,
+        None,
+    )
+}
+
+fn avaia_router_with_product(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    clock: Arc<dyn Clock>,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 ) -> Router {
     let password_engine = native_auth.password_engine();
     let dummy_password_hash = password_engine
@@ -45,7 +68,7 @@ fn avaia_router_with_clock(
         limiter: AttemptLimiter::default(),
         provider_links,
         dummy_password_hash,
-        product: None,
+        product,
     };
 
     Router::new()

@@ -144,6 +144,7 @@ pub fn speech_router(
     native_auth: NativeAuthConfig,
     relay: Arc<dyn SpeechRelay>,
     config: SpeechConfig,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 ) -> Router {
     Router::new()
         .route("/api/v1/speech", post(ingest_line))
@@ -156,6 +157,7 @@ pub fn speech_router(
                 telegram_verifier,
                 discord_oauth,
                 native_auth,
+                product,
             },
             speech,
             relay,
@@ -569,6 +571,7 @@ mod tests {
             .expect("valid native auth configuration"),
             Arc::new(RecordingRelay(sender)),
             SpeechConfig::new(INGEST_TOKEN, 500).expect("speech config"),
+            None,
         );
         Harness {
             app,

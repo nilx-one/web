@@ -185,28 +185,23 @@ production:
 
 Deploying AIS and the site's "Sign in" button are separate steps.
 
-### New people: first sign-in creates the Bond (opt-in, off)
+### AIS Bonds
 
-`NILXONE_AIS_NEW_BONDS=enabled` (with sign-in on) makes the AIS callback give a
-person's first sign-in its Bond before any session exists. Core's
-`provision_new_bond` creates the human Bond at the address AIS assigned and
-binds it to the profile in one transaction; from then on the product session
-acts for it on the routes that accept one (see below). A repeat sign-in
-changes nothing.
+With AIS sign-in on (`AIAIAIAI_SIGN_IN_ISSUER`), a person's Bond comes from
+their aiaiaiai Identity. There is no separate switch. They need legacy and
+product tables in one SQLite store.
 
-An address that already belongs to another Bond (a legacy Bond, or one made
-for another AIS account) is **never linked by name**: no Bond is created, no
-session is opened, and the callback redirects to `/?auth_error=` with
+**New people.** The AIS callback gives a person's first sign-in its Bond before
+any session exists. Core's `provision_new_bond` creates the human Bond at the
+address AIS assigned and binds it to the profile in one transaction; a repeat
+sign-in changes nothing. An address that already belongs to another Bond (a
+legacy Bond, or one made for another AIS account) is **never linked by name**:
+no Bond, no session, and the callback redirects to `/?auth_error=` with
 `bond_address_taken` (owners of existing Bonds use the migration below),
 `bond_address_missing` (the sign-in carried no usable address) or
-`bond_unavailable` (storage). Needs legacy and product tables in one SQLite
-store, like migration. The feature also enables the product-session routes
-listed below, without the migration routes.
+`bond_unavailable` (storage).
 
-### Legacy Bond migration (opt-in, off)
-
-`NILXONE_LEGACY_BOND_MIGRATION=enabled` (with sign-in on) adds the #621 host
-flow over Core's `LegacyBondMigrationRepository`:
+**Existing Bonds.** The owner of a legacy Bond attaches an AIS identity:
 
 - `POST /api/v1/auth/aiaiaiai/migrate/start` — `x-0x1-csrf: 1`, a fresh
   password-authenticated native `__Host-0x1_session`. Returns
@@ -219,21 +214,16 @@ flow over Core's `LegacyBondMigrationRepository`:
   revokes the legacy session; the response clears both cookies and points to
   an ordinary AIS sign-in, which restores the attached profile.
 
-Nothing is matched by `pub_dress`. Enabling it installs Core's migration
-tables and, from then on, refuses native logins for attached Bonds. The flag
-stays off in production until the hostile E2E in #621 and a separately
-authorized rollout.
+Nothing is matched by `pub_dress`. From then on native logins for an attached
+Bond are refused.
 
-With the flag on, the **routes whose Core writes re-check the session
-atomically** (Special: `/api/v1/identity/subscription`, `special-items`,
-`special-inventory`, `special-items/{order_id}`, the market visit and its
-return; xPing: `xping/engine`; crafts: `crafts`) also accept the AIS product session cookie
-`__Host-0x1_product` of an attached Bond. The Bond comes solely from Core's
-durable `legacy_bond_bindings` link (`resolve_session_bond`); a native session
-or provider proof is tried first and a product session never mints a native
-cookie. The `active` flag is an early answer: Core re-checks `active = 1`
-atomically at the wallet write (Core #145). Every other route still answers
-401 to a product session.
+**Playing.** Every route that resolves a Bond (`authenticated_bond`, the
+identity read, the map and location control, speech, Avaia) also accepts the
+AIS product session cookie `__Host-0x1_product` of an attached Bond, after a
+native session or a Telegram/Discord proof. The Bond comes solely from Core's
+durable `legacy_bond_bindings` link (`resolve_session_bond`); a product session
+never mints a native session or cookie. The `active` flag is an early answer:
+Core re-checks `active = 1` atomically at the wallet writes it guards.
 
 ## Bond roles and location modes
 

@@ -143,6 +143,8 @@ pub(crate) struct LocationControlApiState {
     pub(crate) telegram_verifier: TelegramInitDataVerifier,
     pub(crate) discord_oauth: Option<DiscordOAuthClient>,
     pub(crate) native_auth: NativeAuthConfig,
+    /// AIS product sessions of attached Bonds (#621).
+    pub(crate) product: Option<crate::product_bond_auth::ProductBondAuth>,
 }
 
 pub fn location_control_router(
@@ -151,6 +153,7 @@ pub fn location_control_router(
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 ) -> Router {
     Router::new()
         .route("/api/v1/location-control", get(read_location_control))
@@ -166,6 +169,7 @@ pub fn location_control_router(
             telegram_verifier,
             discord_oauth,
             native_auth,
+            product,
         })
 }
 
@@ -217,6 +221,14 @@ pub(crate) async fn authenticate_bond(
                 tracing::error!(%error, "native session lookup failed");
                 return Err(StatusCode::SERVICE_UNAVAILABLE);
             }
+        }
+    }
+
+    if let Some(product) = state.product.as_ref() {
+        match product.bond(&state.identities, headers, now).await {
+            Ok(Some((identity, _))) => return Ok((identity, None)),
+            Ok(None) => {}
+            Err(()) => return Err(StatusCode::SERVICE_UNAVAILABLE),
         }
     }
 
@@ -661,6 +673,7 @@ mod tests {
                 "test-password-pepper-that-is-at-least-thirty-two-bytes",
             )
             .expect("valid native auth configuration"),
+            None,
         )
     }
 
