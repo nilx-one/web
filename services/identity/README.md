@@ -401,9 +401,6 @@ these routes authenticate an active Bond, require CSRF, rate-limit and answer
 
 ## Market Special orders (0x1 issuer)
 
-`MARKET_TELEGRAM_ISSUER_URL` adds the production Telegram queue alongside the
-existing browser queue. The Telegram worker grants Special directly after payment.
-
 0xda-market sells Special in seeds; this service is the issuer that owns the
 wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
 
@@ -546,19 +543,3 @@ service binary, HTTP routes and disabled activation flags are unchanged.
 Source moves preserve migration SQL and do not migrate data. Merge the Core
 package before this consumer change; the dependency is pinned to its exact
 reviewed source commit. Deployment, funding and activation remain separate.
-
-
-### Telegram Market checkout publication
-
-The production Identity envelope and the reusable Identity deployment workflow
-now require `PARTNER_LOOKUP_TOKEN` (at least 32 bytes, distinct from the issuer
-handoff key). Configure the same production secret in `nilx-one/web`,
-`0xda-market/core` and `0xda-market/telegram-bot`; it opens the existing read-only
-`provider-lookup` and `provider-account` routes. The Bot never receives
-`NILX_BROWSER_HANDOFF_TOKEN`. No new wallet debit path is introduced.
-
-Deploy the coordinated Infra provider allowlist/envelope change before publishing
-the new Identity candidate, then deploy Identity before Core and Bot. Production
-activation stays manual. Native authentication secrets remain host-owned and are
-preserved by `prepare-runtime-env.sh`. A malformed/reused partner key aborts
-preparation before replacing the existing runtime file.
