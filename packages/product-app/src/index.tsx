@@ -88,6 +88,17 @@ export {
   type SystemNotice,
 } from "./features/system-informer/system-informer";
 import { FailureNoticeProvider } from "./features/failures/failure-toast-region";
+import {
+  confirmAisMigration,
+  readAisMigrationReturn,
+  startAisMigration,
+  type AisMigrationFailure,
+} from "./features/identity/ais-migration";
+import { AisMigrationScreen } from "./features/identity/ais-migration-screen";
+import {
+  aisSignInHref,
+  readAisSignInFailure,
+} from "./features/identity/ais-sign-in";
 import { IdentityFoundationView } from "./features/identity/identity-foundation-view";
 import {
   createIdentityFoundationViewModel,
@@ -370,6 +381,61 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [selection, setSelection] = useState<PubDressSelection>({
     ...DEFAULT_AUTH_SELECTION,
   });
+  // A return from aiaiaiai that did not sign the person in says why, once.
+  const [aisFailure] = useState(() =>
+    browserHost ? readAisSignInFailure(window.location.search) : undefined,
+  );
+  useEffect(() => {
+    if (aisFailure === undefined) return;
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("auth_error");
+    window.history.replaceState(window.history.state, "", clean);
+  }, [aisFailure]);
+  // Moving an existing Bond to aiaiaiai: the trip back leaves its stage in the
+  // address; a failed step is shown on the same screen.
+  const [migration, setMigration] = useState<
+    { stage: "confirm" | "error"; reason?: AisMigrationFailure } | undefined
+  >(() =>
+    browserHost ? readAisMigrationReturn(window.location.search) : undefined,
+  );
+  const [migrationBusy, setMigrationBusy] = useState(false);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (
+      !url.searchParams.has("migration") &&
+      !url.searchParams.has("migration_error")
+    ) {
+      return;
+    }
+    url.searchParams.delete("migration");
+    url.searchParams.delete("migration_error");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+  const migrateToAis = () => {
+    if (migrationBusy) return;
+    setMigrationBusy(true);
+    void startAisMigration().then((result) => {
+      if (result.kind === "redirect") {
+        window.location.assign(result.url);
+        return;
+      }
+      setMigrationBusy(false);
+      setMigration({ stage: "error", reason: result.reason });
+    });
+  };
+  const confirmMigration = () => {
+    if (migrationBusy) return;
+    setMigrationBusy(true);
+    void confirmAisMigration().then((result) => {
+      if (result.kind === "attached") {
+        // Signed in again through aiaiaiai: the Bond is the same, the door is new.
+        window.location.assign(result.next);
+        return;
+      }
+      setMigrationBusy(false);
+      setMigration({ stage: "error", reason: result.reason });
+    });
+  };
   const [password, setPassword] = useState("");
   // A verified external provider must never attach to a stored native session
   // without the person's explicit create/connect decision.
@@ -1180,6 +1246,20 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         }
       : undefined;
 
+  if (migration !== undefined && viewModel.identity.kind === "authenticated") {
+    return (
+      <AisMigrationScreen
+        hostLabel={viewModel.hostLabel}
+        safeArea={viewModel.safeArea}
+        stage={migration.stage}
+        reason={migration.reason}
+        busy={migrationBusy}
+        onConfirm={confirmMigration}
+        onBack={() => setMigration(undefined)}
+      />
+    );
+  }
+
   if (viewModel.identity.kind === "authenticated") {
     // No Avaia runtime is published yet, so there is nothing to fetch on any
     // device. Both the Dock and the setup surface state that same device truth.
@@ -1432,12 +1512,18 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
             {...(viewModel.identity.native
               ? { onLogout: () => logout.mutate() }
               : {})}
+            {...(viewModel.identity.native && browserHost
+              ? { onMigrateToAis: migrateToAis }
+              : {})}
           />
         </SubscriptionStatusProvider>
       </ProductActivation>
     );
   }
 
+  const aisSignIn = browserHost
+    ? { href: aisSignInHref(), failure: aisFailure }
+    : undefined;
   const providerContext = browserProviderContextQuery.data;
   const browserProviderAuth = browserHost
     ? {
@@ -1480,6 +1566,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
       selection={selection}
       viewModel={viewModel}
       browserProviderAuth={browserProviderAuth}
+      aisSignIn={aisSignIn}
       onCredentialAutofill={applyAutofilledCredential}
       onAvatarChoice={(model) => {
         if (!chooseAvatar.isPending) chooseAvatar.mutate(model);

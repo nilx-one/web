@@ -22,6 +22,7 @@ import {
   ProviderPasswordForm,
   ProviderPasswordHandoff,
 } from "./provider-password-form";
+import type { AisSignInFailure } from "./ais-sign-in";
 import { PubDressUrlField } from "./pub-dress-url-field";
 import { createPubDressUrlViewState } from "./pub-dress-url-view-model";
 import {
@@ -46,8 +47,17 @@ export interface BrowserProviderAuthViewState {
   onChooseExistingIdentity(): void;
 }
 
+/** The aiaiaiai sign-in the form leads with (web hosts only). */
+export interface AisSignInViewState {
+  /** The host route that begins the sign-in. */
+  href: string;
+  /** Why the last return from aiaiaiai did not sign the person in. */
+  failure?: AisSignInFailure | undefined;
+}
+
 export interface IdentityFoundationViewProps {
   password: string;
+  aisSignIn?: AisSignInViewState | undefined;
   selection: PubDressSelection;
   viewModel: IdentityFoundationViewModel;
   browserProviderAuth?: BrowserProviderAuthViewState | undefined;
@@ -140,6 +150,35 @@ function lede(identity: IdentityViewState, t: Translate): string {
     case "unavailable":
       return translateCopy(t, identity.detail);
   }
+}
+
+const AIS_FAILURE_COPY = {
+  "address-taken": "identity.ais.failure.addressTaken",
+  "address-missing": "identity.ais.failure.addressMissing",
+  unavailable: "identity.ais.failure.unavailable",
+  other: "identity.ais.failure.other",
+} as const;
+
+function AisSignIn({ ais }: { ais: AisSignInViewState }) {
+  const { t } = useLocalization();
+  return (
+    <section className="ais-sign-in" aria-labelledby="ais-sign-in-label">
+      <a id="ais-sign-in-label" className="ais-sign-in__button" href={ais.href}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+        </svg>
+        <span>{t("identity.ais.signIn")}</span>
+      </a>
+      <p className="identity-status" id="ais-sign-in-note">
+        {t("identity.ais.note")}
+      </p>
+      {ais.failure === undefined ? null : (
+        <p className="identity-status identity-status--error" role="alert">
+          {t(AIS_FAILURE_COPY[ais.failure])}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function ProviderRow({
@@ -365,6 +404,7 @@ function IdentityForm({
 
 export function IdentityFoundationView({
   browserProviderAuth,
+  aisSignIn,
   password,
   pubDressLabelDerivation,
   pubDressLabelDerivationPending = false,
@@ -432,6 +472,14 @@ export function IdentityFoundationView({
           </div>
 
           <div className="identity-surface">
+            {aisSignIn !== undefined && viewModel.identity.kind === "form" ? (
+              <>
+                <AisSignIn ais={aisSignIn} />
+                <div className="identity-divider" aria-hidden="true">
+                  <span>{t("identity.or")}</span>
+                </div>
+              </>
+            ) : null}
             {viewModel.showProviderRow ? (
               <>
                 <ProviderRow auth={browserProviderAuth} />

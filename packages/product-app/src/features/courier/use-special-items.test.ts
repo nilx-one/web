@@ -3,6 +3,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { CarriedGrid } from "../inventory/inventory";
+import { SpecialStillRunning } from "./market-dock";
 import { useSpecialItems } from "./use-special-items";
 
 const { deliver } = vi.hoisted(() => ({ deliver: vi.fn() }));
@@ -103,4 +104,54 @@ it("activates without starting another delivery", async () => {
   expect(activated).toBe(true);
   expect(catalog.changeItem).toHaveBeenCalledWith(id, { op: "activate" });
   expect(deliver).not.toHaveBeenCalled();
+});
+
+it("asks before adding a term to a Special that still runs, then extends on yes", async () => {
+  const changeItem = vi
+    .fn<(id: string, command: unknown) => Promise<void>>()
+    .mockRejectedValueOnce(new SpecialStillRunning(3 * 86_400_000))
+    .mockResolvedValue(undefined);
+  const catalog = {
+    load: vi.fn(),
+    items: vi.fn(async () => []),
+    changeItem,
+  };
+  const hook = renderHook(() => useSpecialItems("0x0sky", catalog, id));
+  let activated: boolean | undefined;
+  await act(async () => {
+    activated = await hook.result.current.activate(id);
+  });
+  // Not a failure to retry: a question, and nothing was spent.
+  expect(activated).toBe(false);
+  expect(hook.result.current.retry).toBeUndefined();
+  expect(hook.result.current.confirmation).toEqual({
+    id,
+    remainingMs: 3 * 86_400_000,
+  });
+  await act(async () => {
+    activated = await hook.result.current.confirm();
+  });
+  expect(activated).toBe(true);
+  expect(changeItem).toHaveBeenLastCalledWith(id, {
+    op: "activate",
+    confirm: true,
+  });
+  expect(hook.result.current.confirmation).toBeUndefined();
+});
+
+it("keeps the item for later when the person declines the extension", async () => {
+  const catalog = {
+    load: vi.fn(),
+    items: vi.fn(async () => []),
+    changeItem: vi.fn(async () => {
+      throw new SpecialStillRunning(7_200_000);
+    }),
+  };
+  const hook = renderHook(() => useSpecialItems("0x0sky", catalog, id));
+  await act(async () => {
+    await hook.result.current.activate(id);
+  });
+  act(() => hook.result.current.keepForLater());
+  expect(hook.result.current.confirmation).toBeUndefined();
+  expect(catalog.changeItem).toHaveBeenCalledOnce();
 });

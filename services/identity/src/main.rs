@@ -363,8 +363,18 @@ async fn main() {
         discord_credentials,
         github_browser_oauth,
     );
-    let product_api = product_sign_in::router(
-        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await,
+    let product_sign_in =
+        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
+    let (legacy_migration, product_bonds) = match product_sign_in {
+        Some(_) => {
+            product_bonds_from_environment(&public_origin, &database_url, &native_auth).await
+        }
+        None => (None, None),
+    };
+    let product_api = product_sign_in::router_with_bonds(
+        product_sign_in,
+        legacy_migration,
+        product_bonds.clone(),
     );
     let provider_api = browser_web_auth::router(
         repository.clone(),
@@ -389,13 +399,15 @@ async fn main() {
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
+        product_bonds.clone(),
     );
-    let pub_info_api = api::pub_info_router(
+    let pub_info_api = api::pub_info_router_with_product_bonds(
         repository.clone(),
         provider_links.clone(),
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
+        product_bonds.clone(),
     );
     let speech_api = speech_config.map(|config| {
         info!("spoken lines enabled");
@@ -411,6 +423,7 @@ async fn main() {
                 surfaces: Arc::clone(&surfaces),
             }),
             config,
+            product_bonds.clone(),
         )
     });
     let avaia_api = api::avaia_router(
@@ -419,6 +432,7 @@ async fn main() {
         telegram_activity_verifier.clone(),
         discord_activity_oauth.clone(),
         native_auth.clone(),
+        product_bonds.clone(),
     );
     let provider_self_service_api = provider_self_service_router(
         repository.clone(),
@@ -432,12 +446,13 @@ async fn main() {
         discord_activity_oauth.clone(),
         native_auth.clone(),
     );
-    let api = api::router(
+    let api = api::router_with_product_bonds(
         repository.clone(),
         provider_links.clone(),
         telegram_activity_verifier,
         discord_activity_oauth,
         native_auth,
+        product_bonds,
     )
     .merge(avaia_api)
     .merge(pub_info_api)
@@ -593,6 +608,52 @@ async fn product_sign_in_from_environment(
         .expect("the product service accepts the nilx-one client");
     info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
     Some(product_sign_in::ProductSignIn::new(service, native_auth))
+}
+
+/// The AIS Bond features that come with AIS sign-in: attaching an AIS identity
+/// to an existing Bond, giving a person's first sign-in its Bond, and letting
+/// a Bond's product session act in the game. They need Core's store, which
+/// refuses to prepare unless legacy and product tables share this database.
+async fn product_bonds_from_environment(
+    public_origin: &Url,
+    database_url: &str,
+    native_auth: &NativeAuthConfig,
+) -> (
+    Option<product_sign_in::LegacyMigration>,
+    Option<identity_bot::ProductBondAuth>,
+) {
+    let Some(issuer) = env::var("AIAIAIAI_SIGN_IN_ISSUER")
+        .ok()
+        .filter(|value| !value.is_empty())
+    else {
+        return (None, None);
+    };
+    let backchannel = env::var("AIAIAIAI_SIGN_IN_BACKCHANNEL")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let config = product_sign_in_client(&issuer, backchannel.as_deref(), public_origin)
+        .unwrap_or_else(|error| panic!("AIS Bond sign-in configuration: {error}"));
+    let flow = aiaiaiai_sign_in::SignInFlow::legacy_migration(
+        aiaiaiai_sign_in::SignInClient::new(config),
+        native_auth.secret_digester(),
+    )
+    .expect("legacy migration proves only the nilx-one client");
+    let repository = public_info::PublicInfoRepository::connect(database_url)
+        .await
+        .expect("the 0x1 product tables must initialize");
+    let store = public_info::LegacyBondMigrationRepository::prepare(repository.clone())
+        .await
+        .expect("AIS Bonds need legacy and product tables in one SQLite store");
+    let bonds = identity_bot::ProductBondAuth::new(
+        store.clone(),
+        repository,
+        native_auth.secret_digester(),
+    );
+    info!("AIS Bonds enabled");
+    (
+        product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester()),
+        Some(bonds),
+    )
 }
 
 /// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.

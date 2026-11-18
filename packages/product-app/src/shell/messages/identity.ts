@@ -36,6 +36,40 @@ export const IDENTITY_EN = {
   "identity.provider.signInWith": "Sign in with",
   "identity.provider.signInWithNamed": "Sign in with {provider}",
   "identity.provider.web": "web",
+  "identity.ais.signIn": "Sign in with aiaiaiai",
+  "identity.ais.note":
+    "One account for every aiaiaiai product. Your Bond is created for you the first time.",
+  "identity.ais.failure.addressTaken":
+    "That name already belongs to another Bond. If it is yours, sign in below and move it to aiaiaiai.",
+  "identity.ais.failure.addressMissing":
+    "aiaiaiai did not give a name for your Bond. Try again.",
+  "identity.ais.failure.unavailable":
+    "Sign-in is unavailable right now. Try again shortly.",
+  "identity.ais.failure.other": "Sign-in did not complete. Try again.",
+  "identity.migration.title": "Move this Bond to aiaiaiai",
+  "identity.migration.lede":
+    "Your Bond keeps its name, Avaia, experience and everything else; only how you sign in changes.",
+  "identity.migration.confirm":
+    "aiaiaiai verified your account. Moving attaches this Bond to it: the name, Avaia, experience, seeds and subscriptions stay exactly as they are, and from now on you sign in through aiaiaiai.",
+  "identity.migration.confirmAction": "Move this Bond to aiaiaiai",
+  "identity.migration.cancel": "Not now",
+  "identity.migration.back": "Back",
+  "identity.migration.failure.freshSignIn":
+    "Sign in to this Bond with its password again, then start the move within ten minutes.",
+  "identity.migration.failure.alreadyAttached":
+    "This Bond is already attached to an aiaiaiai account. Sign in through aiaiaiai.",
+  "identity.migration.failure.alreadyAiaiaiai":
+    "You are already signed in through aiaiaiai.",
+  "identity.migration.failure.inProgress":
+    "A move for this sign-in is already in progress.",
+  "identity.migration.failure.expired":
+    "This move has expired. Start it again.",
+  "identity.migration.failure.proofInvalid":
+    "The aiaiaiai sign-in could not be verified. Start again.",
+  "identity.migration.failure.identityConflict":
+    "This aiaiaiai account already has a 0x1 profile. Nothing was changed.",
+  "identity.migration.failure.unavailable":
+    "The move is unavailable right now. Try again shortly.",
   "identity.provider.verified":
     "{provider} verified. Choose whether to create a new identity or sign in to your existing one.",
   "identity.provider.suggested": "Create {pubDress}",
@@ -221,6 +255,39 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.provider.signInWith": "Увійти через",
   "identity.provider.signInWithNamed": "Увійти через {provider}",
   "identity.provider.web": "веб",
+  "identity.ais.signIn": "Увійти через aiaiaiai",
+  "identity.ais.note":
+    "Один акаунт для всіх продуктів aiaiaiai. Bond створиться сам під час першого входу.",
+  "identity.ais.failure.addressTaken":
+    "Це ім’я вже належить іншому Bond. Якщо це ваш Bond, увійдіть нижче й перенесіть його до aiaiaiai.",
+  "identity.ais.failure.addressMissing":
+    "aiaiaiai не передав ім’я для вашого Bond. Спробуйте ще раз.",
+  "identity.ais.failure.unavailable":
+    "Вхід зараз недоступний. Спробуйте трохи згодом.",
+  "identity.ais.failure.other": "Вхід не завершився. Спробуйте ще раз.",
+  "identity.migration.title": "Перенести цей Bond до aiaiaiai",
+  "identity.migration.lede":
+    "Ваш Bond зберігає ім’я, Avaia, досвід і все інше; змінюється лише спосіб входу.",
+  "identity.migration.confirm":
+    "aiaiaiai підтвердив ваш акаунт. Перенесення прикріплює цей Bond до нього: ім’я, Avaia, досвід, seeds і підписки лишаються як є, а надалі ви входите через aiaiaiai.",
+  "identity.migration.confirmAction": "Перенести цей Bond до aiaiaiai",
+  "identity.migration.cancel": "Не зараз",
+  "identity.migration.back": "Назад",
+  "identity.migration.failure.freshSignIn":
+    "Увійдіть до цього Bond паролем ще раз і почніть перенесення протягом десяти хвилин.",
+  "identity.migration.failure.alreadyAttached":
+    "Цей Bond уже прикріплений до акаунта aiaiaiai. Увійдіть через aiaiaiai.",
+  "identity.migration.failure.alreadyAiaiaiai":
+    "Ви вже увійшли через aiaiaiai.",
+  "identity.migration.failure.inProgress":
+    "Перенесення для цього входу вже триває.",
+  "identity.migration.failure.expired": "Час перенесення минув. Почніть знову.",
+  "identity.migration.failure.proofInvalid":
+    "Вхід через aiaiaiai не вдалося підтвердити. Почніть знову.",
+  "identity.migration.failure.identityConflict":
+    "Цей акаунт aiaiaiai уже має профіль 0x1. Нічого не змінено.",
+  "identity.migration.failure.unavailable":
+    "Перенесення зараз недоступне. Спробуйте трохи згодом.",
   "identity.provider.verified":
     "{provider} підтверджено. Оберіть: створити нову ідентичність або увійти до наявної.",
   "identity.provider.suggested": "Створити {pubDress}",

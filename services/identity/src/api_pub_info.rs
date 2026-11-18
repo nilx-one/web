@@ -25,6 +25,27 @@ pub fn pub_info_router(
     )
 }
 
+/// [`pub_info_router`] whose xPing and craft-start routes also accept the
+/// active AIS product session of an attached legacy Bond (#621).
+pub fn pub_info_router_with_product_bonds(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
+    pub_info_router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        Arc::new(SystemClock),
+        product,
+    )
+}
+
 fn pub_info_router_with_clock(
     repository: IdentityRepository,
     provider_links: ProviderLinkRepository,
@@ -32,6 +53,26 @@ fn pub_info_router_with_clock(
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
     clock: Arc<dyn Clock>,
+) -> Router {
+    pub_info_router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        clock,
+        None,
+    )
+}
+
+fn pub_info_router_with_product(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    clock: Arc<dyn Clock>,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 ) -> Router {
     let password_engine = native_auth.password_engine();
     let dummy_password_hash = password_engine
@@ -49,6 +90,7 @@ fn pub_info_router_with_clock(
         limiter: AttemptLimiter::default(),
         provider_links,
         dummy_password_hash,
+        product,
     };
 
     Router::new()

@@ -40,7 +40,7 @@ use crate::{
 /// sign-in must never be mistaken for one.
 pub const PRODUCT_SESSION_COOKIE: &str = "__Host-0x1_product";
 const CSRF_HEADER: &str = "x-0x1-csrf";
-const SESSION_DOMAIN: &str = "product-session";
+pub(crate) const PRODUCT_SESSION_DOMAIN: &str = "product-session";
 const MAX_REQUEST_BYTES: usize = 1024;
 
 /// Everything the routes need once AIS sign-in is configured.
@@ -63,7 +63,7 @@ impl ProductSignIn {
     /// Only this digest reaches the database, never the token.
     fn token_hash(&self, token: &str) -> String {
         self.digester
-            .digest(SESSION_DOMAIN, token)
+            .digest(PRODUCT_SESSION_DOMAIN, token)
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect()
@@ -73,16 +73,49 @@ impl ProductSignIn {
 #[derive(Clone)]
 struct ProductState {
     sign_in: Option<ProductSignIn>,
+    /// The opt-in legacy Bond migration (#621); `None` by default.
+    migration: Option<migration::LegacyMigration>,
+    /// Creates the Bond of a person's first AIS sign-in (#621); `None` by default.
+    provisioning: Option<crate::product_bond_auth::ProductBondAuth>,
     limiter: AttemptLimiter,
 }
 
 /// The routes exist whether or not sign-in is configured, so the site can
 /// ask `/config` and get an honest "not enabled" instead of a 404.
 pub fn router(sign_in: Option<ProductSignIn>) -> Router {
+    router_with_migration(sign_in, None)
+}
+
+/// [`router`] plus the opt-in legacy Bond migration routes. Migration without
+/// product sign-in is meaningless and is dropped.
+pub fn router_with_migration(
+    sign_in: Option<ProductSignIn>,
+    migration: Option<LegacyMigration>,
+) -> Router {
+    router_with_bonds(sign_in, migration, None)
+}
+
+/// [`router_with_migration`] that also gives a person's first AIS sign-in its
+/// Bond when `provisioning` is set.
+pub fn router_with_bonds(
+    sign_in: Option<ProductSignIn>,
+    migration: Option<LegacyMigration>,
+    provisioning: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
+    let migration = migration.filter(|_| sign_in.is_some());
+    let provisioning = provisioning.filter(|_| sign_in.is_some());
     Router::new()
         .route("/api/v1/auth/aiaiaiai/config", get(config))
         .route("/api/v1/auth/aiaiaiai/start", get(start))
         .route("/api/v1/auth/aiaiaiai/callback", get(callback))
+        .route(
+            "/api/v1/auth/aiaiaiai/migrate/start",
+            post(migration::start),
+        )
+        .route(
+            "/api/v1/auth/aiaiaiai/migrate/confirm",
+            post(migration::confirm),
+        )
         .route("/api/v1/product/session", get(read_session))
         .route("/api/v1/product/session/sign-out", post(sign_out))
         .route("/api/v1/product/experience", post(publish_experience))
@@ -91,6 +124,8 @@ pub fn router(sign_in: Option<ProductSignIn>) -> Router {
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .with_state(ProductState {
             sign_in,
+            migration,
+            provisioning,
             limiter: AttemptLimiter::default(),
         })
 }
@@ -169,6 +204,7 @@ async fn config(State(state): State<ProductState>) -> Response {
         serde_json::json!({
             "enabled": state.sign_in.is_some(),
             "issuer": state.sign_in.as_ref().map(|sign_in| sign_in.service.issuer()),
+            "legacy_migration": state.migration.is_some(),
         }),
     )
 }
@@ -198,7 +234,14 @@ async fn start(
         return rate_limited(retry_after);
     }
     match sign_in.service.start(query.return_path.as_deref(), now) {
-        Ok(started) => redirect_with_cookies(started.location.as_str(), [started.set_cookie]),
+        Ok(started) => {
+            let mut response =
+                redirect_with_cookies(started.location.as_str(), [started.set_cookie]);
+            if state.migration.is_some() {
+                append_cookie(&mut response, migration::clear_migration_transaction());
+            }
+            response
+        }
         Err(_) => unavailable(),
     }
 }
@@ -230,6 +273,13 @@ async fn callback(
     {
         return rate_limited(retry_after);
     }
+    if let Some(migration) = state
+        .migration
+        .as_ref()
+        .filter(|_| migration::is_migration_callback(&state, &headers))
+    {
+        return migration::callback(migration, &headers, &query, now).await;
+    }
     let cookie_header = headers.get(COOKIE).and_then(|value| value.to_str().ok());
     let finished = sign_in
         .service
@@ -250,6 +300,15 @@ async fn callback(
         Ok(signed_in) => signed_in,
         Err(failure) => return failed(failure.as_str(), finished.clear_cookie),
     };
+    // A first sign-in has a profile but no Bond. Core creates it before any
+    // session exists, so a refused address never leaves a half-signed-in person.
+    if let Some(provisioning) = state.provisioning.as_ref()
+        && let Err(failure) = provisioning
+            .provision(&signed_in.owner.public_profile().profile_id, now)
+            .await
+    {
+        return failed(failure.code(), finished.clear_cookie);
+    }
     let Ok(token) = TokenFactory::session() else {
         return failed("aiaiaiai_sign_in_unavailable", finished.clear_cookie);
     };
@@ -446,6 +505,10 @@ async fn read_profile(
 
 #[path = "product_activation.rs"]
 mod activation;
+
+#[path = "product_migration.rs"]
+mod migration;
+pub use migration::{LegacyMigration, MIGRATION_HANDLE_COOKIE};
 
 #[cfg(test)]
 #[path = "product_sign_in_tests.rs"]

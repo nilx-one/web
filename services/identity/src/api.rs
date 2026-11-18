@@ -73,6 +73,8 @@ struct ApiState {
     limiter: AttemptLimiter,
     provider_links: ProviderLinkRepository,
     dummy_password_hash: String,
+    /// AIS product sessions of attached Bonds (#621); `None` only in tests.
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
 }
 
 pub fn router(
@@ -100,6 +102,47 @@ fn router_with_clock(
     native_auth: NativeAuthConfig,
     clock: Arc<dyn Clock>,
 ) -> Router {
+    router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        clock,
+        None,
+    )
+}
+
+/// [`router`] whose Special routes also accept the active AIS product session
+/// of an attached legacy Bond.
+pub fn router_with_product_bonds(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
+    router_with_product(
+        repository,
+        provider_links,
+        telegram_verifier,
+        discord_oauth,
+        native_auth,
+        Arc::new(SystemClock),
+        product,
+    )
+}
+
+fn router_with_product(
+    repository: IdentityRepository,
+    provider_links: ProviderLinkRepository,
+    telegram_verifier: TelegramInitDataVerifier,
+    discord_oauth: Option<DiscordOAuthClient>,
+    native_auth: NativeAuthConfig,
+    clock: Arc<dyn Clock>,
+    product: Option<crate::product_bond_auth::ProductBondAuth>,
+) -> Router {
     let password_engine = native_auth.password_engine();
     let dummy_password_hash = password_engine
         .hash("0x1 constant-shape dummy password")
@@ -116,6 +159,7 @@ fn router_with_clock(
         limiter: AttemptLimiter::default(),
         provider_links,
         dummy_password_hash,
+        product,
     };
 
     Router::new()
@@ -245,6 +289,24 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
                 tracing::error!(%error, "native session lookup failed");
                 return unavailable();
             }
+        }
+    }
+
+    // A person signed in through aiaiaiai is signed in here too.
+    if let Some(product) = state.product.as_ref() {
+        match product.bond(&state.repository, &headers, now).await {
+            Ok(Some((identity, _))) => {
+                let avatar_model = match state.repository.avatar_model(&identity.pub_dress).await {
+                    Ok(value) => value,
+                    Err(_) => return unavailable(),
+                };
+                return no_store_json(
+                    StatusCode::OK,
+                    NativeContextResponse::authenticated(identity, avatar_model),
+                );
+            }
+            Ok(None) => {}
+            Err(()) => return unavailable(),
         }
     }
 
@@ -594,8 +656,18 @@ async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMa
             return unavailable();
         }
     }
+    // Signing out ends an aiaiaiai sign-in too, so one button signs out of both.
+    if let Some(product) = state.product.as_ref()
+        && product.sign_out(&headers, now).await.is_err()
+    {
+        return unavailable();
+    }
     let mut response = no_store_empty(StatusCode::NO_CONTENT);
     append_cookie(&mut response, clear_cookie(SESSION_COOKIE));
+    append_cookie(
+        &mut response,
+        clear_cookie(crate::product_sign_in::PRODUCT_SESSION_COOKIE),
+    );
     response
 }
 
@@ -1092,6 +1164,17 @@ async fn read_identity(State(state): State<ApiState>, headers: HeaderMap) -> Res
         }
     }
 
+    // The AIS product session of an attached Bond answers as that Bond.
+    if let Some(product) = state.product.as_ref() {
+        match product.bond(&state.repository, &headers, now).await {
+            Ok(Some((identity, bond))) => {
+                return identity_response(&state, identity, bond.active, None).await;
+            }
+            Ok(None) => {}
+            Err(()) => return unavailable(),
+        }
+    }
+
     let provider_identity = match authenticate(&state, &headers).await {
         Ok(identity) => identity,
         Err(error) => return error.into_response(),
@@ -1567,7 +1650,7 @@ fn renamed_response(
 /// flag. A caller that would act for the Bond must refuse when it is
 /// `false`. See `nilx-one/0x1` `documents/15-devices-and-recovery.md`,
 /// Single Active Client.
-async fn authenticated_bond(
+async fn authenticated_native_bond(
     state: &ApiState,
     headers: &HeaderMap,
     now: u64,
@@ -1606,6 +1689,30 @@ async fn authenticated_bond(
             tracing::error!(%error, "provider identity lookup failed");
             Err(AuthenticationFailure::Unavailable)
         }
+    }
+}
+
+/// Who is acting, as a Bond: a native session, a Telegram or Discord proof, or
+/// the AIS product session of a Bond attached to an AIS profile (#621). They
+/// are tried in that order and a product session never mints a native session
+/// or cookie. Core re-checks `active` atomically wherever it guards a write;
+/// the flag returned here is the early answer.
+async fn authenticated_bond(
+    state: &ApiState,
+    headers: &HeaderMap,
+    now: u64,
+) -> Result<(IdentityRecord, bool, Vec<u8>, Option<String>), AuthenticationFailure> {
+    match authenticated_native_bond(state, headers, now).await {
+        Err(AuthenticationFailure::Unauthorized) => {}
+        other => return other,
+    }
+    let Some(product) = state.product.as_ref() else {
+        return Err(AuthenticationFailure::Unauthorized);
+    };
+    match product.bond(&state.repository, headers, now).await {
+        Ok(Some((identity, bond))) => Ok((identity, bond.active, bond.session_hash, None)),
+        Ok(None) => Err(AuthenticationFailure::Unauthorized),
+        Err(()) => Err(AuthenticationFailure::Unavailable),
     }
 }
 
@@ -2275,6 +2382,7 @@ mod tests {
         let app = app().await;
         for (path, body) in [
             ("/api/v1/identity/special-items/test-order", r#"{"op":"activate"}"#),
+            ("/api/v1/identity/special-items/test-order", r#"{"op":"activate","confirm":true}"#),
             ("/api/v1/identity/special-items/test-order", r#"{"op":"deliver","carry":"pocket","things":[]}"#),
             ("/api/v1/identity/special-items/test-order", r#"{"op":"collect","visit_id":"x"}"#),
             ("/api/v1/identity/special-inventory", r#"{"state":"","command":{"op":"normalize"}}"#),
@@ -2286,6 +2394,16 @@ mod tests {
                 assert_eq!(response.status(), if csrf { StatusCode::UNAUTHORIZED } else { StatusCode::FORBIDDEN });
             }
         }
+    }
+
+    #[test]
+    fn activation_is_unconfirmed_unless_the_client_says_so() {
+        use super::SpecialItemCommand;
+        let parse = |body: &str| serde_json::from_str::<SpecialItemCommand>(body);
+        assert!(matches!(parse(r#"{"op":"activate"}"#), Ok(SpecialItemCommand::Activate { confirm: false })));
+        assert!(matches!(parse(r#"{"op":"activate","confirm":true}"#), Ok(SpecialItemCommand::Activate { confirm: true })));
+        assert!(parse(r#"{"op":"activate","confirm":"yes"}"#).is_err());
+        assert!(parse(r#"{"op":"activate","extend":true}"#).is_err());
     }
 
     async fn create_avaia(app: &axum::Router, cookies: &str, pub_dress: &str) {

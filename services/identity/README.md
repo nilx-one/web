@@ -185,6 +185,46 @@ production:
 
 Deploying AIS and the site's "Sign in" button are separate steps.
 
+### AIS Bonds
+
+With AIS sign-in on (`AIAIAIAI_SIGN_IN_ISSUER`), a person's Bond comes from
+their aiaiaiai Identity. There is no separate switch. They need legacy and
+product tables in one SQLite store.
+
+**New people.** The AIS callback gives a person's first sign-in its Bond before
+any session exists. Core's `provision_new_bond` creates the human Bond at the
+address AIS assigned and binds it to the profile in one transaction; a repeat
+sign-in changes nothing. An address that already belongs to another Bond (a
+legacy Bond, or one made for another AIS account) is **never linked by name**:
+no Bond, no session, and the callback redirects to `/?auth_error=` with
+`bond_address_taken` (owners of existing Bonds use the migration below),
+`bond_address_missing` (the sign-in carried no usable address) or
+`bond_unavailable` (storage).
+
+**Existing Bonds.** The owner of a legacy Bond attaches an AIS identity:
+
+- `POST /api/v1/auth/aiaiaiai/migrate/start` — `x-0x1-csrf: 1`, a fresh
+  password-authenticated native `__Host-0x1_session`. Returns
+  `{"authorization_url"}` and sets the handle `__Host-0x1_migration` plus
+  Core's migration-only OIDC transaction cookie.
+- the shared `/api/v1/auth/aiaiaiai/callback` hands a migration transaction
+  to Core and redirects to `/?migration=confirm` (or `/?migration_error=…`).
+- `POST /api/v1/auth/aiaiaiai/migrate/confirm` — `x-0x1-csrf: 1`, the
+  explicit owner action. Core attaches the existing Bond atomically and
+  revokes the legacy session; the response clears both cookies and points to
+  an ordinary AIS sign-in, which restores the attached profile.
+
+Nothing is matched by `pub_dress`. From then on native logins for an attached
+Bond are refused.
+
+**Playing.** Every route that resolves a Bond (`authenticated_bond`, the
+identity read, the map and location control, speech, Avaia) also accepts the
+AIS product session cookie `__Host-0x1_product` of an attached Bond, after a
+native session or a Telegram/Discord proof. The Bond comes solely from Core's
+durable `legacy_bond_bindings` link (`resolve_session_bond`); a product session
+never mints a native session or cookie. The `active` flag is an early answer:
+Core re-checks `active = 1` atomically at the wallet writes it guards.
+
 ## Bond roles and location modes
 
 All hexadecimal prefixes `0`–`f` are available for new human registrations.

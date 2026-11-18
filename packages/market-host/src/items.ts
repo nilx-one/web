@@ -5,7 +5,10 @@ import type {
   CoreInventoryCommand,
   SubscriptionStatusPort,
 } from "@nilx-one/application";
-import type { PaidSpecialItem } from "@nilx-one/product-app/business";
+import {
+  SpecialStillRunning,
+  type PaidSpecialItem,
+} from "@nilx-one/product-app/business";
 
 export class PaidItemsUnavailable extends Error {}
 
@@ -33,6 +36,19 @@ async function identity(
   });
   if (path === "special-items" && response.status === 404)
     throw new PaidItemsUnavailable();
+  if (path.startsWith("special-items/") && response.status === 409) {
+    const refusal = (await response.json().catch(() => undefined)) as
+      | { error?: { code?: unknown }; special_remaining_ms?: unknown }
+      | undefined;
+    const left = refusal?.special_remaining_ms;
+    if (
+      refusal?.error?.code === "special_active" &&
+      typeof left === "number" &&
+      Number.isSafeInteger(left) &&
+      left >= 0
+    )
+      throw new SpecialStillRunning(left);
+  }
   if (!response.ok) throw new Error("Identity request failed");
   return response.json();
 }

@@ -455,7 +455,7 @@ describe("AuthenticatedMapHomeView", () => {
       screen.getByRole("button", { name: "Focus the world on x0skai" }),
     ).toHaveTextContent("driving");
     const arrows = screen.getByRole("img", {
-      name: "x0skai drives, 0x0sky follows",
+      name: "x0skai drives, 0x0sky watches",
     });
     expect(arrows).toHaveAttribute("data-leader", "avaia");
     const blocks = [
@@ -472,11 +472,11 @@ describe("AuthenticatedMapHomeView", () => {
     expect(path.querySelector('[aria-current="page"]')).toHaveTextContent(
       "Dock",
     );
-    expect(path).toHaveTextContent("x0skai drives, 0x0sky follows");
-    // The ribbons' state, in words: who follows whom.
+    expect(path).toHaveTextContent("x0skai drives, 0x0sky watches");
+    // In words: the Bond is the person's physical place, never a follower.
     expect(
       document.querySelector(".bond-dock__follow-caption"),
-    ).toHaveTextContent("Bond follows Avaia");
+    ).toHaveTextContent("Avaia leads · Bond is where you are");
     expect(
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     ).toHaveTextContent("spectate");
@@ -484,11 +484,11 @@ describe("AuthenticatedMapHomeView", () => {
       screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
     );
     expect(
-      screen.getByRole("img", { name: "0x0sky drives, x0skai follows" }),
+      screen.getByRole("img", { name: "0x0sky drives, x0skai watches" }),
     ).toHaveAttribute("data-leader", "bond");
     expect(
       document.querySelector(".bond-dock__follow-caption"),
-    ).toHaveTextContent("Avaia follows Bond");
+    ).toHaveTextContent("Bond is where you are · Avaia may walk along");
     expect(screen.getByText("x0skai")).toBeVisible();
     expect(screen.getByText("Shared Core ready")).toBeVisible();
     expect(screen.getByText("contract 0.1.0")).toBeVisible();
