@@ -1073,10 +1073,10 @@ async fn provisioning_site(
         product.clone(),
     )
     .expect("nilx-one client");
-    let store = LegacyBondMigrationRepository::prepare(product)
+    let store = LegacyBondMigrationRepository::prepare(product.clone())
         .await
         .expect("one store");
-    let bonds = crate::ProductBondAuth::new(store, native_auth().secret_digester());
+    let bonds = crate::ProductBondAuth::new(store, product, native_auth().secret_digester());
     let site = crate::product_sign_in::router_with_bonds(
         Some(ProductSignIn::new(service, &native_auth())),
         None,

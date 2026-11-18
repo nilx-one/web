@@ -641,10 +641,14 @@ async fn product_bonds_from_environment(
     let repository = public_info::PublicInfoRepository::connect(database_url)
         .await
         .expect("the 0x1 product tables must initialize");
-    let store = public_info::LegacyBondMigrationRepository::prepare(repository)
+    let store = public_info::LegacyBondMigrationRepository::prepare(repository.clone())
         .await
         .expect("AIS Bonds need legacy and product tables in one SQLite store");
-    let bonds = identity_bot::ProductBondAuth::new(store.clone(), native_auth.secret_digester());
+    let bonds = identity_bot::ProductBondAuth::new(
+        store.clone(),
+        repository,
+        native_auth.secret_digester(),
+    );
     info!("AIS Bonds enabled");
     (
         product_sign_in::LegacyMigration::new(flow, store, native_auth.secret_digester()),

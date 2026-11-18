@@ -292,6 +292,24 @@ async fn read_native_context(State(state): State<ApiState>, headers: HeaderMap) 
         }
     }
 
+    // A person signed in through aiaiaiai is signed in here too.
+    if let Some(product) = state.product.as_ref() {
+        match product.bond(&state.repository, &headers, now).await {
+            Ok(Some((identity, _))) => {
+                let avatar_model = match state.repository.avatar_model(&identity.pub_dress).await {
+                    Ok(value) => value,
+                    Err(_) => return unavailable(),
+                };
+                return no_store_json(
+                    StatusCode::OK,
+                    NativeContextResponse::authenticated(identity, avatar_model),
+                );
+            }
+            Ok(None) => {}
+            Err(()) => return unavailable(),
+        }
+    }
+
     if let Some(hint) = read_cookie(&headers, REMEMBERED_BOND_COOKIE)
         && let Some(pub_dress) = state
             .remembered_bond_signer
@@ -638,8 +656,18 @@ async fn logout_native_identity(State(state): State<ApiState>, headers: HeaderMa
             return unavailable();
         }
     }
+    // Signing out ends an aiaiaiai sign-in too, so one button signs out of both.
+    if let Some(product) = state.product.as_ref()
+        && product.sign_out(&headers, now).await.is_err()
+    {
+        return unavailable();
+    }
     let mut response = no_store_empty(StatusCode::NO_CONTENT);
     append_cookie(&mut response, clear_cookie(SESSION_COOKIE));
+    append_cookie(
+        &mut response,
+        clear_cookie(crate::product_sign_in::PRODUCT_SESSION_COOKIE),
+    );
     response
 }
 

@@ -693,3 +693,74 @@ describe("verified Telegram username suggestion", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("sign in through aiaiaiai", () => {
+  const view = (
+    identity:
+      { kind: "form"; mode: "sign-in"; busy: boolean; status: never } | object,
+    aisSignIn?: { href: string; failure?: "address-taken" | "other" },
+  ) =>
+    render(
+      <IdentityFoundationView
+        password=""
+        selection={{ discriminator: "0", slug: "sky" }}
+        viewModel={{
+          hostLabel: "browser host",
+          safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+          showProviderRow: false,
+          runtime: {
+            tone: "ready",
+            label: "Shared Core ready",
+            detail: "Contract 1 is available to the Web client.",
+          },
+          identity: identity as never,
+        }}
+        {...(aisSignIn === undefined ? {} : { aisSignIn })}
+        onCredentialAutofill={vi.fn()}
+        onForgetRemembered={vi.fn()}
+        onLogout={vi.fn()}
+        onPasswordChange={vi.fn()}
+        onResolvePubDress={vi.fn()}
+        onSelectionChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+  const form = {
+    kind: "form",
+    mode: "register",
+    status: { kind: "available", detail: "Available — create this identity" },
+    busy: false,
+  };
+
+  it("leads with a link to the host's start route, no password involved", () => {
+    view(form, { href: "/api/v1/auth/aiaiaiai/start?return=%2F" });
+    const link = screen.getByRole("link", { name: "Sign in with aiaiaiai" });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/v1/auth/aiaiaiai/start?return=%2F",
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("says why the last return did not sign the person in, in their language", () => {
+    chooseLocale("uk-UA");
+    view(form, {
+      href: "/api/v1/auth/aiaiaiai/start?return=%2F",
+      failure: "address-taken",
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Це ім’я вже належить іншому Bond",
+    );
+    expect(
+      screen.getByRole("link", { name: "Увійти через aiaiaiai" }),
+    ).toBeVisible();
+  });
+
+  it("is absent where the host cannot redirect (no prop)", () => {
+    view(form);
+    expect(
+      screen.queryByRole("link", { name: "Sign in with aiaiaiai" }),
+    ).not.toBeInTheDocument();
+  });
+});
