@@ -140,7 +140,7 @@ async fn create_market_visit(
         Ok(value) => value,
         Err(_) => return visit_unavailable("clock", None),
     };
-    let (identity, active, session_hash, cookie) = match authenticated_special_bond(&state, &headers, now).await {
+    let (identity, active, session_hash, cookie) = match authenticated_attached_bond(&state, &headers, now).await {
         Ok(value) => value,
         Err(error) => {
             tracing::info!("market-visit refused: the Bond could not be authenticated");
@@ -288,7 +288,7 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
     Query(query): Query<ReturnQuery>) -> Response {
     use crate::market_issuer::HttpMarketIssuer;
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
-    let (identity, _, _, cookie) = match authenticated_special_bond(&state, &headers, now).await {
+    let (identity, _, _, cookie) = match authenticated_attached_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
     };
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
@@ -323,7 +323,7 @@ async fn read_market_return(State(state): State<ApiState>, headers: HeaderMap,
 
 async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
-    let (identity, _, _, cookie) = match authenticated_special_bond(&state, &headers, now).await {
+    let (identity, _, _, cookie) = match authenticated_attached_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
     };
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
@@ -340,7 +340,7 @@ async fn read_subscription(State(state): State<ApiState>, headers: HeaderMap) ->
 
 async fn read_special_items(State(state): State<ApiState>, headers: HeaderMap) -> Response {
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
-    let (identity, _, _, cookie) = match authenticated_special_bond(&state, &headers, now).await {
+    let (identity, _, _, cookie) = match authenticated_attached_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
     };
     let Ok(owner) = PubDress::from_str(&identity.pub_dress) else { return unavailable(); };
@@ -370,7 +370,7 @@ async fn change_special_item(
 ) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) { return response; }
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
-    let (identity, active, session_hash, cookie) = match authenticated_special_bond(&state, &headers, now).await {
+    let (identity, active, session_hash, cookie) = match authenticated_attached_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
     };
     if !active || session_hash.len() != 32 { return with_session_cookie(session_inactive(), cookie); }
@@ -438,7 +438,7 @@ async fn change_special_inventory(
 ) -> Response {
     if let Some(response) = reject_missing_csrf(&headers) { return response; }
     let now = match now(&state) { Ok(now) => now, Err(_) => return unavailable() };
-    let (identity, active, session_hash, cookie) = match authenticated_special_bond(&state, &headers, now).await {
+    let (identity, active, session_hash, cookie) = match authenticated_attached_bond(&state, &headers, now).await {
         Ok(value) => value, Err(error) => return error.into_response(),
     };
     if !active || session_hash.len() != 32 { return with_session_cookie(session_inactive(), cookie); }

@@ -12,18 +12,27 @@ use crate::repository::{AttestOutcome, CraftOutcome, SaleOutcome};
 use nilxone_api::finds::{self as wire, AttestRequest, CraftRequest, SellRequest};
 
 /// Every route here: CSRF, an authenticated and active Bond, a rate limit.
+/// `attached` lets the AIS product session of an attached legacy Bond act too.
+/// Only craft start passes it: its Core write re-checks the session
+/// atomically. Attestation and sale are gated by the early `active` flag only,
+/// so they stay native-only until Core guards them.
 async fn finds_caller(
     state: &ApiState,
     headers: &HeaderMap,
     bucket: &str,
+    attached: bool,
 ) -> Result<(PubDress, Vec<u8>, u64, Option<String>), Box<Response>> {
     if let Some(response) = reject_missing_csrf(headers) {
         return Err(Box::new(response));
     }
     let now = now(state).map_err(|_| Box::new(unavailable()))?;
-    let (identity, active, token_hash, cookie) = authenticated_bond(state, headers, now)
-        .await
-        .map_err(|error| Box::new(error.into_response()))?;
+    let authenticated = if attached {
+        authenticated_attached_bond(state, headers, now).await
+    } else {
+        authenticated_bond(state, headers, now).await
+    };
+    let (identity, active, token_hash, cookie) =
+        authenticated.map_err(|error| Box::new(error.into_response()))?;
     if !active {
         return Err(Box::new(with_session_cookie(session_inactive(), cookie)));
     }
@@ -69,7 +78,7 @@ async fn attest_find(
     headers: HeaderMap,
     Json(request): Json<AttestRequest>,
 ) -> Response {
-    let (owner, _session, now, cookie) = match finds_caller(&state, &headers, "finds-attest").await {
+    let (owner, _session, now, cookie) = match finds_caller(&state, &headers, "finds-attest", false).await {
         Ok(caller) => caller,
         Err(response) => return *response,
     };
@@ -159,7 +168,7 @@ async fn sell_find(
     headers: HeaderMap,
     Json(request): Json<SellRequest>,
 ) -> Response {
-    let (owner, _session, now, cookie) = match finds_caller(&state, &headers, "finds-sell").await {
+    let (owner, _session, now, cookie) = match finds_caller(&state, &headers, "finds-sell", false).await {
         Ok(caller) => caller,
         Err(response) => return *response,
     };
@@ -207,7 +216,7 @@ async fn start_craft(
     headers: HeaderMap,
     Json(request): Json<CraftRequest>,
 ) -> Response {
-    let (owner, session, now, cookie) = match finds_caller(&state, &headers, "crafts").await {
+    let (owner, session, now, cookie) = match finds_caller(&state, &headers, "crafts", true).await {
         Ok(caller) => caller,
         Err(response) => return *response,
     };

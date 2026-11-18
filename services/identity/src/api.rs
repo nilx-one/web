@@ -1654,14 +1654,15 @@ async fn authenticated_bond(
     }
 }
 
-/// [`authenticated_bond`] for the Special routes, which also accept the AIS
+/// [`authenticated_bond`] for the routes whose Core writes re-check the acting
+/// session atomically (Special, xPing, crafts), which also accept the AIS
 /// product session of an attached legacy Bond (#621). A native session or
 /// provider proof is tried first, exactly as before; the product session is
 /// consulted only when neither authenticates and the operator enabled it.
 /// The returned flag is an early answer: Core re-checks `active = 1`
 /// atomically at the write. A product session never mints a native session
 /// or cookie.
-async fn authenticated_special_bond(
+async fn authenticated_attached_bond(
     state: &ApiState,
     headers: &HeaderMap,
     now: u64,
