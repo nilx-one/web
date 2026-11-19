@@ -410,9 +410,11 @@ never the wheel — and Core, not the client, says what it allows
 - When fog work is held the number is underlined and the spoken hint says so;
   colour is never the only signal.
 
-Not covered here: Avaia choosing and opening cells by herself, and timing a
-reveal from her arrival rather than from the yes. Both build on this and are
-tracked separately.
+A reveal is timed from her arrival, not from the yes: its clock starts once
+she stands within 15 m of the cell's edge (see the fog section above).
+
+Not covered here: Avaia choosing and opening cells by herself. That builds on
+this and is tracked separately.
 
 ## Stationed Avaia
 
