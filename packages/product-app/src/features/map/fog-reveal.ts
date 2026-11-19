@@ -36,6 +36,13 @@ export interface FogRevealJob {
   readonly landmarks: number;
   /** Timer is frozen at this wall-clock instant when Core blocks reveal. */
   readonly pausedAt?: number | undefined;
+  /**
+   * The Avaia has not yet come within reach of the cell, so the work has not
+   * begun: no time runs, and `startedAt` is only when the Bond said yes. It
+   * is absent once the Avaia has arrived — and on a job stored before this
+   * rule, which was already under way.
+   */
+  readonly waiting?: boolean | undefined;
 }
 
 /** How many cells an Avaia works open at the same time. */
@@ -68,6 +75,12 @@ export const FOG_NEARBY_REVEAL_METERS = 15;
 
 /** An uncertain GPS fix may not reveal a neighbouring cell. */
 export const FOG_NEARBY_ACCURACY_METERS = 15;
+
+/**
+ * How close, to the cell's edge, the Avaia has to come before the work on it
+ * begins. A yes sends her; it does not start the clock.
+ */
+export const FOG_REVEAL_REACH_METERS = 15;
 
 /**
  * Shortest distance to a cell's polygon boundary, not to its centre.
@@ -122,6 +135,13 @@ export function distanceToFogCellEdgeMeters(
 export const FOG_APPROACH_STEP_OUT = 0.12;
 
 /**
+ * The step back off the edge never takes her further than this: half the
+ * reach, so the stand a yes walks her to already begins the work, with room
+ * for a walk that ends a little off its target.
+ */
+export const FOG_APPROACH_MAX_STEP_OUT_METERS = FOG_REVEAL_REACH_METERS / 2;
+
+/**
  * Where an Avaia stands to work a fogged cell open: just outside one of its
  * edges, on ground `standable` says a body can stand on — revealed, or the
  * Bond's own — and of those the one nearest `from`. A cell with no such edge
@@ -144,11 +164,24 @@ export function approachPoint(
     ];
     // A closed ring repeats its first vertex; that is no edge.
     if (aLng === bLng && aLat === bLat) continue;
-    const scale = 1 + FOG_APPROACH_STEP_OUT;
+    const midLng = (aLng + bLng) / 2;
+    const midLat = (aLat + bLat) / 2;
+    const outLng = midLng - center.longitude;
+    const outLat = midLat - center.latitude;
+    const toEdgeMeters = Math.hypot(
+      outLng * 111_195 * Math.cos((midLat * Math.PI) / 180),
+      outLat * 111_195,
+    );
+    const share =
+      toEdgeMeters <= 0
+        ? 0
+        : Math.min(
+            FOG_APPROACH_STEP_OUT,
+            FOG_APPROACH_MAX_STEP_OUT_METERS / toEdgeMeters,
+          );
     outside.push({
-      longitude:
-        center.longitude + ((aLng + bLng) / 2 - center.longitude) * scale,
-      latitude: center.latitude + ((aLat + bLat) / 2 - center.latitude) * scale,
+      longitude: midLng + outLng * share,
+      latitude: midLat + outLat * share,
     });
   }
   if (outside.length === 0) return center;
@@ -226,7 +259,41 @@ export function startReveal(
   };
 }
 
+/**
+ * A yes that has not started yet: the Avaia is on her way, and the clock
+ * runs only from `beginReveal`.
+ */
+export function awaitReveal(
+  cell: MapFogCell,
+  landmarks: number,
+  nowMs: number,
+  durationMs = revealDurationMs(landmarks),
+): FogRevealJob {
+  return { ...startReveal(cell, landmarks, nowMs, durationMs), waiting: true };
+}
+
+/** The Avaia came within reach: the work starts now, with its full time. */
+export function beginReveal(job: FogRevealJob, nowMs: number): FogRevealJob {
+  const { waiting: _waiting, ...begun } = job;
+  return { ...begun, startedAt: nowMs };
+}
+
+/**
+ * Whether the Avaia at `point` stands within reach of `cell`: its edge is no
+ * further than `FOG_REVEAL_REACH_METERS` away. An unknown place is never near.
+ */
+export function avaiaInReach(
+  point: MapPointSelection | undefined,
+  cell: MapFogCell,
+): boolean {
+  return (
+    point !== undefined &&
+    distanceToFogCellEdgeMeters(point, cell) <= FOG_REVEAL_REACH_METERS
+  );
+}
+
 export function revealProgress(job: FogRevealJob, nowMs: number): number {
+  if (job.waiting === true) return 0;
   if (job.durationMs <= 0) return 1;
   return Math.min(
     1,
@@ -235,10 +302,15 @@ export function revealProgress(job: FogRevealJob, nowMs: number): number {
 }
 
 export function revealFinished(job: FogRevealJob, nowMs: number): boolean {
-  return job.pausedAt === undefined && nowMs - job.startedAt >= job.durationMs;
+  return (
+    job.waiting !== true &&
+    job.pausedAt === undefined &&
+    nowMs - job.startedAt >= job.durationMs
+  );
 }
 
 export function revealRemainingMs(job: FogRevealJob, nowMs: number): number {
+  if (job.waiting === true) return job.durationMs;
   return Math.max(0, job.startedAt + job.durationMs - (job.pausedAt ?? nowMs));
 }
 
@@ -318,6 +390,7 @@ function isJob(value: unknown): value is FogRevealJob {
   const center = cell?.center as Record<string, unknown> | null | undefined;
   return (
     typeof job.startedAt === "number" &&
+    (job.waiting === undefined || typeof job.waiting === "boolean") &&
     typeof job.durationMs === "number" &&
     job.durationMs >= 0 &&
     job.durationMs <= STORED_JOB_MAX_MS &&
@@ -406,7 +479,7 @@ export function freezeUnattended(
   nowMs: number,
 ): readonly FogRevealJob[] {
   return jobs.map((job) =>
-    job.pausedAt !== undefined
+    job.pausedAt !== undefined || job.waiting === true
       ? job
       : {
           ...job,

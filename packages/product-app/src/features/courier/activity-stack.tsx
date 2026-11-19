@@ -104,13 +104,22 @@ export function ActivityStack({
       at: groupStart ?? confirmed?.at ?? now,
       done: jobs.length === 0,
       exiting: jobs.length === 0 && now - (confirmed?.at ?? now) > 4500,
-      label: jobs.length
-        ? t("fog.status.revealing")
-            .replace("{count}", String(jobs.length))
-            .replace("{limit}", String(FOG_REVEAL_CONCURRENCY)) +
-          " · " +
-          clock(Math.min(...jobs.map((j) => revealRemainingMs(j, now))))
-        : t("courier.cellsDone"),
+      label: !jobs.length
+        ? t("courier.cellsDone")
+        : jobs.every((j) => j.waiting === true)
+          ? // Nobody has begun: no clock runs until the Avaia is there.
+            t("fog.status.approaching")
+          : t("fog.status.revealing")
+              .replace("{count}", String(jobs.length))
+              .replace("{limit}", String(FOG_REVEAL_CONCURRENCY)) +
+            " · " +
+            clock(
+              Math.min(
+                ...jobs
+                  .filter((j) => j.waiting !== true)
+                  .map((j) => revealRemainingMs(j, now)),
+              ),
+            ),
       focus: onCells,
     });
   const flightProgress = () => {

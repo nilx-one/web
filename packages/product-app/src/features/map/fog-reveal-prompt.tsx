@@ -55,10 +55,12 @@ export function FogRevealPrompt({
     return null;
 
   const limit = String(FOG_REVEAL_CONCURRENCY);
+  // A cell still waiting for the Avaia has no clock yet.
+  const begun = jobs.filter((job) => job.waiting !== true);
   const next =
-    jobs.length === 0
+    begun.length === 0
       ? undefined
-      : Math.min(...jobs.map((job) => revealRemainingMs(job, now)));
+      : Math.min(...begun.map((job) => revealRemainingMs(job, now)));
 
   return (
     <div className="fog-reveal">
@@ -116,9 +118,11 @@ export function FogRevealPrompt({
         (jobs.length === 0 ? null : (
           <p className="fog-reveal__status" role="status">
             <span className="fog-reveal__pulse" aria-hidden="true" />
-            {t("fog.status.revealing")
-              .replace("{count}", String(jobs.length))
-              .replace("{limit}", limit)}
+            {begun.length === 0
+              ? t("fog.status.approaching")
+              : t("fog.status.revealing")
+                  .replace("{count}", String(jobs.length))
+                  .replace("{limit}", limit)}
             {next === undefined ? null : (
               <span className="fog-reveal__next">
                 {` · ${t("fog.status.next").replace("{time}", formatClock(next))}`}

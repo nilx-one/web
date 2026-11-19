@@ -103,6 +103,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "fog.prompt.cancel": "Не сейчас",
   "fog.status.revealing": "Открывается {count} из {limit}",
   "fog.status.next": "следующая через {time}",
+  "fog.status.approaching": "Идёт к клетке",
   "fog.announce.revealed": "Клетка тумана открыта.",
   "avaia.progression.title": "Прогресс",
   "avaia.progression.summary": "Уровень {level} · {xp} опыта",

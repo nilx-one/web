@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFogFieldDouble } from "../../../../../tests/support/doubles";
 import {
   artifactsInCell,
+  awaitReveal,
   FOG_REVEAL_MIN_MS,
   readAuthorizedAt,
   revealRemainingMs,
@@ -353,6 +354,97 @@ describe("revealing the fog around a Bond", () => {
     expect(fog.cellAt(stand).id).not.toBe(cell.id);
     // The Bond's own ground is where it approaches from.
     expect(fog.cellAt(stand).id).toBe("strip:3052");
+  });
+
+  describe("the Avaia has to come within 15 m of the cell", () => {
+    // Strip 3053 spans longitude 30.525–30.535; 0.0001° is about 7 m here.
+    const FAR: MapPointSelection = { longitude: 30.5245, latitude: 50.45 };
+    const NEAR: MapPointSelection = { longitude: 30.52485, latitude: 50.45 };
+
+    it("starts no clock on the yes, only when she comes near, then takes its full time", () => {
+      const fog = createFogFieldDouble(0.01);
+      const onRevealed = vi.fn();
+      let avaia: MapPointSelection | undefined = FAR;
+      const { result } = render({
+        renderer: fogRenderer(fog),
+        getAvaiaPoint: () => avaia,
+        onRevealed,
+      });
+
+      act(() => void result.current.handleFogTap(NEXT_DOOR));
+      act(() => void result.current.confirm());
+      expect(result.current.jobs).toHaveLength(1);
+      expect(result.current.jobs[0]?.waiting).toBe(true);
+
+      // However long she takes, nothing opens and nothing counts down.
+      act(() => vi.advanceTimersByTime(10 * 60_000));
+      expect(fog.isRevealed("strip:3053")).toBe(false);
+      expect(result.current.jobs[0]?.waiting).toBe(true);
+      expect(onRevealed).not.toHaveBeenCalled();
+
+      // She arrives where the yes sent her: the stand `approach()` gives.
+      avaia = result.current.approach(result.current.jobs[0]!.cell, FAR);
+      act(() => vi.advanceTimersByTime(1_000));
+      expect(result.current.jobs[0]?.waiting).toBeUndefined();
+
+      act(() => vi.advanceTimersByTime(FOG_REVEAL_MIN_MS - 1));
+      expect(fog.isRevealed("strip:3053")).toBe(false);
+      act(() => vi.advanceTimersByTime(1));
+      expect(fog.isRevealed("strip:3053")).toBe(true);
+      expect(onRevealed).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ id: "strip:3053" }),
+        "avaia",
+      );
+    });
+
+    it("starts at once when she already stands within 15 m", () => {
+      const fog = createFogFieldDouble(0.01);
+      const { result } = render({
+        renderer: fogRenderer(fog),
+        getAvaiaPoint: () => NEAR,
+      });
+      act(() => void result.current.handleFogTap(NEXT_DOOR));
+      act(() => void result.current.confirm());
+      expect(result.current.jobs[0]?.waiting).toBeUndefined();
+    });
+
+    it("never treats an unknown place as near", () => {
+      const fog = createFogFieldDouble(0.01);
+      const { result } = render({
+        renderer: fogRenderer(fog),
+        getAvaiaPoint: () => undefined,
+      });
+      act(() => void result.current.handleFogTap(NEXT_DOOR));
+      act(() => void result.current.confirm());
+      act(() => vi.advanceTimersByTime(10 * 60_000));
+      expect(result.current.jobs[0]?.waiting).toBe(true);
+      expect(fog.isRevealed("strip:3053")).toBe(false);
+    });
+
+    it("waits through a Core hold even when she is there, and starts when it lifts", () => {
+      const fog = createFogFieldDouble(0.01);
+      writeRevealJobs("0x0sky", [
+        awaitReveal(fog.cellAt(NEXT_DOOR), 0, Date.now(), FOG_REVEAL_MIN_MS),
+      ]);
+      const base = {
+        renderer: fogRenderer(fog),
+        bondPoint: BOND,
+        observed: undefined,
+        owner: "0x0sky",
+        enforceProximity: true,
+        getAvaiaPoint: () => NEAR,
+      };
+      const { result, rerender } = render({
+        ...base,
+        proximity: blocked(5_000),
+      });
+      act(() => vi.advanceTimersByTime(5_000));
+      expect(result.current.jobs[0]?.waiting).toBe(true);
+
+      rerender({ ...base, proximity: allowed(15) });
+      act(() => vi.advanceTimersByTime(1_000));
+      expect(result.current.jobs[0]?.waiting).toBeUndefined();
+    });
   });
 
   it("fails closed without Core and pauses work when Avaia exceeds the distance boundary", async () => {
