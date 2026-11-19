@@ -382,7 +382,8 @@ describe("revealing the fog around a Bond", () => {
       expect(result.current.jobs[0]?.waiting).toBe(true);
       expect(onRevealed).not.toHaveBeenCalled();
 
-      avaia = NEAR;
+      // She arrives where the yes sent her: the stand `approach()` gives.
+      avaia = result.current.approach(result.current.jobs[0]!.cell, FAR);
       act(() => vi.advanceTimersByTime(1_000));
       expect(result.current.jobs[0]?.waiting).toBeUndefined();
 

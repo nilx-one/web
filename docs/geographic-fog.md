@@ -35,7 +35,8 @@ No opening establishes physical presence, a BondChain, or a Relationship.
 An Avaia reveal follows the same distance rule: confirming a cell does not
 start its timer. The work begins only when the Avaia stands within 15 m of the
 cell's polygon edge, measured the same way, and a cell she has not reached
-simply waits.
+simply waits. The stand a yes walks her to is at most 7.5 m off that edge, so
+arriving there begins the work.
 
 The Bond's occupied cell is temporarily open in the same presentation source.
 Moving removes the previous transient opening unless a real visit or completed

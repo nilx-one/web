@@ -5,6 +5,7 @@ import type {
   MapFogCell,
   MapFogField,
   MapLandmark,
+  MapPointSelection,
 } from "@nilx-one/map-contract";
 import {
   epochOf,
@@ -17,11 +18,13 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  approachPoint,
   artifactsInCell,
   avaiaInReach,
   awaitReveal,
   beginReveal,
   distanceToFogCellEdgeMeters,
+  FOG_APPROACH_MAX_STEP_OUT_METERS,
   FOG_REVEAL_REACH_METERS,
   FOG_NEARBY_REVEAL_METERS,
   FOG_REVEAL_CONCURRENCY,
@@ -172,6 +175,51 @@ describe("revealing a fog cell", () => {
       avaiaInReach({ longitude: west - 0.0004, latitude: 50.449 }, target),
     ).toBe(false);
     expect(avaiaInReach(undefined, target)).toBe(false);
+  });
+
+  it("sends her to a stand where the work on a real H3 cell can begin", () => {
+    // `cellToBoundary` of H3 resolution 9 cell 891e6384a2fffff, in Kyiv, as
+    // map-shade stores it: about 21 m from its centre's 12% stand-off.
+    const h3: MapFogCell = {
+      id: "891e6384a2fffff",
+      center: { longitude: 30.522204918821306, latitude: 50.44928996472307 },
+      boundary: [
+        [30.51988464334776, 50.45034397546152],
+        [30.519601780567207, 50.44866325217777],
+        [30.52192200723311, 50.447609226985996],
+        [30.524525110599924, 50.44823589891277],
+        [30.524808084139888, 50.44991660911516],
+        [30.522487843556323, 50.45097066047351],
+      ],
+    };
+    const inside = ({ longitude, latitude }: MapPointSelection) => {
+      let within = false;
+      const ring = h3.boundary;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+        const [xi, yi] = ring[i]!;
+        const [xj, yj] = ring[j]!;
+        if (
+          yi > latitude !== yj > latitude &&
+          longitude < ((xj - xi) * (latitude - yi)) / (yj - yi) + xi
+        ) {
+          within = !within;
+        }
+      }
+      return within;
+    };
+    // Every edge, by approaching from far beyond each of them.
+    for (const [longitude, latitude] of h3.boundary) {
+      const from = {
+        longitude: h3.center.longitude + (longitude - h3.center.longitude) * 40,
+        latitude: h3.center.latitude + (latitude - h3.center.latitude) * 40,
+      };
+      const stand = approachPoint(h3, () => true, from);
+      expect(inside(stand)).toBe(false);
+      const meters = distanceToFogCellEdgeMeters(stand, h3);
+      expect(meters).toBeGreaterThan(0);
+      expect(meters).toBeLessThanOrEqual(FOG_APPROACH_MAX_STEP_OUT_METERS);
+      expect(avaiaInReach(stand, h3)).toBe(true);
+    }
   });
 
   it("pauses a distant reveal without accumulating blocked time", () => {

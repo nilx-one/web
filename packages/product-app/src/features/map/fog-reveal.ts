@@ -135,6 +135,13 @@ export function distanceToFogCellEdgeMeters(
 export const FOG_APPROACH_STEP_OUT = 0.12;
 
 /**
+ * The step back off the edge never takes her further than this: half the
+ * reach, so the stand a yes walks her to already begins the work, with room
+ * for a walk that ends a little off its target.
+ */
+export const FOG_APPROACH_MAX_STEP_OUT_METERS = FOG_REVEAL_REACH_METERS / 2;
+
+/**
  * Where an Avaia stands to work a fogged cell open: just outside one of its
  * edges, on ground `standable` says a body can stand on — revealed, or the
  * Bond's own — and of those the one nearest `from`. A cell with no such edge
@@ -157,11 +164,24 @@ export function approachPoint(
     ];
     // A closed ring repeats its first vertex; that is no edge.
     if (aLng === bLng && aLat === bLat) continue;
-    const scale = 1 + FOG_APPROACH_STEP_OUT;
+    const midLng = (aLng + bLng) / 2;
+    const midLat = (aLat + bLat) / 2;
+    const outLng = midLng - center.longitude;
+    const outLat = midLat - center.latitude;
+    const toEdgeMeters = Math.hypot(
+      outLng * 111_195 * Math.cos((midLat * Math.PI) / 180),
+      outLat * 111_195,
+    );
+    const share =
+      toEdgeMeters <= 0
+        ? 0
+        : Math.min(
+            FOG_APPROACH_STEP_OUT,
+            FOG_APPROACH_MAX_STEP_OUT_METERS / toEdgeMeters,
+          );
     outside.push({
-      longitude:
-        center.longitude + ((aLng + bLng) / 2 - center.longitude) * scale,
-      latitude: center.latitude + ((aLat + bLat) / 2 - center.latitude) * scale,
+      longitude: midLng + outLng * share,
+      latitude: midLat + outLat * share,
     });
   }
   if (outside.length === 0) return center;

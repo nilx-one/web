@@ -329,8 +329,8 @@ alongside what the journal lit.
    dashed outline: every cell within three rings of it that touches open
    ground — revealed, or the Bond's own cell. A tap on one asks first
    (“Reveal this patch of fog?”). A yes sends the Avaia up to the cell's
-   edge — just outside it, on open ground, on the side nearest where the
-   Avaia stands — never into the fog. The yes does not start the work: it
+   edge — just outside it, at most 7.5 m off, on open ground, on the side
+   nearest where the Avaia stands — never into the fog. The yes does not start the work: it
    begins, with its full time, only once she stands within 15 m of the cell's
    edge (at once, if she already does). Until then the cell is marked as
    waiting, no clock runs, and the page being closed or Core holding her work
