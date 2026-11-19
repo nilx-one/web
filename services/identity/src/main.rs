@@ -537,6 +537,27 @@ async fn main() {
             worker, interval,
         ));
     }
+    // The production chat checkout settles a separate queue and grants the
+    // term directly. The existing browser queue keeps its paid-item flow.
+    if let Some(url) = identity_bot::telegram_issuer_url(
+        std::env::var("DEPLOY_ENV").ok().as_deref(),
+        std::env::var("MARKET_TELEGRAM_ISSUER_URL").ok().as_deref(),
+    ) {
+        let secret = std::env::var("NILX_BROWSER_HANDOFF_TOKEN").unwrap_or_default();
+        let config = identity_bot::market_issuer::MarketIssuerConfig::new(&secret, Some(&url))
+            .expect("production chat issuer must satisfy the market issuer contract");
+        let interval = config.poll_interval;
+        let market = identity_bot::market_issuer::HttpMarketIssuer::new(config)
+            .expect("chat issuer HTTP client must build");
+        let worker = identity_bot::market_issuer::MarketIssuerWorker::new(
+            telegram_state.repository.clone(),
+            market,
+            Arc::new(identity_bot::market_issuer::system_now_ms),
+        );
+        tokio::spawn(identity_bot::market_issuer::run_market_issuer_worker(
+            worker, interval,
+        ));
+    }
     info!(%http_bind, "starting Stage 1 identity service");
     let handler = dptree::entry()
         .branch(Update::filter_message().endpoint(handle_message))

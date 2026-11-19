@@ -78,6 +78,19 @@ if grep -Eq '^(NATIVE_AUTH_SECRET|PASSWORD_PEPPER|GITHUB_EVIDENCE_ENCRYPTION_KEY
   exit 1
 fi
 
+# This token authorizes read-only partner account lookup, not issuer settlement.
+partner_token="$(read_provider_value PARTNER_LOOKUP_TOKEN)"
+if [ -n "$partner_token" ]; then
+  if [ "${#partner_token}" -lt 32 ]; then
+    echo "PARTNER_LOOKUP_TOKEN must contain at least 32 bytes" >&2
+    exit 1
+  fi
+  if [ "$partner_token" = "$(read_provider_value NILX_BROWSER_HANDOFF_TOKEN)" ]; then
+    echo "Partner read token must differ from the issuer handoff token" >&2
+    exit 1
+  fi
+fi
+
 telegram_token="$(read_provider_value TELOXIDE_TOKEN)"
 test -n "$telegram_token"
 

@@ -48,8 +48,8 @@ variable `API_DELIVERY=enabled` is set, an age-encrypted `<sha>.secrets`
 envelope that `aiaiaiai-org/infra` delivers on its own. The envelope carries
 exactly the names `nilxone-identity` lists under `delivery.envelope` in infra:
 `TELOXIDE_TOKEN`, `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`,
-`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `NILX_BROWSER_HANDOFF_TOKEN`.
-The job refuses to publish when the two lists differ.
+`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `NILX_BROWSER_HANDOFF_TOKEN` and
+`PARTNER_LOOKUP_TOKEN`. The job refuses to publish when the two lists differ.
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER` and `GITHUB_EVIDENCE_ENCRYPTION_KEY`
 are never in the envelope and never in a GitHub Environment. The production host
@@ -68,6 +68,14 @@ does not activate Market production. Rotate both values together.
 
 Identity includes the token only in its age-encrypted runtime envelope,
 never in client build variables. Merge the Infra allowlist change first.
+
+The production chat checkout settles through a second issuer worker that uses
+the same token against production Market. Production Market's
+`NILX_BROWSER_HANDOFF_TOKEN` must then equal this value too, and rotation moves
+all of them together. `PARTNER_LOOKUP_TOKEN` is a different, read-only
+credential: at least 32 bytes, distinct from the handoff token, shared with
+`0xda-market/core` and `0xda-market/telegram-bot`. Store it in this repository's
+`production` Environment as well.
 To apply the token without an image change, run `Deploy Production` on
 `master` with `target=identity`; this forces only the Identity runtime
 redeployment, not the Web/Telegram/Discord clients.
