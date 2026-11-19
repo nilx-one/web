@@ -423,6 +423,15 @@ wallet and the grant (`nilx-one/0x1` `authoritative-seeds-wallet.md`).
   `identity:<order id>` and the order's `term_months`, or rejects with
   `insufficient_seeds`, `session_changed`, `visit_expired`, `visit_unknown`,
   `recipient_mismatch` or `invalid_terms`.
+- A production service can run a second worker for the chat checkout: set
+  `MARKET_TELEGRAM_ISSUER_URL` to the production Market issuer queue (empty or
+  unset means none; a `DEPLOY_ENV=development` service never runs it). It
+  authenticates the same way, with `NILX_BROWSER_HANDOFF_TOKEN`, so that
+  Market's own `NILX_BROWSER_HANDOFF_TOKEN` must be the same value. Unlike the
+  browser worker it grants the term at payment, with no paid item and no
+  pickup: a Bond that already holds Special is refused with `special_active`.
+  Never point both workers at one Market queue, or an order would be an item or
+  a grant by whichever worker claims it first.
 - A committed receipt is always confirmed again, never rejected, so a lost
   confirmation or a crash cannot charge twice or lose a paid order. A receipt
   that disagrees with its order stays `processing` for an operator.

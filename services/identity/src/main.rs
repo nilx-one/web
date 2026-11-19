@@ -539,9 +539,10 @@ async fn main() {
     }
     // The production chat checkout settles a separate queue and grants the
     // term directly. The existing browser queue keeps its paid-item flow.
-    if std::env::var("DEPLOY_ENV").as_deref() != Ok("development")
-        && let Ok(url) = std::env::var("MARKET_TELEGRAM_ISSUER_URL")
-    {
+    if let Some(url) = identity_bot::telegram_issuer_url(
+        std::env::var("DEPLOY_ENV").ok().as_deref(),
+        std::env::var("MARKET_TELEGRAM_ISSUER_URL").ok().as_deref(),
+    ) {
         let secret = std::env::var("NILX_BROWSER_HANDOFF_TOKEN").unwrap_or_default();
         let config = identity_bot::market_issuer::MarketIssuerConfig::new(&secret, Some(&url))
             .expect("production chat issuer must satisfy the market issuer contract");

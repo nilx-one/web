@@ -166,8 +166,9 @@ jobs:
           # Match the server-side handoff contract in bytes independent of runner locale.
           token_bytes="$(printf %s "$NILX_BROWSER_HANDOFF_TOKEN" | wc -c)"
           (( token_bytes >= 32 )) || { echo "NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 bytes." >&2; exit 1; }
-          (( ${#PARTNER_LOOKUP_TOKEN} >= 32 )) || { echo "PARTNER_LOOKUP_TOKEN must be at least 32 bytes." >&2; exit 1; }
-          test "$PARTNER_LOOKUP_TOKEN" != "$NILX_BROWSER_HANDOFF_TOKEN" || exit 1
+          partner_bytes="$(printf %s "$PARTNER_LOOKUP_TOKEN" | wc -c)"
+          (( partner_bytes >= 32 )) || { echo "PARTNER_LOOKUP_TOKEN must contain at least 32 bytes." >&2; exit 1; }
+          test "$PARTNER_LOOKUP_TOKEN" != "$NILX_BROWSER_HANDOFF_TOKEN" || { echo "PARTNER_LOOKUP_TOKEN must differ from NILX_BROWSER_HANDOFF_TOKEN." >&2; exit 1; }
           sudo apt-get update -qq
           sudo apt-get install -y -qq age
           {
