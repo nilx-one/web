@@ -142,3 +142,24 @@ fi
 
 [ "$(value_of NATIVE_AUTH_SECRET "$runtime")" = "$native_first" ]
 [ "$(value_of PASSWORD_PEPPER "$runtime")" = "$pepper_first" ]
+
+# Partner lookup survives preparation without touching server-owned auth keys.
+printf '%s\n' 'TELOXIDE_TOKEN=partner-test' 'PARTNER_LOOKUP_TOKEN=partner-read-only-012345678901234567890' >"$provider"
+sh "$prepare" "$runtime" "$provider"
+[ "$(value_of PARTNER_LOOKUP_TOKEN "$runtime")" = partner-read-only-012345678901234567890 ]
+[ "$(value_of NATIVE_AUTH_SECRET "$runtime")" = "$native_first" ]
+cp "$runtime" "$tmp/before-partner.env"
+printf '%s\n' 'TELOXIDE_TOKEN=partner-test' 'PARTNER_LOOKUP_TOKEN=short' >"$provider"
+if sh "$prepare" "$runtime" "$provider" >"$tmp/partner-error" 2>&1; then
+  echo 'short partner token accepted' >&2; exit 1
+fi
+cmp "$runtime" "$tmp/before-partner.env"
+printf '%s\n' 'TELOXIDE_TOKEN=partner-test' \
+  'PARTNER_LOOKUP_TOKEN=same-token-012345678901234567890123456' \
+  'NILX_BROWSER_HANDOFF_TOKEN=same-token-012345678901234567890123456' >"$provider"
+if sh "$prepare" "$runtime" "$provider" >"$tmp/partner-error" 2>&1; then
+  echo 'partner token may authorize issuer settlement' >&2; exit 1
+fi
+cmp "$runtime" "$tmp/before-partner.env"
+! grep -q 'same-token-0123' "$tmp/partner-error"
+echo 'Partner lookup handoff validated'

@@ -170,6 +170,11 @@ receipt. It authenticates with lowercase hex HMAC-SHA256 of
 `POST /api/v1/identity/market-visit` binds a `visit_id` to the Bond and the
 session that asked, and that binding is what a new debit requires. A committed
 receipt for an order id is confirmed again and never charged twice.
+A production service may run a second worker, for the chat checkout, against
+`MARKET_TELEGRAM_ISSUER_URL`. It grants the term at payment where the browser
+worker issues a paid item, and uses the same `NILX_BROWSER_HANDOFF_TOKEN`
+derivation, so production Market must hold the same value. The two workers must
+never share a queue.
 `POST /api/v1/partner/provider-account` is read-only and debits nothing
 (`services/identity/README.md`, "Partner account summary" and "Market Special
 orders").
