@@ -14,6 +14,7 @@ pub mod api {
     include!("api_business_creation.rs");
     include!("session_activation.rs");
 }
+pub mod ais_purchase;
 pub mod browser_web_auth;
 pub use nilxone_identity::aiaiaiai_sign_in;
 pub mod business_command;
