@@ -283,6 +283,41 @@ jobs:
             trap - RETURN
             port=$((port + 1))
           done < <(jq -r '.deployOrder[] as $name | [$name, .targets[$name].root] | @tsv' deploy/web/targets.json)
+      - name: Verify isolated development Web listener
+        run: |
+          set -Eeuo pipefail
+          container_id="$(docker run --detach \
+            --env WEB_PORT=1703 \
+            --env CLIENT_ROOT=/srv/site \
+            --env IDENTITY_UPSTREAM=nilxone-identity-development:1703 \
+            --env MARKET_BOOTSTRAP_UPSTREAM=market-api-development:1703 \
+            --env MARKET_BOOTSTRAP_HOST=market-api-development \
+            --publish 18090:1703 \
+            0x1-clients:ci)"
+          trap 'docker rm --force "$container_id" >/dev/null 2>&1 || true' EXIT
+
+          ready=false
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:18090/health >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = true
+          curl --fail --silent --show-error http://127.0.0.1:18090/ >/dev/null
+          docker exec "$container_id" test -f /srv/site/index.html
+          docker exec "$container_id" wget -q -O - http://127.0.0.1:1703/health >/dev/null
+
+          # Both development API targets are intentionally absent. In particular,
+          # the public catalog must not fall back to the production Market.
+          http_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            http://127.0.0.1:18090/market-api/bootstrap)"
+          test "$http_status" = 502
+          identity_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            http://127.0.0.1:18090/api/v1/identity)"
+          test "$identity_status" = 502
+
       - name: Validate generic client Compose contract
         run: |
           set -Eeuo pipefail

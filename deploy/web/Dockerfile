@@ -16,11 +16,12 @@ COPY deploy/web/monuments/ /srv/monuments/
 COPY deploy/web/voices/ /srv/voices/
 COPY deploy/web/Caddyfile /etc/caddy/Caddyfile
 
-ENV CLIENT_ROOT=/srv/site
+ENV CLIENT_ROOT=/srv/site \
+    WEB_PORT=1927
 
-EXPOSE 1927
+EXPOSE 1927 1703
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=6 --start-period=5s \
-  CMD wget -q -O - http://127.0.0.1:1927/health >/dev/null || exit 1
+  CMD wget -q -O - "http://127.0.0.1:${WEB_PORT}/health" >/dev/null || exit 1
 
 CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile"]

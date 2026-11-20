@@ -63,6 +63,34 @@ Why this host rather than a bucket, for now:
 
 `deploy/web/check-models-public.sh` is the public smoke, for every served entry at its catalog revision (or one, with `MODEL_ID`): the manifest answers for that entry, the chat config answers, the library answers and is served immutable, and every licence file beside the weights answers. Both scripts are covered by `.test.sh` neighbours that mock `curl`, and CI runs them with the other deployment scripts.
 
+## Isolated development listener
+
+The same immutable image can serve a development workload without changing production defaults:
+
+```text
+WEB_PORT=1703
+CLIENT_ROOT=/srv/site
+IDENTITY_UPSTREAM=nilxone-identity-development:1703
+MARKET_BOOTSTRAP_UPSTREAM=market-api-development:1703
+MARKET_BOOTSTRAP_HOST=market-api-development
+```
+
+`WEB_PORT` controls the container HTTP listener and its Docker HEALTHCHECK.
+Without overrides, the listener stays on **1927**, Identity resolves to
+`nilxone-identity:1927`, and public catalog requests use
+`https://0xda-market.nilx.one` exactly as before. No production
+Compose target needs a new environment variable.
+
+The development upstream aliases are isolated placeholders, **not** an
+instruction to reuse production Identity, credentials, session data, or Market.
+Until separate development backends are deployed on the development network,
+those API requests will fail; static Web pages and `/health` remain usable.
+This fails closed rather than silently routing development sessions or
+catalog requests into production.
+
+Deployment must use an explicit development Docker network and a separate
+Infra workload. Publishing a new image alone does not activate that workload.
+
 ## Deployment
 
 `Deploy Production` is the only manual production entry point.
