@@ -28,6 +28,8 @@ use serde::Deserialize;
 
 /// The only product that may request a permit for this checkout.
 const PRODUCT: &str = "0xda-market";
+/// The one AIS: the permit's issuer, and where its signing keys are read. Not a setting.
+pub const AIS_ISSUER: &str = "https://auth.aiaiaiai.org";
 const KEY_TTL: Duration = Duration::from_secs(300);
 const KEY_REFRESH_AFTER_REFUSAL: Duration = Duration::from_secs(60);
 const KEY_TIMEOUT: Duration = Duration::from_secs(5);
@@ -108,9 +110,11 @@ pub struct AisPurchase<M> {
 }
 
 impl<M> AisPurchase<M> {
-    /// `issuer` is AIS's origin: the permit's issuer claim and where its keys are read.
-    /// Not a secret and not a mode: there is one AIS.
-    pub fn new(worker: MarketIssuerWorker<M>, issuer: &str) -> Option<Arc<Self>> {
+    pub fn new(worker: MarketIssuerWorker<M>) -> Arc<Self> {
+        Self::with_origin(worker, AIS_ISSUER).expect("the pinned AIS origin is a URL")
+    }
+
+    fn with_origin(worker: MarketIssuerWorker<M>, issuer: &str) -> Option<Arc<Self>> {
         let origin = url::Url::parse(issuer).ok()?;
         Some(Arc::new(Self {
             worker,
@@ -251,7 +255,10 @@ mod tests {
             market,
             Arc::new(nilxone_identity::market_issuer::system_now_ms),
         );
-        (AisPurchase::new(worker, ais).expect("AIS origin"), calls)
+        (
+            AisPurchase::with_origin(worker, ais).expect("AIS origin"),
+            calls,
+        )
     }
 
     async fn post(state: Arc<AisPurchase<UnreachableMarket>>, body: &str) -> (StatusCode, String) {

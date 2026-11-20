@@ -119,15 +119,10 @@ pub fn market_issuer_config()
     ))
 }
 
-/// The issuer queue of the production chat checkout, when this service runs it.
-/// A development service never does: its only queue is the browser one, so the
-/// chat flow is proven against the same worker that settles browser orders.
-/// An empty value means "not configured", never a malformed URL that would stop
-/// the whole Identity service from booting (the browser worker treats it alike).
-pub fn telegram_issuer_url(deploy_env: Option<&str>, configured: Option<&str>) -> Option<String> {
-    if deploy_env == Some("development") {
-        return None;
-    }
+/// The issuer queue of the Telegram checkout, when this service runs it. An empty value
+/// means "not configured", never a malformed URL that would stop the whole Identity
+/// service from booting (the browser worker treats it alike).
+pub fn telegram_issuer_url(configured: Option<&str>) -> Option<String> {
     configured
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -141,25 +136,16 @@ mod telegram_issuer_url_tests {
     const QUEUE: &str = "https://0xda-market.nilx.one/production-issuer/issuer";
 
     #[test]
-    fn a_development_service_never_runs_the_chat_queue() {
-        assert_eq!(url(Some("development"), Some(QUEUE)), None);
-    }
-
-    #[test]
     fn missing_or_blank_means_not_configured() {
-        assert_eq!(url(None, None), None);
-        assert_eq!(url(Some("production"), None), None);
-        assert_eq!(url(Some("production"), Some("")), None);
-        assert_eq!(url(None, Some("  \n")), None);
+        assert_eq!(url(None), None);
+        assert_eq!(url(Some("")), None);
+        assert_eq!(url(Some("  \n")), None);
     }
 
     #[test]
-    fn a_production_or_unnamed_service_uses_the_configured_queue() {
-        assert_eq!(url(Some("production"), Some(QUEUE)).as_deref(), Some(QUEUE));
-        assert_eq!(
-            url(None, Some(&format!(" {QUEUE}\n"))).as_deref(),
-            Some(QUEUE)
-        );
+    fn the_configured_queue_is_used_trimmed() {
+        assert_eq!(url(Some(QUEUE)).as_deref(), Some(QUEUE));
+        assert_eq!(url(Some(&format!(" {QUEUE}\n"))).as_deref(), Some(QUEUE));
     }
 }
 
