@@ -2,27 +2,28 @@
 
 # Stage 0x1 clients from nilx-one/web
 
-In GitHub Actions, choose **Request 0x1 client staging**, the desired
-branch in GitHub's native *Run workflow* selector, and one target:
-`--all`, `--web`, `--telegram`, or `--discord`.
+Open **Actions → Request 0x1 client staging** in `nilx-one/web`.
+Choose the branch and one target:
 
-The request workflow starts **Web** Full CI and **Package Clients** on
-the selected branch, waits for successful exact-commit runs, and verifies
-the signed immutable GHCR image. It creates only a minimal artifact with
-source SHA, source branch, target and GitHub run ID.
+- `--all` — all three clients
+- `--web` — Web only
+- `--telegram` — Telegram Mini App only
+- `--discord` — Discord Activity only
 
-A separate `workflow_run` relay runs from protected `master`, validates
-that artifact against the successful originating workflow, and uses the
-existing production Environment's `INFRA_DEPLOY_TOKEN` to request staging
-in aiaiaiai-org/infra. No SSH or Infra token is passed to selected-branch
-jobs. Do not add additional PATs.
+The selected branch runs Web Full CI and Package Clients.
+Both must pass for its exact commit SHA.
+The workflow then verifies the GHCR image provenance.
 
-Infra then independently verifies the origin run and OCI provenance and
-stages selected private client containers on the new VPS. This is not yet
-public `nilx.one` deployment; DNS, Identity SQLite and Market/Render are
-not changed. Requires matching Infra PR support for
-`repository_dispatch` event `stage-nilx-clients`.
+The selected branch has no Infra or SSH secrets.
+It uploads a request containing only branch, SHA, target, and run ID.
 
-The source workflow does not itself deploy, and the relay's successful
-dispatch only means Infra accepted the request, not that its deployment
-succeeded. Inspect Infra's corresponding Actions run for final result.
+A separate trusted workflow on `master` validates that request.
+Only this relay uses the existing `INFRA_DEPLOY_TOKEN` to contact Infra.
+No additional personal access token is required.
+
+Infra independently verifies the Web run and image provenance.
+It stages the selected clients privately on the new VPS.
+Public DNS, Identity SQLite, and Render services remain unchanged.
+
+The relay confirms only that Infra accepted the request.
+Check the corresponding Infra Actions run for the staging result.
