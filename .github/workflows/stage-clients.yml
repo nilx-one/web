@@ -1,0 +1,133 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Request 0x1 client staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Client targets on the new VPS
+        required: true
+        type: choice
+        default: --all
+        options: [--all, --web, --telegram, --discord]
+
+# Selected branch is untrusted; it receives NO Infra or server credentials.
+permissions:
+  actions: write
+  contents: read
+  packages: read
+  attestations: read
+
+concurrency:
+  group: stage-0x1-clients-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      TARGET: ${{ inputs.target }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate requested branch and target
+        run: |
+          set -Eeuo pipefail
+          case "$TARGET" in --all|--web|--telegram|--discord) ;; *) exit 1 ;; esac
+          test "$GITHUB_REF_TYPE" = branch
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_REF_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          jq -e '.schema == 1 and .deployOrder == ["web","telegram","discord"]' deploy/web/targets.json >/dev/null
+          selected="$(printf '%s' "$TARGET" | sed 's/^--//')"
+          if [[ "$selected" != all ]]; then
+            jq -e --arg target "$selected" '.targets[$target] != null' deploy/web/targets.json >/dev/null
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Start Full CI and Package Clients for the exact branch
+        id: started
+        run: |
+          set -Eeuo pipefail
+          echo "timestamp=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+          gh workflow run web.yml --ref "$GITHUB_REF_NAME"
+          gh workflow run package-web.yml --ref "$GITHUB_REF_NAME"
+
+      - name: Await both workflows for the selected commit
+        env:
+          SINCE: ${{ steps.started.outputs.timestamp }}
+        run: |
+          set -Eeuo pipefail
+          for workflow in web.yml package-web.yml; do
+            complete=false
+            for attempt in $(seq 1 150); do
+              response="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs" \
+                -f branch="$GITHUB_REF_NAME" -f event=workflow_dispatch -f per_page=40)"
+              candidate="$(jq -r --arg sha "$GITHUB_SHA" --argjson since "$SINCE" '
+                [.workflow_runs[] | select(
+                  .head_sha == $sha and
+                  (.created_at | fromdateiso8601) >= $since
+                )] | sort_by(.id) | last |
+                if . == null then "" else [.id, .status, (.conclusion // "")] | @tsv end
+              ' <<< "$response")"
+              if [[ -n "$candidate" ]]; then
+                IFS=$'\t' read -r run_id status result <<< "$candidate"
+                if [[ "$status" == completed ]]; then
+                  if [[ "$result" != success ]]; then
+                    echo "::error::$workflow failed ($result), run $run_id"
+                    exit 1
+                  fi
+                  echo "Verified $workflow succeeded at $GITHUB_SHA (run $run_id)"
+                  complete=true
+                  break
+                fi
+              fi
+              sleep 12
+            done
+            test "$complete" = true || {
+              echo "::error::Timed out waiting for $workflow on $GITHUB_SHA."
+              exit 1
+            }
+          done
+
+      - name: Verify signed immutable image
+        run: |
+          set -Eeuo pipefail
+          image=ghcr.io/nilx-one/web
+          manifest="$(docker buildx imagetools inspect "$image:$GITHUB_SHA" --format '{{json .Manifest}}')"
+          digest="$(jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))' <<< "$manifest")"
+          gh attestation verify "oci://$image@$digest" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow nilx-one/web/.github/workflows/package-web.yml \
+            --source-ref "$GITHUB_REF" \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
+          echo "Verified image $image@$digest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build sanitized relay request
+        run: |
+          set -Eeuo pipefail
+          jq -n --arg sha "$GITHUB_SHA" --arg branch "$GITHUB_REF_NAME" \
+            --arg target "$TARGET" --argjson run_id "$GITHUB_RUN_ID" \
+            '{source_sha:$sha,source_branch:$branch,target:$target,source_run_id:$run_id}' \
+            > staging-request.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staging-request-${{ github.run_id }}
+          path: staging-request.json
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "Branch: $GITHUB_REF_NAME / $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Target: $TARGET" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Signed request prepared for trusted master relay; no DNS or VPS changes in this job.' >> "$GITHUB_STEP_SUMMARY"

@@ -7,6 +7,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/deploy-production.yml"
+      - ".github/workflows/stage-clients.yml"
+      - ".github/workflows/relay-stage-clients.yml"
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/validate-deploy-contract.yml"
       - "deploy/infra-workload.sh"
@@ -20,6 +22,8 @@ on:
       - master
     paths:
       - ".github/workflows/deploy-production.yml"
+      - ".github/workflows/stage-clients.yml"
+      - ".github/workflows/relay-stage-clients.yml"
       - ".github/workflows/deploy-identity-service.yml"
       - ".github/workflows/validate-deploy-contract.yml"
       - "deploy/infra-workload.sh"
@@ -96,6 +100,31 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Validate branch-selector staging isolation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          producer=.github/workflows/stage-clients.yml
+          relay=.github/workflows/relay-stage-clients.yml
+          grep -Fq 'workflow_dispatch:' "$producer"
+          for target in --all --web --telegram --discord; do
+            grep -Fq -- "$target" "$producer"
+          done
+          grep -Fq 'gh workflow run web.yml' "$producer"
+          grep -Fq 'gh workflow run package-web.yml' "$producer"
+          grep -Fq 'gh attestation verify' "$producer"
+          grep -Fq 'actions/upload-artifact@v4' "$producer"
+          if grep -Eq 'INFRA_DEPLOY_TOKEN|secrets: inherit|repos/aiaiaiai-org/infra/dispatches' "$producer"; then
+            echo "::error::Selected-branch workflow cannot receive Infra credentials"
+            exit 1
+          fi
+          grep -Fq 'workflow_run:' "$relay"
+          grep -Fq 'name: production' "$relay"
+          grep -Fq 'github.event.workflow_run.head_sha' "$relay"
+          grep -Fq 'actions/download-artifact@v4' "$relay"
+          grep -Fq 'secrets.INFRA_DEPLOY_TOKEN' "$relay"
+          grep -Fq 'repos/aiaiaiai-org/infra/dispatches' "$relay"
 
       - name: Validate production preflight boundary
         shell: bash

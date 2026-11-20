@@ -1,0 +1,82 @@
+# © 2026 aiaiaiai · aiaiaiai.org
+# SPDX-License-Identifier: MPL-2.0
+
+name: Relay verified 0x1 client staging
+
+# This privileged workflow_run uses the version on protected master.
+# Branch-selected code never reads INFRA_DEPLOY_TOKEN.
+on:
+  workflow_run:
+    workflows: ["Request 0x1 client staging"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  relay:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.head_repository.full_name == 'nilx-one/web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    steps:
+      - name: Verify originating workflow identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -Eeuo pipefail
+          workflow_id="$(gh api repos/nilx-one/web/actions/workflows/stage-clients.yml --jq .id)"
+          run="$(gh api "repos/nilx-one/web/actions/runs/$RUN_ID")"
+          jq -e --argjson expected "$workflow_id" '
+            .workflow_id == $expected and
+            .event == "workflow_dispatch" and
+            .conclusion == "success" and
+            .head_repository.full_name == "nilx-one/web"
+          ' <<< "$run" >/dev/null
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: staging-request-${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/client-staging
+
+      - name: Validate request binding and allowlisted targets
+        env:
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -Eeuo pipefail
+          request="$RUNNER_TEMP/client-staging/staging-request.json"
+          test -s "$request"
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SOURCE_BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]
+          jq -e --arg sha "$SOURCE_SHA" --arg branch "$SOURCE_BRANCH" \
+            --argjson run_id "$RUN_ID" '
+            (keys | sort) == ["source_branch","source_run_id","source_sha","target"] and
+            .source_sha == $sha and .source_branch == $branch and
+            .source_run_id == $run_id and
+            (.target == "--all" or .target == "--web" or
+             .target == "--telegram" or .target == "--discord")
+          ' "$request" >/dev/null
+
+      - name: Dispatch verified request to Infra
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$GH_TOKEN" || {
+            echo "::error::INFRA_DEPLOY_TOKEN is required in protected production Environment."
+            exit 1
+          }
+          jq -n --slurpfile req "$RUNNER_TEMP/client-staging/staging-request.json" \
+            '{event_type:"stage-nilx-clients",client_payload:$req[0]}' |
+            gh api --method POST repos/aiaiaiai-org/infra/dispatches --input -
+          echo 'Verified request sent to Infra; this does not change public DNS.' >> "$GITHUB_STEP_SUMMARY"
