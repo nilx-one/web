@@ -537,34 +537,27 @@ async fn main() {
             worker, interval,
         ));
     }
-    // The production chat checkout settles a separate queue and grants the term directly. A
+    // The Telegram checkout settles a separate Market queue and grants the term directly. A
     // Telegram order is authorized by the buyer's AIS permit, not by polling that queue, so the
-    // worker only settles what a permit names. AIS is the one origin 0x1 already signs in
-    // through; without it, or without the queue, the route is not served.
+    // worker only settles what a permit names. Without the queue the route is not served.
     let api = match identity_bot::telegram_issuer_url(
-        std::env::var("DEPLOY_ENV").ok().as_deref(),
         std::env::var("MARKET_TELEGRAM_ISSUER_URL").ok().as_deref(),
-    )
-    .zip(
-        std::env::var("AIAIAIAI_SIGN_IN_ISSUER")
-            .ok()
-            .filter(|value| !value.is_empty()),
     ) {
-        Some((url, ais)) => {
+        Some(url) => {
             let secret = std::env::var("NILX_BROWSER_HANDOFF_TOKEN").unwrap_or_default();
             let config = identity_bot::market_issuer::MarketIssuerConfig::new(&secret, Some(&url))
-                .expect("production chat issuer must satisfy the market issuer contract");
+                .expect("Telegram issuer must satisfy the market issuer contract");
             let market = identity_bot::market_issuer::HttpMarketIssuer::new(config)
-                .expect("chat issuer HTTP client must build");
+                .expect("Telegram issuer HTTP client must build");
             let worker = identity_bot::market_issuer::MarketIssuerWorker::new(
                 telegram_state.repository.clone(),
                 market,
                 Arc::new(identity_bot::market_issuer::system_now_ms),
             );
-            let purchase = identity_bot::ais_purchase::AisPurchase::new(worker, &ais)
-                .expect("AIAIAIAI_SIGN_IN_ISSUER must be an AIS origin");
-            info!(issuer = %ais, "AIS Telegram purchases enabled");
-            api.merge(identity_bot::ais_purchase::router(purchase))
+            info!("AIS Telegram purchases enabled");
+            api.merge(identity_bot::ais_purchase::router(
+                identity_bot::ais_purchase::AisPurchase::new(worker),
+            ))
         }
         None => {
             info!("AIS Telegram purchases are not configured");
