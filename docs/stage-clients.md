@@ -5,10 +5,10 @@
 Open **Actions → Request 0x1 client staging** in `nilx-one/web`.
 Choose the branch and one target:
 
-- `--all` — all three clients
-- `--web` — Web only
-- `--telegram` — Telegram Mini App only
-- `--discord` — Discord Activity only
+- `all` — all three clients
+- `web` — Web only
+- `telegram` — Telegram Mini App only
+- `discord` — Discord Activity only
 
 The selected branch runs Web Full CI and Package Clients.
 Both must pass for its exact commit SHA.
@@ -27,3 +27,6 @@ Public DNS, Identity SQLite, and Render services remain unchanged.
 
 The relay confirms only that Infra accepted the request.
 Check the corresponding Infra Actions run for the staging result.
+
+Identity is not deployed by this workflow. It remains a separate manual
+production dependency until its database, keys and compatibility are verified.

@@ -108,7 +108,7 @@ jobs:
           producer=.github/workflows/stage-clients.yml
           relay=.github/workflows/relay-stage-clients.yml
           grep -Fq 'workflow_dispatch:' "$producer"
-          for target in --all --web --telegram --discord; do
+          for target in all web telegram discord; do
             grep -Fq -- "$target" "$producer"
           done
           grep -Fq 'gh workflow run web.yml' "$producer"

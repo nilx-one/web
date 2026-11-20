@@ -63,8 +63,8 @@ jobs:
             (keys | sort) == ["source_branch","source_run_id","source_sha","target"] and
             .source_sha == $sha and .source_branch == $branch and
             .source_run_id == $run_id and
-            (.target == "--all" or .target == "--web" or
-             .target == "--telegram" or .target == "--discord")
+            (.target == "all" or .target == "web" or
+             .target == "telegram" or .target == "discord")
           ' "$request" >/dev/null
 
       - name: Dispatch verified request to Infra
