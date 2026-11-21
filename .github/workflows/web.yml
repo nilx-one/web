@@ -64,6 +64,9 @@ jobs:
           cache-dependency-path: |
             tools/avatars/requirements.txt
             tools/monuments/requirements.txt
+      - name: Verify product-owned encrypted Identity credential contract
+        run: python -m unittest tests/test_product_identity_secret_envelope.py
+
       - id: avatar-cache
         name: Restore deterministic avatar assets
         uses: actions/cache@v4
