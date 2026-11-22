@@ -91,7 +91,7 @@ if [ -n "$partner_token" ]; then
   fi
 fi
 
-telegram_token="$(read_provider_value TELOXIDE_TOKEN)"
+telegram_token="$(read_provider_value TELEGRAM_BOT_TOKEN)"
 test -n "$telegram_token"
 
 public_origin="$(read_provider_value PUBLIC_ORIGIN)"

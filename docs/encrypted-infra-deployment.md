@@ -12,7 +12,7 @@ SSH key** corresponding to `aiaiaiai-org/infra`'s `edge-prod-1`
 
 The existing `nilx-one/web` `production` Secrets stay owned here:
 
-- `TELOXIDE_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_OIDC_CLIENT_SECRET`
 - `DISCORD_CLIENT_SECRET`
 - `INFRA_DEPLOY_TOKEN` (GitHub permission to request deployment)
@@ -47,7 +47,7 @@ rollback have passed. No production deployment is automatic.
 variable `API_DELIVERY=enabled` is set, an age-encrypted `<sha>.secrets`
 envelope that `aiaiaiai-org/infra` delivers on its own. The envelope carries
 exactly the names `nilxone-identity` lists under `delivery.envelope` in infra:
-`TELOXIDE_TOKEN`, `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`,
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`,
 `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `NILX_BROWSER_HANDOFF_TOKEN` and
 `PARTNER_LOOKUP_TOKEN`. The job refuses to publish when the two lists differ.
 

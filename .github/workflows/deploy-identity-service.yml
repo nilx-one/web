@@ -21,7 +21,7 @@ on:
     secrets:
       INFRA_DEPLOY_TOKEN:
         required: false
-      TELOXIDE_TOKEN:
+      TELEGRAM_BOT_TOKEN:
         required: false
       TELEGRAM_OIDC_CLIENT_SECRET:
         required: false
@@ -149,7 +149,7 @@ jobs:
         name: Encrypt provider credentials for scoped infra handoff
         if: steps.need.outputs.deploy == 'true'
         env:
-          TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
           NILX_BROWSER_HANDOFF_TOKEN: ${{ secrets.NILX_BROWSER_HANDOFF_TOKEN }}
@@ -159,7 +159,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          for name in TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN PARTNER_LOOKUP_TOKEN INFRA_AGE_RECIPIENT REGISTRY_TOKEN; do
+          for name in TELEGRAM_BOT_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN PARTNER_LOOKUP_TOKEN INFRA_AGE_RECIPIENT REGISTRY_TOKEN; do
             test -n "${!name:-}" || { echo "Required production credential/recipient $name missing." >&2; exit 1; }
             [[ "${!name}" != *$'\n'* && "${!name}" != *$'\r'* ]] || exit 1
           done
@@ -172,7 +172,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq age
           {
-            printf 'TELOXIDE_TOKEN=%s\n' "$TELOXIDE_TOKEN"
+            printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
             printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$TELEGRAM_OIDC_CLIENT_SECRET"
             printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET"
             printf 'NILX_BROWSER_HANDOFF_TOKEN=%s\n' "$NILX_BROWSER_HANDOFF_TOKEN"

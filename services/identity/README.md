@@ -450,7 +450,7 @@ authorized steps.
 ## Secret boundary
 
 `NATIVE_AUTH_SECRET`, `PASSWORD_PEPPER`, `AIAIAIAI_ISSUER_SIGNING_KEY`,
-`TELOXIDE_TOKEN`,
+`TELEGRAM_BOT_TOKEN`,
 `DISCORD_CLIENT_SECRET`, `SPEECH_INGEST_TOKEN`, and `PARTNER_LOOKUP_TOKEN` are server-only runtime secrets. The native authentication
 secret and password pepper must be independent values of at least 32 bytes. None
 may be exposed through Vite, browser configuration, repository files, build

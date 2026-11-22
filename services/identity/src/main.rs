@@ -246,7 +246,7 @@ async fn main() {
         std::process::exit(run_operator_command(&args).await);
     }
 
-    let bot_token = env::var("TELOXIDE_TOKEN").expect("TELOXIDE_TOKEN must be configured");
+    let bot_token = env::var("TELEGRAM_BOT_TOKEN").expect("TELEGRAM_BOT_TOKEN must be configured");
     let database_url =
         env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://identity.db".to_owned());
     let http_bind = env::var("HTTP_BIND")
@@ -500,7 +500,7 @@ async fn main() {
     });
 
     // One durable, shared delivery queue for all Telegram-linked admins.
-    // No new secret or standalone bot; the existing TELOXIDE_TOKEN is reused.
+    // No new secret or standalone bot; the existing TELEGRAM_BOT_TOKEN is reused.
     tokio::spawn(deliver_admin_role_notifications(
         bot.clone(),
         telegram_state.repository.clone(),

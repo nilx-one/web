@@ -2,7 +2,7 @@
 
 # Product-owned Telegram credential for fresh 0x1 Identity
 
-`TELOXIDE_TOKEN` for `@nilxone_bot` is a **product secret**:
+`TELEGRAM_BOT_TOKEN` for `@nilxone_bot` is a **product secret**:
 `nilx-one/web` → **Settings → Environments → production → Secrets**.
 It must **never** be copied into `aiaiaiai-org/infra` secrets,
 GitHub workflow dispatch input, shell argument, or public log.
@@ -15,7 +15,7 @@ fingerprint or a public `ssh-ed25519` host key.
 After that variable and the product's genuine bot token are available,
 run `Package fresh 0x1 Identity secret envelope` manually on the
 product's trusted `master` branch. It validates the format, encrypts
-**only** `TELOXIDE_TOKEN` using AGE, and publishes an
+**only** `TELEGRAM_BOT_TOKEN` using AGE, and publishes an
 attested immutable digest under
 `ghcr.io/nilx-one/0x1-identity-fresh-secrets@sha256:...`.
 
