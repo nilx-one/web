@@ -26,7 +26,7 @@ async fn product_site(fixture: &Fixture) -> Router {
         SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
         product,
     )
-    .expect("nilx-one client");
+    .expect("0x1 client");
     crate::product_sign_in::router(Some(ProductSignIn::new(service, &native_auth())))
 }
 

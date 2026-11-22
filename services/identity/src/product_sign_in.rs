@@ -10,7 +10,7 @@
 //! database and its sessions. Nothing here reads or writes the legacy
 //! identity database, and a public address never opens a native session:
 //! the product session names a profile by the pairwise subject AIS issued to
-//! the `nilx-one` client, and by nothing else.
+//! the `0x1` client, and by nothing else.
 
 use axum::{
     Json, Router,

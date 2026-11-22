@@ -31,7 +31,7 @@ fn clients() -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect();
     serde_json::json!([{
-        "client_id": "nilx-one",
+        "client_id": "0x1",
         "name": "0x1",
         "redirect_uris": [CALLBACK],
         "secret_sha256": digest,
@@ -81,7 +81,7 @@ async fn fixture() -> Fixture {
         SignInClientConfig::new(
             ORIGIN,
             Some(&format!("http://{address}")),
-            "nilx-one",
+            "0x1",
             SECRET,
             CALLBACK,
         )
@@ -246,7 +246,7 @@ async fn a_password_sign_in_reaches_the_client_as_a_verified_pairwise_subject() 
         .repository
         .client_pairwise_subject(
             &PubDress::from_str("0x0sky").unwrap(),
-            "nilx-one",
+            "0x1",
             &native_auth().secret_digester(),
         )
         .await
@@ -348,7 +348,7 @@ async fn an_unknown_client_or_redirect_never_redirects() {
 async fn a_request_without_pkce_is_sent_back_with_an_error() {
     let fixture = fixture().await;
     let uri = format!(
-        "/authorize?response_type=code&client_id=nilx-one&redirect_uri={}&scope=openid&state=s&nonce=n",
+        "/authorize?response_type=code&client_id=0x1&redirect_uri={}&scope=openid&state=s&nonce=n",
         url::form_urlencoded::byte_serialize(CALLBACK.as_bytes()).collect::<String>()
     );
     let (status, headers, _) = send(&fixture.issuer, get(&uri)).await;
@@ -411,7 +411,7 @@ async fn the_token_endpoint_refuses_a_wrong_secret_or_verifier_and_spends_the_co
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .header(
                 header::AUTHORIZATION,
-                format!("Basic {}", STANDARD.encode(format!("nilx-one:{secret}"))),
+                format!("Basic {}", STANDARD.encode(format!("0x1:{secret}"))),
             )
             .body(Body::from(body))
             .unwrap()
@@ -474,7 +474,7 @@ fn configuration_refuses_unsafe_clients() {
         IssuerConfig::new(ORIGIN, &key, &http_redirect),
         Err(IssuerConfigError::Clients(_))
     ));
-    let bad_hash = serde_json::json!([{ "client_id": "nilx-one", "name": "0x1", "redirect_uris": [CALLBACK], "secret_sha256": "00" }]);
+    let bad_hash = serde_json::json!([{ "client_id": "0x1", "name": "0x1", "redirect_uris": [CALLBACK], "secret_sha256": "00" }]);
     assert!(matches!(
         IssuerConfig::new(ORIGIN, &key, &bad_hash.to_string()),
         Err(IssuerConfigError::Clients(_))
@@ -501,7 +501,7 @@ async fn the_0x1_site_signs_in_through_the_issuer_and_gets_a_product_session() {
         SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
         product,
     )
-    .expect("nilx-one client");
+    .expect("0x1 client");
     let site = crate::product_sign_in::router(Some(ProductSignIn::new(service, &native_auth())));
 
     let (status, _, body) = send(
@@ -768,13 +768,13 @@ async fn an_existing_bond_owner_attaches_an_ais_identity_through_the_migration_f
         SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
         product.clone(),
     )
-    .expect("nilx-one client");
+    .expect("0x1 client");
     let store = LegacyBondMigrationRepository::prepare(product)
         .await
         .expect("one SQLite store");
     let migration = LegacyMigration::new(
         SignInFlow::legacy_migration(fixture.client.clone(), native_auth().secret_digester())
-            .expect("nilx-one migration flow"),
+            .expect("0x1 migration flow"),
         store,
         native_auth().secret_digester(),
     )
@@ -1076,7 +1076,7 @@ async fn provisioning_site(
         SignInFlow::new(fixture.client.clone(), native_auth().secret_digester()),
         product.clone(),
     )
-    .expect("nilx-one client");
+    .expect("0x1 client");
     let store = LegacyBondMigrationRepository::prepare(product.clone())
         .await
         .expect("one store");

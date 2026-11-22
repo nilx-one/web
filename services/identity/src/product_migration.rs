@@ -64,7 +64,7 @@ pub struct LegacyMigration {
 }
 
 impl LegacyMigration {
-    /// `flow` must be Core's `SignInFlow::legacy_migration` for `nilx-one`;
+    /// `flow` must be Core's `SignInFlow::legacy_migration` for `0x1`;
     /// an ordinary product flow is refused so its transactions can never be
     /// presented as migration proof.
     pub fn new(

@@ -25,7 +25,7 @@ The product-side contract and first implementation are in
 [Core PR #95](https://github.com/nilx-one/core/pull/95), including
 `docs/ais-public-info.md`. `PublicInfoService` composes the existing OIDC
 verifier with its own product tables. Only a verified `(issuer, sub)`
-for client `nilx-one` creates or resolves a profile. A public name never
+for client `0x1` creates or resolves a profile. A public name never
 attaches a pre-existing Bond, and another product's pairwise subject cannot
 select a 0x1 row. A rename preserves the product id and its state.
 
