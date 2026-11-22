@@ -41,6 +41,7 @@ pub use nilxone_identity::rate_limit;
 pub use nilxone_identity::repository;
 pub mod speech;
 pub mod telegram_init_data;
+pub mod telegram_login;
 
 pub use browser_web_auth::{BrowserOAuthConfig, OAuthClientCredentials};
 pub use credentials::{
