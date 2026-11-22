@@ -632,7 +632,7 @@ async fn product_sign_in_from_environment(
         .await
         .expect("the 0x1 product tables must initialize");
     let service = public_info::PublicInfoService::new(flow, repository)
-        .expect("the product service accepts the nilx-one client");
+        .expect("the product service accepts the 0x1 client");
     info!(issuer = %issuer, "aiaiaiai sign-in enabled for the 0x1 site");
     Some(product_sign_in::ProductSignIn::new(service, native_auth))
 }
@@ -664,7 +664,7 @@ async fn product_bonds_from_environment(
         aiaiaiai_sign_in::SignInClient::new(config),
         native_auth.secret_digester(),
     )
-    .expect("legacy migration proves only the nilx-one client");
+    .expect("legacy migration proves only the 0x1 client");
     let repository = public_info::PublicInfoRepository::connect(database_url)
         .await
         .expect("the 0x1 product tables must initialize");
@@ -684,7 +684,7 @@ async fn product_bonds_from_environment(
 }
 
 /// 0x1 as a public client of AIS: no secret, only PKCE and the exact callback.
-/// Core's product service accepts only the `nilx-one` client, so the id is not
+/// Core's product service accepts only the `0x1` client, so the id is not
 /// a setting.
 fn product_sign_in_client(
     issuer: &str,
@@ -694,12 +694,7 @@ fn product_sign_in_client(
     let redirect_uri = public_origin
         .join("/api/v1/auth/aiaiaiai/callback")
         .expect("the callback path stays on the public origin");
-    aiaiaiai_sign_in::SignInClientConfig::public(
-        issuer,
-        backchannel,
-        "nilx-one",
-        redirect_uri.as_str(),
-    )
+    aiaiaiai_sign_in::SignInClientConfig::public(issuer, backchannel, "0x1", redirect_uri.as_str())
 }
 
 fn oauth_credentials_from_environment(
@@ -1858,7 +1853,7 @@ mod tests {
     fn the_0x1_site_is_a_public_client_of_ais_on_its_own_callback() {
         let origin = Url::parse("https://nilx.one").unwrap();
         let config = product_sign_in_client("https://auth.aiaiaiai.org", None, &origin).unwrap();
-        assert_eq!(config.client_id(), "nilx-one");
+        assert_eq!(config.client_id(), "0x1");
         assert_eq!(config.issuer(), "https://auth.aiaiaiai.org");
         // No secret exists to leak, log or carry.
         assert!(format!("{config:?}").contains("client_secret: None"));

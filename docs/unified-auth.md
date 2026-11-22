@@ -96,7 +96,7 @@ A server-side registry, not a request parameter, says what a client may do:
 
 | Field             | Meaning                                                               |
 | ----------------- | --------------------------------------------------------------------- |
-| `client_id`       | `nilx-one`, `0xda-market`, `prism-hub`, `prism-hubot`, `mind-web`, …  |
+| `client_id`       | `0x1`, `0xda-market`, `prism-hub`, `prism-hubot`, `mind-web`, …       |
 | `redirect_uris`   | exact-match allowlist, HTTPS only                                     |
 | `kind`            | `confidential` (has a server secret) or `public` (PKCE only)          |
 | `presentation`    | product name, skin, featured methods; presentation only (ECO-0001 §4) |
