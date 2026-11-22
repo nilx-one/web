@@ -99,7 +99,7 @@ jobs:
           # keeps its existing values and refuses an override, and infra's contract
           # refuses them in an envelope. A copy in GitHub could lock out every password,
           # end every session and lose every stored GitHub token.
-          TELOXIDE_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
           NILX_BROWSER_HANDOFF_TOKEN: ${{ secrets.NILX_BROWSER_HANDOFF_TOKEN }}
@@ -109,7 +109,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          names=(TELOXIDE_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
+          names=(TELEGRAM_BOT_TOKEN TELEGRAM_OIDC_CLIENT_ID TELEGRAM_OIDC_CLIENT_SECRET
                  DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN PARTNER_LOOKUP_TOKEN)
           for name in "${names[@]}"; do
             value="$(printenv "$name")"

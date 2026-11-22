@@ -24,7 +24,7 @@ value_of() {
   ' "$file"
 }
 
-printf '%s\n' 'TELOXIDE_TOKEN=first-token' >"$provider"
+printf '%s\n' 'TELEGRAM_BOT_TOKEN=first-token' >"$provider"
 sh "$prepare" "$runtime" "$provider"
 
 native_first="$(value_of NATIVE_AUTH_SECRET "$runtime")"
@@ -34,12 +34,12 @@ evidence_key_first="$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")"
 [ "${#pepper_first}" -ge 32 ]
 [ "$native_first" != "$pepper_first" ]
 [ "${#evidence_key_first}" -eq 64 ]
-[ "$(value_of TELOXIDE_TOKEN "$runtime")" = first-token ]
+[ "$(value_of TELEGRAM_BOT_TOKEN "$runtime")" = first-token ]
 [ "$(stat -c '%a' "$runtime")" = 600 ]
 
 {
   printf '%s\n' 'PUBLIC_ORIGIN=https://nilx.one'
-  printf '%s\n' 'TELOXIDE_TOKEN=second-token'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=second-token'
   printf '%s\n' 'TELEGRAM_OIDC_CLIENT_ID=telegram-client'
   printf '%s\n' 'TELEGRAM_OIDC_CLIENT_SECRET=telegram-secret'
   printf '%s\n' 'DISCORD_CLIENT_ID=1234'
@@ -55,7 +55,7 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of NATIVE_AUTH_SECRET "$runtime")" = "$native_first" ]
 [ "$(value_of PASSWORD_PEPPER "$runtime")" = "$pepper_first" ]
 [ "$(value_of PUBLIC_ORIGIN "$runtime")" = https://nilx.one ]
-[ "$(value_of TELOXIDE_TOKEN "$runtime")" = second-token ]
+[ "$(value_of TELEGRAM_BOT_TOKEN "$runtime")" = second-token ]
 [ "$(value_of TELEGRAM_OIDC_CLIENT_ID "$runtime")" = telegram-client ]
 [ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
 [ "$(value_of DISCORD_CLIENT_ID "$runtime")" = 1234 ]
@@ -68,13 +68,13 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=third-token'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=third-token'
   printf '%s\n' 'DISCORD_CLIENT_ID=1234'
   printf '%s\n' 'DISCORD_CLIENT_SECRET=discord-secret'
 } >"$provider"
 sh "$prepare" "$runtime" "$provider"
 
-[ "$(value_of TELOXIDE_TOKEN "$runtime")" = third-token ]
+[ "$(value_of TELEGRAM_BOT_TOKEN "$runtime")" = third-token ]
 [ "$(value_of TELEGRAM_OIDC_CLIENT_ID "$runtime")" = telegram-client ]
 [ "$(value_of TELEGRAM_OIDC_CLIENT_SECRET "$runtime")" = telegram-secret ]
 [ "$(value_of GITHUB_AUTH_CLIENT_ID "$runtime")" = github-auth-client ]
@@ -84,7 +84,7 @@ sh "$prepare" "$runtime" "$provider"
 [ "$(value_of GITHUB_EVIDENCE_ENCRYPTION_KEY "$runtime")" = "$evidence_key_first" ]
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=github-evidence-missing-pair'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=github-evidence-missing-pair'
   printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=github-evidence-client'
 } >"$provider"
 if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
@@ -93,7 +93,7 @@ if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
 fi
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=github-shared-client'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=github-shared-client'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=shared-client'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_SECRET=github-auth-secret'
   printf '%s\n' 'GITHUB_EVIDENCE_CLIENT_ID=shared-client'
@@ -105,7 +105,7 @@ if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
 fi
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=github-missing-pair'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=github-missing-pair'
   printf '%s\n' 'GITHUB_AUTH_CLIENT_ID=github-auth-client'
 } >"$provider"
 if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
@@ -114,7 +114,7 @@ if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
 fi
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=missing-pair'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=missing-pair'
   printf '%s\n' 'TELEGRAM_OIDC_CLIENT_ID=telegram-client'
 } >"$provider"
 if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
@@ -123,7 +123,7 @@ if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
 fi
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=attempted-evidence-key-override'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=attempted-evidence-key-override'
   printf '%s\n' 'GITHUB_EVIDENCE_ENCRYPTION_KEY=not-allowed'
 } >"$provider"
 if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
@@ -132,7 +132,7 @@ if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
 fi
 
 {
-  printf '%s\n' 'TELOXIDE_TOKEN=attempted-override'
+  printf '%s\n' 'TELEGRAM_BOT_TOKEN=attempted-override'
   printf '%s\n' 'NATIVE_AUTH_SECRET=not-allowed'
 } >"$provider"
 if sh "$prepare" "$runtime" "$provider" >/dev/null 2>&1; then
@@ -144,17 +144,17 @@ fi
 [ "$(value_of PASSWORD_PEPPER "$runtime")" = "$pepper_first" ]
 
 # Partner lookup survives preparation without touching server-owned auth keys.
-printf '%s\n' 'TELOXIDE_TOKEN=partner-test' 'PARTNER_LOOKUP_TOKEN=partner-read-only-012345678901234567890' >"$provider"
+printf '%s\n' 'TELEGRAM_BOT_TOKEN=partner-test' 'PARTNER_LOOKUP_TOKEN=partner-read-only-012345678901234567890' >"$provider"
 sh "$prepare" "$runtime" "$provider"
 [ "$(value_of PARTNER_LOOKUP_TOKEN "$runtime")" = partner-read-only-012345678901234567890 ]
 [ "$(value_of NATIVE_AUTH_SECRET "$runtime")" = "$native_first" ]
 cp "$runtime" "$tmp/before-partner.env"
-printf '%s\n' 'TELOXIDE_TOKEN=partner-test' 'PARTNER_LOOKUP_TOKEN=short' >"$provider"
+printf '%s\n' 'TELEGRAM_BOT_TOKEN=partner-test' 'PARTNER_LOOKUP_TOKEN=short' >"$provider"
 if sh "$prepare" "$runtime" "$provider" >"$tmp/partner-error" 2>&1; then
   echo 'short partner token accepted' >&2; exit 1
 fi
 cmp "$runtime" "$tmp/before-partner.env"
-printf '%s\n' 'TELOXIDE_TOKEN=partner-test' \
+printf '%s\n' 'TELEGRAM_BOT_TOKEN=partner-test' \
   'PARTNER_LOOKUP_TOKEN=same-token-012345678901234567890123456' \
   'NILX_BROWSER_HANDOFF_TOKEN=same-token-012345678901234567890123456' >"$provider"
 if sh "$prepare" "$runtime" "$provider" >"$tmp/partner-error" 2>&1; then

@@ -163,7 +163,7 @@ jobs:
             fi
           done
 
-          if grep -F -- "--arg" "$file" | grep -Eq "TELOXIDE_TOKEN|CLIENT_SECRET"; then
+          if grep -F -- "--arg" "$file" | grep -Eq "TELEGRAM_BOT_TOKEN|CLIENT_SECRET"; then
             echo "::error file=$file::provider secrets must not be carried in the dispatch payload"
             exit 1
           fi

@@ -12,7 +12,7 @@ class ProductSecretDeliveryTests(unittest.TestCase):
         self.assertIn("on:\n  workflow_dispatch:", workflow)
         self.assertIn("github.ref == 'refs/heads/master'", workflow)
         self.assertIn("name: production", workflow)
-        self.assertIn("TELEGRAM_BOT_TOKEN: ${{ secrets.TELOXIDE_TOKEN }}", workflow)
+        self.assertIn("TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}", workflow)
         self.assertIn("RECIPIENT: ${{ vars.EDGE_DEV_1_IDENTITY_AGE_RECIPIENT }}", workflow)
         self.assertIn("age --recipient", workflow)
         self.assertIn("COPY secrets.age /secrets.age", workflow)
