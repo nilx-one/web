@@ -14,7 +14,9 @@ use axum::{
 };
 use nilxone_api::bot_login::{LoginStartRefusal, LoginStartRequest, START_PATH};
 use nilxone_identity::{
-    aiaiaiai_sign_in::SignInClient, public_info::PublicInfoRepository, rate_limit::AttemptLimiter,
+    aiaiaiai_sign_in::SignInClient,
+    public_info::{PublicInfoRepository, TelegramLoginError},
+    rate_limit::AttemptLimiter,
 };
 
 use crate::browser_web_auth::{no_store_error, no_store_json, now_unix_seconds};
@@ -28,6 +30,7 @@ pub struct AuthorizedLoginBot(pub String);
 struct LoginHost {
     repository: PublicInfoRepository,
     client: SignInClient,
+    /// Per-process only; each replica has its own budget.
     attempts: AttemptLimiter,
 }
 
@@ -49,6 +52,22 @@ fn refusal(reason: LoginStartRefusal) -> Response {
     )
 }
 
+fn map_start_error(error: TelegramLoginError) -> Response {
+    match &error {
+        TelegramLoginError::InvalidInput => {
+            tracing::error!(%error, "Telegram login start rejected invalid input");
+            refusal(LoginStartRefusal::InvalidProviderEvidence)
+        }
+        TelegramLoginError::WrongClient
+        | TelegramLoginError::SignIn(_)
+        | TelegramLoginError::Storage(_)
+        | TelegramLoginError::InvalidTransaction(_) => {
+            tracing::error!(%error, "Telegram login start failed");
+            refusal(LoginStartRefusal::LoginServiceUnavailable)
+        }
+    }
+}
+
 async fn start(
     State(host): State<LoginHost>,
     principal: Option<Extension<AuthorizedLoginBot>>,
@@ -66,7 +85,9 @@ async fn start(
     let Some(now) = now_unix_seconds() else {
         return refusal(LoginStartRefusal::LoginServiceUnavailable);
     };
-    if let Err(retry) = host.attempts.consume(subject.clone(), now, 30, 60) {
+    // Bucket per Telegram actor so one chatter cannot exhaust the shared bot.
+    let limit_key = format!("{subject}:{}", request.provider_actor_id);
+    if let Err(retry) = host.attempts.consume(limit_key, now, 30, 60) {
         let mut response = refusal(LoginStartRefusal::LoginRateLimited);
         response
             .headers_mut()
@@ -79,8 +100,9 @@ async fn start(
         .await
     {
         Ok(Some(started)) => no_store_json(StatusCode::OK, started),
+        // Consumed or expired updates; Core has no distinct login_expired yet.
         Ok(None) => refusal(LoginStartRefusal::InvalidProviderEvidence),
-        Err(_) => refusal(LoginStartRefusal::LoginServiceUnavailable),
+        Err(error) => map_start_error(error),
     }
 }
 
@@ -151,5 +173,50 @@ mod tests {
             links.push(url);
         }
         assert_eq!(links[0], links[1]);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_is_isolated_per_telegram_actor() {
+        let callback = "https://nilx.one/api/v1/telegram/login/callback";
+        let client =
+            SignInClientConfig::public("https://auth.aiaiaiai.org", None, "0x1", callback).unwrap();
+        let app = router(
+            PublicInfoRepository::connect("sqlite::memory:")
+                .await
+                .unwrap(),
+            SignInClient::new(client),
+        );
+        let send = |actor: u64, message_id: i32| {
+            let mut request = Request::post(START_PATH)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "version": 1, "provider": "telegram",
+                        "provider_actor_id": actor, "chat_id": actor as i64,
+                        "message_id": message_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(AuthorizedLoginBot("test-bot".into()));
+            app.clone().oneshot(request)
+        };
+        for message_id in 1..=30 {
+            assert_eq!(
+                send(42, message_id).await.unwrap().status(),
+                StatusCode::OK,
+                "actor 42 message {message_id}"
+            );
+        }
+        let limited = send(42, 31).await.unwrap();
+        assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(limited.headers().contains_key(RETRY_AFTER));
+        assert_eq!(
+            send(43, 1).await.unwrap().status(),
+            StatusCode::OK,
+            "a different actor keeps its own budget"
+        );
     }
 }
