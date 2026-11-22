@@ -552,3 +552,14 @@ service binary, HTTP routes and disabled activation flags are unchanged.
 Source moves preserve migration SQL and do not migrate data. Merge the Core
 package before this consumer change; the dependency is pinned to its exact
 reviewed source commit. Deployment, funding and activation remain separate.
+
+### Isolated Telegram bot login start
+
+The host mounts `POST /api/v1/telegram/login/start` when
+`TELEGRAM_LOGIN_AIS_PUBLIC_JWK` holds the trusted public Ed25519 signing JWK
+from AIS. Refresh this pin on AIS key rotation. Only a direct AIS access token
+for client `0x1-telegram-test-bot`, audience `0x1` and scope
+`telegram.login.start` may start the Core transaction. The sender, private
+chat and message IDs come from the authenticated bot's update. Login start
+returns a short-lived link. Completing sign-in still requires the dedicated
+callback, matching AIS provider evidence and confirmation in the original chat.

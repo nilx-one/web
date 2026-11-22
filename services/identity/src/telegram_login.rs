@@ -5,6 +5,10 @@
 //! Mount behind workload authentication. Only that middleware can insert
 //! the authenticated, login-scoped bot principal into request extensions.
 
+#[path = "telegram_login_authority.rs"]
+mod authority;
+pub use authority::{Authority, ISSUER};
+
 use axum::{
     Extension, Json, Router,
     extract::State,
@@ -24,7 +28,7 @@ use crate::browser_web_auth::{no_store_error, no_store_json, now_unix_seconds};
 /// Trusted middleware supplies the verified bot workload subject after checking
 /// its login-start permission. Never deserialize this value from the wire.
 #[derive(Clone)]
-pub struct AuthorizedLoginBot(pub String);
+struct AuthorizedLoginBot(String);
 
 #[derive(Clone)]
 struct LoginHost {
@@ -34,7 +38,18 @@ struct LoginHost {
     attempts: AttemptLimiter,
 }
 
-pub fn router(repository: PublicInfoRepository, client: SignInClient) -> Router {
+pub fn authenticated_router(
+    repository: PublicInfoRepository,
+    client: SignInClient,
+    authority: Authority,
+) -> Router {
+    router(repository, client).route_layer(axum::middleware::from_fn_with_state(
+        authority,
+        authority::authenticate,
+    ))
+}
+
+fn router(repository: PublicInfoRepository, client: SignInClient) -> Router {
     Router::new()
         .route(START_PATH, post(start))
         .with_state(LoginHost {
