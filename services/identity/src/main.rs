@@ -363,6 +363,34 @@ async fn main() {
         discord_credentials,
         github_browser_oauth,
     );
+    let telegram_login_api = match env::var_os("TELEGRAM_LOGIN_AIS_PUBLIC_JWK") {
+        None => axum::Router::new(),
+        Some(value) => {
+            use identity_bot::telegram_login::{Authority, ISSUER, authenticated_router};
+            let authority = value
+                .to_str()
+                .and_then(Authority::from_public_jwk)
+                .expect("Telegram login requires the trusted public AIS Ed25519 signing JWK");
+            let callback = public_origin
+                .join("/api/v1/telegram/login/callback")
+                .expect("Telegram callback path");
+            let config = aiaiaiai_sign_in::SignInClientConfig::public(
+                ISSUER,
+                None,
+                "0x1",
+                callback.as_str(),
+            )
+            .expect("Telegram AIS client configuration");
+            let repository = public_info::PublicInfoRepository::connect(&database_url)
+                .await
+                .expect("Telegram login product database");
+            authenticated_router(
+                repository,
+                aiaiaiai_sign_in::SignInClient::new(config),
+                authority,
+            )
+        }
+    };
     let product_sign_in =
         product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
     let (legacy_migration, product_bonds) = match product_sign_in {
@@ -459,6 +487,7 @@ async fn main() {
     .merge(location_api)
     .merge(provider_api)
     .merge(product_api)
+    .merge(telegram_login_api)
     .merge(provider_self_service_api)
     .merge(session_activation_api)
     .merge(github_evidence_api)
