@@ -14,7 +14,7 @@ The repository composes three scopes:
 2. **Feature-level MVVM** separates React views from presentation state and application use cases.
 3. **Host adapters** translate browser, Telegram, and future messenger capabilities behind explicit contracts.
 
-Telegram is a host of the shared product, not an independent feature implementation. Server-side Telegram integration is isolated from browser bundles and remains an adapter to canonical Core contracts. See [Architecture](docs/architecture.md) and the [Web UI Shell](docs/web-ui-shell.md) layout contract.
+The Telegram Mini App hosts the 0x1 Web interface inside `@nilxone_bot`. [`nilx-one/bot`](https://github.com/nilx-one/bot) owns chat commands and interactions, including the optional `/open` shortcut. Every 0x1 product capability available in Web or native clients must also be usable directly in Telegram chat under the same Core permissions. Server-side Telegram integration is isolated from browser bundles and uses the same Core contracts. See [Architecture](docs/architecture.md) and the [Web UI Shell](docs/web-ui-shell.md) layout contract.
 
 ```text
 apps -> product-app -> application
@@ -31,7 +31,7 @@ services/identity -> pinned Core contracts
 - `apps/telegram-mini-app` — inactive Telegram WebView composition root;
 - `apps/discord-activity` — inactive Discord composition root.
 
-Both applications render the same `product-app` package. Host-specific code stays in adapters.
+All three applications render the same `product-app` package. Host-specific code stays in adapters.
 
 ## Avaia in the client
 
