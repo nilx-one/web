@@ -553,6 +553,16 @@ Source moves preserve migration SQL and do not migrate data. Merge the Core
 package before this consumer change; the dependency is pinned to its exact
 reviewed source commit. Deployment, funding and activation remain separate.
 
+### Telegram polling owner
+
+Telegram allows one poller per bot token. By default Identity polls
+`@nilxone_bot`. `TELEGRAM_POLLING=disabled` hands its updates to the 0x1 bot
+runtime (nilx-one/bot). In that mode Identity sets no command menu and starts
+no dispatcher. It still serves HTTP and sends admin notifications with the same
+token. The legacy chat features of this dispatcher stop: the compact chat,
+location intents, unlink and admin approval buttons. Any value other than
+`enabled` or `disabled` fails at startup.
+
 ### Isolated Telegram bot login start
 
 The host mounts `POST /api/v1/telegram/login/start` when
