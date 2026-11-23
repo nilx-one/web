@@ -349,14 +349,19 @@ async fn main() {
         .await
         .expect("GitHub evidence database connection must initialize");
     let bot = Bot::new(bot_token.clone());
-    bot.set_my_commands(bot_commands(CommandMenu::Unregistered))
-        .scope(BotCommandScope::AllPrivateChats)
-        .await
-        .expect("Telegram command menu must register for private chats");
-    bot.set_chat_menu_button()
-        .menu_button(MenuButton::Commands)
-        .await
-        .expect("Telegram default chat menu button must open the command list");
+    let polling = telegram_polling_from_environment();
+    if polling {
+        bot.set_my_commands(bot_commands(CommandMenu::Unregistered))
+            .scope(BotCommandScope::AllPrivateChats)
+            .await
+            .expect("Telegram command menu must register for private chats");
+        bot.set_chat_menu_button()
+            .menu_button(MenuButton::Commands)
+            .await
+            .expect("Telegram default chat menu button must open the command list");
+    } else {
+        info!("Telegram polling is disabled: the 0x1 bot owns @nilxone_bot updates");
+    }
     let browser_oauth = BrowserOAuthConfig::new(
         public_origin.clone(),
         telegram_browser_oauth,
@@ -623,11 +628,34 @@ async fn main() {
         .enable_ctrlc_handler()
         .build();
 
+    if !polling {
+        axum::serve(listener, api)
+            .await
+            .expect("identity HTTP server must remain available");
+        return;
+    }
     tokio::select! {
         () = dispatcher.dispatch() => {}
         result = axum::serve(listener, api) => {
             result.expect("identity HTTP server must remain available");
         }
+    }
+}
+
+/// `TELEGRAM_POLLING=disabled` hands `@nilxone_bot` updates to the 0x1 bot
+/// runtime: Telegram allows one poller per token. Identity keeps serving HTTP
+/// and still sends admin notifications with the same token. Anything else
+/// fails at startup, so a typo never starts a second poller.
+fn telegram_polling_from_environment() -> bool {
+    telegram_polling(env::var("TELEGRAM_POLLING").ok().as_deref())
+        .expect("TELEGRAM_POLLING must be enabled or disabled")
+}
+
+fn telegram_polling(value: Option<&str>) -> Option<bool> {
+    match value {
+        None | Some("enabled") => Some(true),
+        Some("disabled") => Some(false),
+        Some(_) => None,
     }
 }
 
@@ -2235,5 +2263,15 @@ mod tests {
 
         let text = private_message(json!({ "text": "hello" }));
         assert!(shared_point(&text).is_none());
+    }
+
+    #[test]
+    fn telegram_polling_is_on_unless_explicitly_disabled() {
+        assert_eq!(super::telegram_polling(None), Some(true));
+        assert_eq!(super::telegram_polling(Some("enabled")), Some(true));
+        assert_eq!(super::telegram_polling(Some("disabled")), Some(false));
+        for typo in ["", "off", "false", "Disabled"] {
+            assert_eq!(super::telegram_polling(Some(typo)), None, "{typo}");
+        }
     }
 }
