@@ -363,10 +363,20 @@ async fn main() {
         discord_credentials,
         github_browser_oauth,
     );
+    let product_sign_in =
+        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
+    let (legacy_migration, product_bonds) = match product_sign_in {
+        Some(_) => {
+            product_bonds_from_environment(&public_origin, &database_url, &native_auth).await
+        }
+        None => (None, None),
+    };
     let telegram_login_api = match env::var_os("TELEGRAM_LOGIN_AIS_PUBLIC_JWK") {
         None => axum::Router::new(),
         Some(value) => {
-            use identity_bot::telegram_login::{Authority, ISSUER, authenticated_router};
+            use identity_bot::telegram_login::{
+                Authority, ChatSignIn, HostAisToken, ISSUER, authenticated_router,
+            };
             let authority = value
                 .to_str()
                 .and_then(Authority::from_public_jwk)
@@ -384,20 +394,31 @@ async fn main() {
             let repository = public_info::PublicInfoRepository::connect(&database_url)
                 .await
                 .expect("Telegram login product database");
+            // The callback and confirmation need the host's own AIS key;
+            // without it the host only starts logins.
+            let chat = match (
+                env::var("TELEGRAM_LOGIN_HOST_AIS_KEY_ID"),
+                env::var("TELEGRAM_LOGIN_HOST_AIS_SIGNING_SEED"),
+            ) {
+                (Ok(kid), Ok(seed)) => Some(ChatSignIn {
+                    ais: HostAisToken::new(ISSUER, &kid, &seed)
+                        .expect("Telegram chat sign-in requires a valid host AIS key"),
+                    provisioning: product_bonds.clone(),
+                    session_ttl_seconds: native_auth.session_ttl_seconds,
+                }),
+                (Err(_), Err(_)) => None,
+                _ => panic!(
+                    "TELEGRAM_LOGIN_HOST_AIS_KEY_ID and TELEGRAM_LOGIN_HOST_AIS_SIGNING_SEED \
+                     are set together"
+                ),
+            };
             authenticated_router(
                 repository,
                 aiaiaiai_sign_in::SignInClient::new(config),
                 authority,
+                chat,
             )
         }
-    };
-    let product_sign_in =
-        product_sign_in_from_environment(&public_origin, &database_url, &native_auth).await;
-    let (legacy_migration, product_bonds) = match product_sign_in {
-        Some(_) => {
-            product_bonds_from_environment(&public_origin, &database_url, &native_auth).await
-        }
-        None => (None, None),
     };
     let product_api = product_sign_in::router_with_bonds(
         product_sign_in,

@@ -561,5 +561,27 @@ from AIS. Refresh this pin on AIS key rotation. Only a direct AIS access token
 for client `0x1-telegram-test-bot`, audience `0x1` and scope
 `telegram.login.start` may start the Core transaction. The sender, private
 chat and message IDs come from the authenticated bot's update. Login start
-returns a short-lived link. Completing sign-in still requires the dedicated
-callback, matching AIS provider evidence and confirmation in the original chat.
+returns a short-lived link.
+
+### Telegram chat sign-in: callback and confirmation
+
+With `TELEGRAM_LOGIN_HOST_AIS_KEY_ID` and `TELEGRAM_LOGIN_HOST_AIS_SIGNING_SEED`
+(base64url, unpadded 32-byte Ed25519 seed) set together, the host also mounts:
+
+- `GET /api/v1/telegram/login/callback`: public, reached from AIS. The host
+  fetches its own AIS grant (client `0x1`, `private_key_jwt`, audience `ais`,
+  scope `telegram.identity.resolve`). Core then verifies the code and that AIS
+  links the signed-in identity to the Telegram sender who sent `/login`. The
+  page only says to return to Telegram. It sets no cookie and opens no session.
+- `POST /api/v1/telegram/login/confirm`: behind the same bot grant as login
+  start. The bot sends the confirm press's sender and chat and the original
+  `/login` message id. Core consumes the verified callback once, provisions
+  the Bond on a first sign-in as browser sign-in does, and opens a
+  `Telegram · Chat` product session.
+
+One Core and one product database serve the Mini App, the browser and the
+chat. The chat session follows Single Active Client: it is active only when no
+other client is, and otherwise waits for the confirmed handoff. The bot never
+receives a session token; Core binds the session to the bot workload and the
+sender. AIS must register the matching public key on the `0x1` product with
+`"tokens": {"ais": ["telegram.identity.resolve"]}`.
