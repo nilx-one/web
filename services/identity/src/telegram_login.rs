@@ -237,9 +237,9 @@ fn callback_page(verified: bool) -> Response {
 }
 
 async fn callback(State(host): State<LoginHost>, Query(query): Query<CallbackQuery>) -> Response {
-    let Some(chat) = host.chat.as_ref() else {
+    if host.chat.is_none() {
         return callback_page(false);
-    };
+    }
     let (Some(state), Some(code)) = (query.state, query.code) else {
         return callback_page(false);
     };
@@ -258,12 +258,11 @@ async fn callback(State(host): State<LoginHost>, Query(query): Query<CallbackQue
     {
         return callback_page(false);
     }
-    let Some(token) = chat.ais.access_token().await else {
-        return callback_page(false);
-    };
+    // Core proves the sender by AIS's `telegram_binding` claim alone; this
+    // host holds no bot token to verify Telegram `initData` with.
     match host
         .repository
-        .verify_telegram_login_callback(&host.client, &state, &code, &token)
+        .verify_telegram_login_callback(&host.client, &state, &code, None)
         .await
     {
         Ok(Some(_)) => callback_page(true),
