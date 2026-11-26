@@ -741,6 +741,15 @@ describe("sign in through aiaiaiai", () => {
       "/api/v1/auth/aiaiaiai/start?return=%2F",
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use an existing 0x1 Bond" }),
+    );
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).toBeInTheDocument();
   });
 
   it("says why the last return did not sign the person in, in their language", () => {

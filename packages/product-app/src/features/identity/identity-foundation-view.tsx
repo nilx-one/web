@@ -424,6 +424,12 @@ export function IdentityFoundationView({
 }: IdentityFoundationViewProps) {
   const { t } = useLocalization();
   const identity = viewModel.identity;
+  const [legacySignInOpen, setLegacySignInOpen] = useState(false);
+  const aisPrimary =
+    aisSignIn !== undefined &&
+    identity.kind === "form" &&
+    browserProviderAuth?.pendingProvider === undefined;
+  const showLegacySignIn = !aisPrimary || legacySignInOpen;
   const error =
     identity.kind === "unavailable"
       ? identity.detail
@@ -467,20 +473,26 @@ export function IdentityFoundationView({
         <section className="identity-panel" aria-labelledby="foundation-title">
           <div className="identity-copy">
             <p className="eyebrow">{t("identity.eyebrow")}</p>
-            <h1 id="foundation-title">{heading(viewModel.identity, t)}</h1>
-            <p className="foundation-lede">{lede(viewModel.identity, t)}</p>
+            <h1 id="foundation-title">
+              {showLegacySignIn
+                ? heading(identity, t)
+                : t("identity.ais.heading")}
+            </h1>
+            {showLegacySignIn ? (
+              <p className="foundation-lede">{lede(identity, t)}</p>
+            ) : null}
           </div>
 
           <div className="identity-surface">
             {aisSignIn !== undefined && viewModel.identity.kind === "form" ? (
-              <>
-                <AisSignIn ais={aisSignIn} />
-                <div className="identity-divider" aria-hidden="true">
-                  <span>{t("identity.or")}</span>
-                </div>
-              </>
+              <AisSignIn ais={aisSignIn} />
             ) : null}
-            {viewModel.showProviderRow ? (
+            {aisPrimary && !legacySignInOpen ? (
+              <button type="button" onClick={() => setLegacySignInOpen(true)}>
+                {t("identity.ais.legacySignIn")}
+              </button>
+            ) : null}
+            {showLegacySignIn && viewModel.showProviderRow ? (
               <>
                 <ProviderRow auth={browserProviderAuth} />
                 <div className="identity-divider" aria-hidden="true">
@@ -508,20 +520,24 @@ export function IdentityFoundationView({
                 onSubmit={onSubmit}
               />
             ) : viewModel.identity.kind === "form" ? (
-              <IdentityForm
-                identity={viewModel.identity}
-                password={password}
-                pubDressLabelDerivation={pubDressLabelDerivation}
-                pubDressLabelDerivationPending={pubDressLabelDerivationPending}
-                pubDressUrlResolution={pubDressUrlResolution}
-                selection={selection}
-                onCredentialAutofill={onCredentialAutofill}
-                onForgetRemembered={onForgetRemembered}
-                onPasswordChange={onPasswordChange}
-                onResolvePubDress={onResolvePubDress}
-                onSelectionChange={onSelectionChange}
-                onSubmit={onSubmit}
-              />
+              showLegacySignIn ? (
+                <IdentityForm
+                  identity={viewModel.identity}
+                  password={password}
+                  pubDressLabelDerivation={pubDressLabelDerivation}
+                  pubDressLabelDerivationPending={
+                    pubDressLabelDerivationPending
+                  }
+                  pubDressUrlResolution={pubDressUrlResolution}
+                  selection={selection}
+                  onCredentialAutofill={onCredentialAutofill}
+                  onForgetRemembered={onForgetRemembered}
+                  onPasswordChange={onPasswordChange}
+                  onResolvePubDress={onResolvePubDress}
+                  onSelectionChange={onSelectionChange}
+                  onSubmit={onSubmit}
+                />
+              ) : null
             ) : viewModel.identity.kind === "avatar-choice" ? (
               <AvatarChoiceView
                 state={viewModel.identity}
