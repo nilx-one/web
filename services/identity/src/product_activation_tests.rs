@@ -354,3 +354,126 @@ async fn the_active_client_moves_only_after_a_completed_sync() {
     );
     assert_eq!(publish(&site, &mac).await.0, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn the_active_browser_parks_before_it_signs_out_and_the_next_one_applies_it() {
+    let fixture = fixture().await;
+    let site = product_site(&fixture).await;
+    let mac = product_sign_in(&fixture, &site, MAC, None).await;
+    let data = vec![7_u8; SYNC_PART_BYTES as usize + 10];
+    let total = data.len();
+    // Parking writes, so it needs CSRF like every write.
+    let (status, _, body) = send(
+        &site,
+        activation(
+            "PUT",
+            &format!("/api/v1/session/parked?offset=0&total_bytes={total}"),
+            Some(&mac),
+            false,
+            Body::from(data[..SYNC_PART_BYTES as usize].to_vec()),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    let mut parked = Value::Null;
+    for offset in [0, SYNC_PART_BYTES as usize] {
+        let end = (offset + SYNC_PART_BYTES as usize).min(total);
+        let (status, _, body) = send(
+            &site,
+            activation(
+                "PUT",
+                &format!("/api/v1/session/parked?offset={offset}&total_bytes={total}"),
+                Some(&mac),
+                true,
+                Body::from(data[offset..end].to_vec()),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        parked = serde_json::from_str::<Value>(&body).unwrap()["parked"].clone();
+    }
+    assert_eq!(parked["total_bytes"], total);
+    assert_eq!(parked["digest"], sync_digest(&data));
+
+    let (status, _, _) = send(
+        &site,
+        activation(
+            "POST",
+            "/api/v1/product/session/sign-out",
+            Some(&mac),
+            true,
+            Body::empty(),
+        ),
+    )
+    .await;
+    assert!(status.is_success() || status.is_redirection(), "{status}");
+
+    // The next sign-in is active and finds the parked data.
+    let iphone = product_sign_in(&fixture, &site, IPHONE, None).await;
+    let state = state_of(&site, &iphone).await;
+    assert_eq!(state["state"], "authenticated_active", "{state}");
+    assert_eq!(state["parked"], parked);
+    let mut fetched = Vec::new();
+    for offset in [0, SYNC_PART_BYTES as usize] {
+        let (status, headers, _) = send(
+            &site,
+            activation(
+                "GET",
+                &format!("/api/v1/session/parked?offset={offset}"),
+                Some(&iphone),
+                false,
+                Body::empty(),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(headers.get(header::CACHE_CONTROL).unwrap(), "no-store");
+        let request = activation(
+            "GET",
+            &format!("/api/v1/session/parked?offset={offset}"),
+            Some(&iphone),
+            false,
+            Body::empty(),
+        );
+        let response = site.clone().oneshot(request).await.unwrap();
+        fetched.extend(
+            axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        );
+    }
+    assert_eq!(fetched, data);
+    let ack = |digest: String| {
+        let mut request = activation(
+            "POST",
+            "/api/v1/session/parked/ack",
+            Some(&iphone),
+            true,
+            Body::from(format!(r#"{{"digest":"{digest}"}}"#)),
+        );
+        request.headers_mut().insert(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_static("application/json"),
+        );
+        request
+    };
+    let (status, _, body) = send(&site, ack("0".repeat(64))).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(error_code(&body), "sync_incomplete");
+    let (status, _, body) = send(&site, ack(sync_digest(&data))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(serde_json::from_str::<Value>(&body).unwrap()["parked"].is_null());
+    let (status, _, body) = send(
+        &site,
+        activation(
+            "GET",
+            "/api/v1/session/parked?offset=0",
+            Some(&iphone),
+            false,
+            Body::empty(),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(error_code(&body), "parked_data_not_found");
+}

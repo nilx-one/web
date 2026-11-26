@@ -139,10 +139,18 @@ deadline and part:
 - `POST /api/v1/session/activation/requests` asks to become active (`201`).
 - `POST …/requests/{id}/cancel`, `…/approve` and `…/decline`.
 - `PUT …/requests/{id}/sync?offset=&total_bytes=` takes one raw part of
-  up to 256 KiB, the only product route above 1 KiB.
+  up to 256 KiB; it and `PUT /api/v1/session/parked` are the only product
+  routes above 1 KiB.
 - `GET …/requests/{id}/sync?offset=` answers one part as
   `application/octet-stream`.
 - `POST …/requests/{id}/complete` takes `{ "digest" }`.
+- `PUT /api/v1/session/parked?offset=&total_bytes=` parks the active
+  client's data, a raw part at a time, before it signs out.
+- `GET /api/v1/session/parked?offset=` answers one part of the data parked
+  for the owner, to the active client that keeps its state on its device;
+  its state carries `parked` while there is some.
+- `POST /api/v1/session/parked/ack` takes `{ "digest" }` once that client
+  applied the data; a matching digest deletes it.
 
 Writes need CSRF; a missing or unknown session answers
 `401 provider_authentication_required`, and Core's refusals carry their own

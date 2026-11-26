@@ -18,8 +18,8 @@ use axum::{
 };
 use nilxone_api::activation::{
     APPROVE_PATH, ActivationRefusal, ActivationState, CANCEL_PATH, COMPLETE_PATH, CompleteRequest,
-    DECLINE_PATH, DownloadPartQuery, REQUESTS_PATH, STATE_PATH, SYNC_PART_BYTES, SYNC_PATH,
-    UploadPartQuery,
+    DECLINE_PATH, DownloadPartQuery, PARKED_ACK_PATH, PARKED_PATH, REQUESTS_PATH, STATE_PATH,
+    SYNC_PART_BYTES, SYNC_PATH, UploadPartQuery,
 };
 use nilxone_identity::public_info::ActivationError;
 
@@ -46,6 +46,24 @@ pub(super) fn routes() -> Router<ProductState> {
                 .get(download),
         )
         .route(COMPLETE_PATH, post(complete))
+        .route(
+            PARKED_PATH,
+            put(park)
+                .layer(DefaultBodyLimit::max(SYNC_BODY_BYTES))
+                .get(download_parked),
+        )
+        .route(PARKED_ACK_PATH, post(acknowledge_parked))
+}
+
+fn raw_bytes(bytes: Vec<u8>) -> Response {
+    let mut response = (StatusCode::OK, bytes).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 fn refused(refusal: ActivationRefusal) -> Response {
@@ -210,16 +228,7 @@ async fn download(
         repository
             .download_activation_sync_part(&caller.token_hash, &id, part.offset, caller.now)
             .await,
-        |bytes| {
-            let mut response = (StatusCode::OK, bytes).into_response();
-            let headers = response.headers_mut();
-            headers.insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/octet-stream"),
-            );
-            headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-            response
-        },
+        raw_bytes,
     )
 }
 
@@ -239,6 +248,62 @@ async fn complete(
         StatusCode::OK,
         repository
             .complete_activation(&caller.token_hash, &id, digest, caller.now)
+            .await,
+    )
+}
+
+/// The active client parks its data, a part at a time, before it signs out.
+async fn park(
+    State(state): State<ProductState>,
+    headers: HeaderMap,
+    Query(part): Query<UploadPartQuery>,
+    body: Bytes,
+) -> Response {
+    let caller = caller!(state, headers, true);
+    if let Err(refusal) = part.validate(body.len()) {
+        return refused(refusal);
+    }
+    let repository = caller.sign_in.service.repository();
+    state_answer(
+        StatusCode::OK,
+        repository
+            .park_part(&caller.token_hash, part, &body, caller.now)
+            .await,
+    )
+}
+
+/// The active client fetches one part of the data parked for its owner.
+async fn download_parked(
+    State(state): State<ProductState>,
+    headers: HeaderMap,
+    Query(part): Query<DownloadPartQuery>,
+) -> Response {
+    let caller = caller!(state, headers, false);
+    let repository = caller.sign_in.service.repository();
+    answer(
+        repository
+            .download_parked_part(&caller.token_hash, part.offset, caller.now)
+            .await,
+        raw_bytes,
+    )
+}
+
+/// The active client applied the parked data; the back-end deletes it.
+async fn acknowledge_parked(
+    State(state): State<ProductState>,
+    headers: HeaderMap,
+    Json(request): Json<CompleteRequest>,
+) -> Response {
+    let caller = caller!(state, headers, true);
+    let digest = match request.validate() {
+        Ok(digest) => digest,
+        Err(refusal) => return refused(refusal),
+    };
+    let repository = caller.sign_in.service.repository();
+    state_answer(
+        StatusCode::OK,
+        repository
+            .acknowledge_parked(&caller.token_hash, digest, caller.now)
             .await,
     )
 }
