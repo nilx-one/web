@@ -52,6 +52,7 @@ function reading(
       clientLabel: "Mac · Safari",
       activeClientLabel: "iPhone · Telegram",
       request,
+      parked: null,
     },
   };
 }
@@ -85,6 +86,9 @@ function port(first: ActivationReading): ClientActivationAccessPort & {
       kind: "unavailable" as const,
     })),
     completeActivation: vi.fn(async () => first),
+    parkActivationPart: vi.fn(async () => first),
+    downloadParkedPart: vi.fn(async () => ({ kind: "unavailable" as const })),
+    acknowledgeParked: vi.fn(async () => first),
   };
 }
 
@@ -194,5 +198,56 @@ describe("ClientActivationGate", () => {
     expect(
       screen.getByRole("heading", { name: "Active on iPhone · Telegram" }),
     ).toBeInTheDocument();
+  });
+
+  it("applies parked data once active, then acknowledges it", async () => {
+    const data = new Uint8Array([4, 5, 6]);
+    const digest = "digest:3";
+    const active = (parked: { totalBytes: number; digest: string } | null) => ({
+      kind: "state" as const,
+      view: {
+        state: "authenticated_active" as const,
+        active: true,
+        mayAct: true,
+        clientLabel: "Mac · Safari",
+        activeClientLabel: null,
+        request: null,
+        parked,
+      },
+    });
+    const access = {
+      ...port(active({ totalBytes: 3, digest })),
+      downloadParkedPart: vi.fn(async () => ({
+        kind: "bytes" as const,
+        bytes: data,
+      })),
+      acknowledgeParked: vi.fn(async () => active(null)),
+    };
+    const applied: number[][] = [];
+    render(
+      <ClientActivationGate
+        access={access}
+        core={{
+          activationSyncPart: async (total, offset) =>
+            offset >= total
+              ? { kind: "none" }
+              : { kind: "part", offset, end: total, last: true },
+          activationSyncDigest: async (bytes) => `digest:${bytes.length}`,
+        }}
+        payload={{
+          build: () => new Uint8Array(),
+          apply: (bytes) => {
+            applied.push([...bytes]);
+          },
+        }}
+      >
+        <button type="button">Walk</button>
+      </ClientActivationGate>,
+    );
+    await act(async () => undefined);
+    await act(async () => undefined);
+    expect(applied).toEqual([[4, 5, 6]]);
+    expect(access.acknowledgeParked).toHaveBeenCalledWith(digest);
+    expect(screen.getByRole("button", { name: "Walk" })).toBeVisible();
   });
 });

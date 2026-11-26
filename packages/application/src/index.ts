@@ -317,8 +317,10 @@ export {
 } from "./find-attestation";
 
 export {
+  applyParkedPayload,
   downloadActivationPayload,
   hasClientActivationAccess,
+  parkActivationPayload,
   uploadActivationPayload,
   type ActivationDownload,
   type ActivationDownloadRun,
@@ -338,6 +340,9 @@ export {
   type ClientActivationAccessPort,
   type ClientActivationState,
   type ClientActivationView,
+  type ActivationParking,
+  type ParkedActivationView,
+  type ParkedApplication,
 } from "./client-activation";
 export {
   ACTIVATION_PAYLOAD_FORMAT,

@@ -84,8 +84,32 @@ describe("Core's reading of client activation", () => {
             deliveredBytes: 614400,
           },
         },
+        parked: null,
       },
     });
+  });
+
+  it("carries the parked data Core announces to the active client", () => {
+    const active = JSON.stringify({
+      state: "authenticated_active",
+      active: true,
+      may_act: true,
+      client_label: "Mac · Safari",
+      active_client_label: null,
+      request: null,
+      parked: { total_bytes: 300000, digest: "a".repeat(64) },
+    });
+    const reading = decodeActivationReading(
+      runtime.read_activation_state(true, active),
+    );
+    expect(reading).toMatchObject({
+      kind: "state",
+      view: { parked: { totalBytes: 300000, digest: "a".repeat(64) } },
+    });
+    const none = decodeActivationReading(
+      runtime.read_activation_state(true, SYNCING),
+    );
+    expect(none).toMatchObject({ kind: "state", view: { parked: null } });
   });
 
   it("keeps Core's refusals, sign-in and unavailable answers apart", () => {

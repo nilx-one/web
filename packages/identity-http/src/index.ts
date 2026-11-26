@@ -105,6 +105,8 @@ interface IdentityHttpAdapterOptions {
 }
 
 const ACTIVATION_STATE_PATH = "/api/v1/session/activation";
+const PARKED_PATH = "/api/v1/session/parked";
+const PARKED_ACK_PATH = "/api/v1/session/parked/ack";
 const ACTIVATION_REQUESTS_PATH = `${ACTIVATION_STATE_PATH}/requests`;
 
 function activationRequestPath(
@@ -1614,22 +1616,55 @@ class IdentityHttpAdapter
     );
   }
 
-  public async downloadActivationSyncPart(
+  public downloadActivationSyncPart(
     requestId: string,
+    offset: number,
+  ): Promise<ActivationDownload> {
+    return this.activationBytes(
+      activationRequestPath(requestId, "sync"),
+      offset,
+    );
+  }
+
+  public parkActivationPart(
+    offset: number,
+    totalBytes: number,
+    bytes: Uint8Array,
+  ): Promise<ActivationReading> {
+    const query = new URLSearchParams({
+      offset: String(offset),
+      total_bytes: String(totalBytes),
+    });
+    return this.activation("PUT", `${PARKED_PATH}?${query}`, {
+      contentType: "application/octet-stream",
+      body: bytes,
+    });
+  }
+
+  public downloadParkedPart(offset: number): Promise<ActivationDownload> {
+    return this.activationBytes(PARKED_PATH, offset);
+  }
+
+  public acknowledgeParked(digest: string): Promise<ActivationReading> {
+    return this.activation("POST", PARKED_ACK_PATH, {
+      contentType: "application/json",
+      body: JSON.stringify({ digest }),
+    });
+  }
+
+  private async activationBytes(
+    path: string,
     offset: number,
   ): Promise<ActivationDownload> {
     const query = new URLSearchParams({ offset: String(offset) });
     const authorization = this.authorization();
     try {
-      const response = await this.fetch(
-        `${activationRequestPath(requestId, "sync")}?${query}`,
-        {
-          method: "GET",
-          cache: "no-store",
-          credentials: "same-origin",
-          headers: authorization === undefined ? {} : { authorization },
-        },
-      );
+      const response = await this.fetch(`${path}?${query}`, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: authorization === undefined ? {} : { authorization },
+      });
       if (!response.ok) return { kind: "unavailable" };
       return {
         kind: "bytes",

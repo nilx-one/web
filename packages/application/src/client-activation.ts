@@ -56,7 +56,8 @@ export type ActivationRefusal =
   | "sync_payload_too_large"
   | "sync_out_of_order"
   | "invalid_sync_digest"
-  | "sync_incomplete";
+  | "sync_incomplete"
+  | "parked_data_not_found";
 
 export interface ActivationStepView {
   readonly step: ActivationStep;
@@ -86,6 +87,17 @@ export interface ActivationRequestView {
   readonly progress?: ActivationProgress;
 }
 
+/**
+ * The data the back-end parked for this Bond: the last active client's,
+ * left when it signed out or when a client without device state (the
+ * Telegram chat) took over. Only the active client that keeps its state on
+ * this device is shown it, and must fetch, apply and acknowledge it.
+ */
+export interface ParkedActivationView {
+  readonly totalBytes: number;
+  readonly digest: string;
+}
+
 export interface ClientActivationView {
   readonly state: ClientActivationState;
   readonly active: boolean;
@@ -94,6 +106,8 @@ export interface ClientActivationView {
   readonly clientLabel: string | null;
   readonly activeClientLabel: string | null;
   readonly request: ActivationRequestView | null;
+  /** Parked data this active client must apply, or none. */
+  readonly parked: ParkedActivationView | null;
 }
 
 export type ActivationReading =
@@ -138,6 +152,16 @@ export interface ClientActivationAccessPort {
     requestId: string,
     digest: string,
   ): Promise<ActivationReading>;
+  /** `PUT /api/v1/session/parked`: park one part before signing out. */
+  parkActivationPart(
+    offset: number,
+    totalBytes: number,
+    bytes: Uint8Array,
+  ): Promise<ActivationReading>;
+  /** `GET /api/v1/session/parked`: one part of the parked data. */
+  downloadParkedPart(offset: number): Promise<ActivationDownload>;
+  /** `POST /api/v1/session/parked/ack`: the parked data is applied. */
+  acknowledgeParked(digest: string): Promise<ActivationReading>;
 }
 
 export function hasClientActivationAccess(
@@ -259,4 +283,91 @@ export async function downloadActivationPayload({
   }
   const digest = await core.activationSyncDigest(buffer);
   return access.completeActivation(requestId, digest);
+}
+
+export interface ActivationParking {
+  readonly access: ClientActivationAccessPort;
+  readonly core: ActivationSyncCore;
+  readonly payload: Uint8Array;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * The active client parks its data before it signs out, every part from
+ * the first. The answer to the part that made it whole carries `parked`
+ * with the digest the back-end holds; anything else means it is not parked,
+ * and the caller decides whether to sign out anyway.
+ */
+export async function parkActivationPayload({
+  access,
+  core,
+  payload,
+  signal,
+}: ActivationParking): Promise<ActivationReading> {
+  const total = payload.length;
+  let offset = 0;
+  for (;;) {
+    if (signal?.aborted) return { kind: "unavailable" };
+    const part = await core.activationSyncPart(total, offset);
+    if (part.kind === "none") return { kind: "unavailable" };
+    const reading = await access.parkActivationPart(
+      part.offset,
+      total,
+      payload.subarray(part.offset, part.end),
+    );
+    if (reading.kind !== "state") return reading;
+    offset = part.end;
+    if (!part.last) continue;
+    const expected = await core.activationSyncDigest(payload);
+    return reading.view.parked?.digest === expected
+      ? reading
+      : { kind: "unavailable" };
+  }
+}
+
+export interface ParkedApplication {
+  readonly access: ClientActivationAccessPort;
+  readonly core: ActivationSyncCore;
+  readonly parked: ParkedActivationView;
+  readonly payload: ActivationPayloadPort;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * The active client takes the parked data: fetch every part, check it is
+ * the whole the back-end announced, apply it over this device's own copy
+ * and acknowledge it. This client is already the active one, so nothing can
+ * undo the switch any more and fresh data always wins. A failure before the
+ * acknowledgement leaves the data parked; the next state read asks again.
+ */
+export async function applyParkedPayload({
+  access,
+  core,
+  parked,
+  payload,
+  signal,
+}: ParkedApplication): Promise<ActivationReading> {
+  const buffer = new Uint8Array(parked.totalBytes);
+  let offset = 0;
+  for (;;) {
+    if (signal?.aborted) return { kind: "unavailable" };
+    const part = await core.activationSyncPart(parked.totalBytes, offset);
+    if (part.kind === "none") return { kind: "unavailable" };
+    const download = await access.downloadParkedPart(part.offset);
+    if (download.kind !== "bytes") return download;
+    if (download.bytes.length !== part.end - part.offset)
+      return { kind: "unavailable" };
+    buffer.set(download.bytes, part.offset);
+    offset = part.end;
+    if (part.last) break;
+  }
+  if (signal?.aborted) return { kind: "unavailable" };
+  if ((await core.activationSyncDigest(buffer)) !== parked.digest)
+    return { kind: "unavailable" };
+  try {
+    payload.apply(buffer);
+  } catch {
+    return { kind: "unavailable" };
+  }
+  return access.acknowledgeParked(parked.digest);
 }

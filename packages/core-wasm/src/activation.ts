@@ -13,6 +13,7 @@ import type {
   ActivationSyncPart,
   ClientActivationState,
   ClientActivationView,
+  ParkedActivationView,
 } from "@nilx-one/application";
 
 const STATES = new Set<ClientActivationState>([
@@ -61,6 +62,7 @@ const REFUSALS = new Set<ActivationRefusal>([
   "sync_out_of_order",
   "invalid_sync_digest",
   "sync_incomplete",
+  "parked_data_not_found",
 ]);
 
 const INVALID = "0x1 Core returned an invalid activation reading";
@@ -130,6 +132,15 @@ function decodeRequest(value: unknown): ActivationRequestView | null {
   };
 }
 
+function decodeParked(value: unknown): ParkedActivationView | null {
+  if (value === null || value === undefined) return null;
+  const parked = record(value);
+  return {
+    totalBytes: count(parked.total_bytes),
+    digest: text(parked.digest),
+  };
+}
+
 function decodeView(reading: Record<string, unknown>): ClientActivationView {
   if (
     typeof reading.active !== "boolean" ||
@@ -143,6 +154,7 @@ function decodeView(reading: Record<string, unknown>): ClientActivationView {
     clientLabel: optionalText(reading.client_label),
     activeClientLabel: optionalText(reading.active_client_label),
     request: decodeRequest(reading.request),
+    parked: decodeParked(reading.parked),
   };
 }
 
