@@ -116,7 +116,10 @@ import {
   createAvaiaSetupViewState,
 } from "./features/avaia/avaia-setup-view-model";
 import { AuthenticatedMapHomeView } from "./features/map/authenticated-map-home-view";
-import { ProductActivation } from "./features/activation/product-activation";
+import {
+  ProductActivation,
+  parkBeforeSignOut,
+} from "./features/activation/product-activation";
 import type { EmbeddedMarketCatalogPort } from "./features/courier/market-dock";
 import type { ManualMoveOutcome } from "./features/map/use-bond-manual-walk";
 import { avaiaAvailability } from "./features/map/bond-dock-view-model";
@@ -453,6 +456,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
   const [avaiaProfileSlugStemDraft, setAvaiaProfileSlugStemDraft] = useState<
     string | undefined
   >(undefined);
+  const signedInOwner = useRef<string | undefined>(undefined);
   const pendingAutofillCredential = useRef<
     PendingAutofillCredential | undefined
   >(undefined);
@@ -813,7 +817,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     },
   });
   const logout = useMutation({
-    mutationFn: () => new LogoutNativeIdentity(dependencies.identity).execute(),
+    mutationFn: async () => {
+      await parkBeforeSignOut(
+        dependencies.identity,
+        dependencies.core,
+        signedInOwner.current,
+      );
+      return new LogoutNativeIdentity(dependencies.identity).execute();
+    },
     onSuccess: async (result) => {
       if (result.kind !== "completed") {
         return;
@@ -1029,6 +1040,14 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         )
       : identityState,
   );
+  // The Bond whose data a sign-out parks; read by the logout mutation.
+  const signedInPubDress =
+    viewModel.identity.kind === "authenticated"
+      ? viewModel.identity.pubDress
+      : undefined;
+  useEffect(() => {
+    signedInOwner.current = signedInPubDress;
+  }, [signedInPubDress]);
 
   // The host answers for the device; the appearance store resolves a person's
   // standing choice over it. One resolution, stamped once on the document, is

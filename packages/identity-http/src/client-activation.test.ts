@@ -84,4 +84,38 @@ describe("client activation routes", () => {
       kind: "unavailable",
     });
   });
+
+  it("parks, fetches and acknowledges parked data on its own routes", async () => {
+    const { fetch, http } = adapter(new Response("{}"));
+    await http.parkActivationPart(0, 10, new Uint8Array(10));
+    await http.acknowledgeParked("ab12");
+    const [parkPath, parkInit] = fetch.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(parkPath).toBe("/api/v1/session/parked?offset=0&total_bytes=10");
+    expect(parkInit.method).toBe("PUT");
+    expect(parkInit.headers).toMatchObject({
+      "x-0x1-csrf": "1",
+      "content-type": "application/octet-stream",
+    });
+    const [ackPath, ackInit] = fetch.mock.calls[1] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(ackPath).toBe("/api/v1/session/parked/ack");
+    expect(ackInit.body).toBe('{"digest":"ab12"}');
+
+    const bytes = adapter(new Response(new Uint8Array([1, 2, 3])));
+    expect(await bytes.http.downloadParkedPart(262144)).toEqual({
+      kind: "bytes",
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    const [downloadPath] = bytes.fetch.mock.calls[0] as unknown as [string];
+    expect(downloadPath).toBe("/api/v1/session/parked?offset=262144");
+    const missing = adapter(new Response("{}", { status: 404 }));
+    expect(await missing.http.downloadParkedPart(0)).toEqual({
+      kind: "unavailable",
+    });
+  });
 });

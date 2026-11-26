@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import {
+  applyParkedPayload,
   downloadActivationPayload,
   uploadActivationPayload,
   type ActivationPayloadPort,
@@ -205,6 +206,37 @@ export function ClientActivationGate({
           view.state === "activation_syncing" &&
           reading.view.state === "authenticated_active"
         )
+          setGeneration((value) => value + 1);
+        apply(reading);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        running.current = false;
+      });
+  }, [access, apply, core, payload, view]);
+
+  // Parked data waits for this client, now the active one: the switch can
+  // no longer be undone, so it is applied over this device's own copy, then
+  // acknowledged, and the game reopens on it. A failure leaves it parked and
+  // the next state read tries again.
+  useEffect(() => {
+    const parked = view?.parked;
+    if (
+      view === null ||
+      !view.active ||
+      parked === null ||
+      parked === undefined ||
+      core === undefined ||
+      payload === undefined ||
+      running.current
+    )
+      return;
+    const signal = unmounted.current.signal;
+    running.current = true;
+    void applyParkedPayload({ access, core, parked, payload, signal })
+      .then((reading) => {
+        if (signal.aborted) return;
+        if (reading.kind === "state" && reading.view.parked === null)
           setGeneration((value) => value + 1);
         apply(reading);
       })

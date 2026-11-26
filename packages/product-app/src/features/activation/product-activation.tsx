@@ -6,6 +6,7 @@ import { useMemo, type ReactNode } from "react";
 import {
   createActivationPayload,
   hasClientActivationAccess,
+  parkActivationPayload,
   type ActivationPayloadPort,
   type ActivationSyncCore,
   type CoreRuntimePort,
@@ -31,6 +32,34 @@ function syncCore(core: CoreRuntimePort): ActivationSyncCore | undefined {
       part.call(core, totalBytes, offset),
     activationSyncDigest: (data) => digest.call(core, data),
   };
+}
+
+/**
+ * Before this browser signs out, the active client parks its data on the
+ * back-end, so the next client to become active applies it. Parking never
+ * blocks signing out: when it cannot happen (an inactive client, no route,
+ * no Core binding, a failure), the data stays on this device as before.
+ */
+export async function parkBeforeSignOut(
+  identity: IdentityAccessPort,
+  core: CoreRuntimePort,
+  owner: string | undefined,
+): Promise<void> {
+  if (owner === undefined || !hasClientActivationAccess(identity)) return;
+  const sync = syncCore(core);
+  const payload = browserPayload(owner);
+  if (sync === undefined || payload === undefined) return;
+  try {
+    const reading = await identity.readActivationState();
+    if (reading.kind !== "state" || !reading.view.active) return;
+    await parkActivationPayload({
+      access: identity,
+      core: sync,
+      payload: payload.build(),
+    });
+  } catch {
+    // Signing out goes on; the data stays on this device.
+  }
 }
 
 export interface ProductActivationProps {
