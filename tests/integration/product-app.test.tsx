@@ -152,6 +152,12 @@ function createIdentity(
   };
 }
 
+async function openExistingBondSignIn() {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Use an existing 0x1 Bond" }),
+  );
+}
+
 describe("ProductApp identity", () => {
   afterEach(() => {
     window.history.replaceState({}, "", "/");
@@ -168,6 +174,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity()}
       />,
     );
+    await openExistingBondSignIn();
 
     expect(
       await screen.findByRole("heading", { name: "Enter your pub_dress." }),
@@ -189,6 +196,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity()}
       />,
     );
+    await openExistingBondSignIn();
     await screen.findByLabelText("pub_dress");
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
@@ -216,6 +224,7 @@ describe("ProductApp identity", () => {
     render(
       <ProductApp core={readyCore} host={createHost()} identity={identity} />,
     );
+    await openExistingBondSignIn();
     const discriminator = await screen.findByRole("combobox", {
       name: "pub_dress hexadecimal discriminator",
     });
@@ -276,6 +285,7 @@ describe("ProductApp identity", () => {
     render(
       <ProductApp core={readyCore} host={createHost()} identity={identity} />,
     );
+    await openExistingBondSignIn();
 
     await user.type(await screen.findByLabelText("pub_dress"), "sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
@@ -321,6 +331,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     const slug = await screen.findByLabelText("pub_dress");
     const password = await screen.findByLabelText("Password");
@@ -383,6 +394,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     await user.type(await screen.findByLabelText("pub_dress"), "0x0sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
@@ -422,6 +434,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     const username = await screen.findByLabelText("pub_dress");
     const password = container.querySelector<HTMLInputElement>(
@@ -465,6 +478,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity({ resolvePubDress })}
       />,
     );
+    await openExistingBondSignIn();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
@@ -502,6 +516,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
@@ -536,6 +551,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity()}
       />,
     );
+    await openExistingBondSignIn();
     const slug = await screen.findByLabelText("pub_dress");
     await user.click(slug);
     await user.paste("0xaSky");
@@ -561,6 +577,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity({ resolvePubDress: () => resolution })}
       />,
     );
+    await openExistingBondSignIn();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
@@ -596,6 +613,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     fireEvent.change(
       await screen.findByRole("combobox", {
@@ -630,6 +648,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sk y");
@@ -672,6 +691,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     expect(await screen.findByLabelText("Password")).not.toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Edit 0x0sky" }));
@@ -1137,6 +1157,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openExistingBondSignIn();
 
     const discriminator = await screen.findByRole("combobox", {
       name: "pub_dress hexadecimal discriminator",
