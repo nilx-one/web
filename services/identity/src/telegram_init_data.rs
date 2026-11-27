@@ -371,9 +371,14 @@ mod tests {
         );
     }
 
-    fn public_fixture(bot_id: u64, auth_date: u64, user: &str) -> (TelegramInitDataVerifier, String) {
+    fn public_fixture(
+        bot_id: u64,
+        auth_date: u64,
+        user: &str,
+    ) -> (TelegramInitDataVerifier, String) {
         let key = SigningKey::from_bytes(&[23; 32]);
-        let check = format!("{bot_id}:WebAppData\nauth_date={auth_date}\nquery_id=query-1\nuser={user}");
+        let check =
+            format!("{bot_id}:WebAppData\nauth_date={auth_date}\nquery_id=query-1\nuser={user}");
         let signature = URL_SAFE_NO_PAD.encode(key.sign(check.as_bytes()).to_bytes());
         let data = form_urlencoded::Serializer::new(String::new())
             .append_pair("user", user)
@@ -420,9 +425,17 @@ mod tests {
     fn public_signature_still_requires_fresh_human_provider_evidence() {
         for (date, user, expected) in [
             (NOW - 301, r#"{"id":42}"#, TelegramInitDataError::Expired),
-            (NOW + 31, r#"{"id":42}"#, TelegramInitDataError::FutureAuthDate),
+            (
+                NOW + 31,
+                r#"{"id":42}"#,
+                TelegramInitDataError::FutureAuthDate,
+            ),
             (NOW, r#"{"id":0}"#, TelegramInitDataError::InvalidUser),
-            (NOW, r#"{"id":42,"is_bot":true}"#, TelegramInitDataError::BotUser),
+            (
+                NOW,
+                r#"{"id":42,"is_bot":true}"#,
+                TelegramInitDataError::BotUser,
+            ),
         ] {
             let (verifier, data) = public_fixture(123456, date, user);
             assert_eq!(verifier.verify(&data, NOW), Err(expected));
