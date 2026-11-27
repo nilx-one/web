@@ -67,12 +67,12 @@ Roles:
 - **Tool** — the agent client, model, IDE or service actually doing the work,
   named as the product calls itself.
 
-| Action       | Comes from                               | Signature                          |
-|--------------|------------------------------------------|------------------------------------|
-| Commit       | author and committer: owner's bot        | `Assisted-by: <Tool>` trailer      |
-| Pull request | human owner's credentials                | description names tool and bot     |
-| Review       | the reviewing tool                       | `Review by <Tool>` header          |
-| Merge        | human owner's credentials, preferably    | trailers from commits preserved    |
+| Action       | Comes from                            | Signature                       |
+| ------------ | ------------------------------------- | ------------------------------- |
+| Commit       | author and committer: owner's bot     | `Assisted-by: <Tool>` trailer   |
+| Pull request | human owner's credentials             | description names tool and bot  |
+| Review       | the reviewing tool                    | `Review by <Tool>` header       |
+| Merge        | human owner's credentials, preferably | trailers from commits preserved |
 
 #### Commits
 
