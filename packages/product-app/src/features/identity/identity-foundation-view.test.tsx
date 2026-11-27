@@ -665,6 +665,7 @@ describe("verified Telegram username suggestion", () => {
             busy: false,
           },
         }}
+        aisSignIn={{ href: "/api/v1/auth/aiaiaiai/start?return=%2F" }}
         browserProviderAuth={{
           available: { telegram: true, discord: true, github: false },
           pendingProvider: "telegram",
@@ -684,6 +685,7 @@ describe("verified Telegram username suggestion", () => {
       />,
     );
 
+    expect(screen.getByLabelText("pub_dress")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create 0xboss_zhab" }));
     expect(onApplySuggestedPubDress).toHaveBeenCalledWith("0xboss_zhab");
     fireEvent.click(
@@ -741,6 +743,19 @@ describe("sign in through aiaiaiai", () => {
       "/api/v1/auth/aiaiaiai/start?return=%2F",
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", {
+      name: "Use an existing 0x1 Bond",
+    });
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).toBeInTheDocument();
   });
 
   it("says why the last return did not sign the person in, in their language", () => {
@@ -749,6 +764,9 @@ describe("sign in through aiaiaiai", () => {
       href: "/api/v1/auth/aiaiaiai/start?return=%2F",
       failure: "address-taken",
     });
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Це ім’я вже належить іншому Bond",
     );

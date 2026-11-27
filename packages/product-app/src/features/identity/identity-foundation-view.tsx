@@ -8,7 +8,7 @@ import type {
   PubDressSelection,
 } from "@nilx-one/application";
 import { AppChrome, RuntimeStatus } from "@nilx-one/ui";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { AuthForm } from "@aiaiaiai/auth-view";
 export { calculateFieldReflection } from "@aiaiaiai/auth-view";
 
@@ -424,6 +424,15 @@ export function IdentityFoundationView({
 }: IdentityFoundationViewProps) {
   const { t } = useLocalization();
   const identity = viewModel.identity;
+  const legacySignInId = useId();
+  const [legacySignInOpen, setLegacySignInOpen] = useState(
+    aisSignIn?.failure === "address-taken",
+  );
+  const aisPrimary =
+    aisSignIn !== undefined &&
+    identity.kind === "form" &&
+    browserProviderAuth?.pendingProvider === undefined;
+  const showLegacySignIn = !aisPrimary || legacySignInOpen;
   const error =
     identity.kind === "unavailable"
       ? identity.detail
@@ -467,96 +476,123 @@ export function IdentityFoundationView({
         <section className="identity-panel" aria-labelledby="foundation-title">
           <div className="identity-copy">
             <p className="eyebrow">{t("identity.eyebrow")}</p>
-            <h1 id="foundation-title">{heading(viewModel.identity, t)}</h1>
-            <p className="foundation-lede">{lede(viewModel.identity, t)}</p>
+            <h1 id="foundation-title">
+              {showLegacySignIn
+                ? heading(identity, t)
+                : t("identity.ais.heading")}
+            </h1>
+            {showLegacySignIn ? (
+              <p className="foundation-lede">{lede(identity, t)}</p>
+            ) : null}
           </div>
 
           <div className="identity-surface">
             {aisSignIn !== undefined && viewModel.identity.kind === "form" ? (
-              <>
-                <AisSignIn ais={aisSignIn} />
-                <div className="identity-divider" aria-hidden="true">
-                  <span>{t("identity.or")}</span>
-                </div>
-              </>
+              <AisSignIn ais={aisSignIn} />
             ) : null}
-            {viewModel.showProviderRow ? (
-              <>
-                <ProviderRow auth={browserProviderAuth} />
-                <div className="identity-divider" aria-hidden="true">
-                  <span>{t("identity.or")}</span>
-                </div>
-              </>
+            {aisPrimary ? (
+              <button
+                className="identity-legacy-toggle"
+                type="button"
+                aria-expanded={legacySignInOpen}
+                aria-controls={legacySignInId}
+                onClick={() => setLegacySignInOpen((open) => !open)}
+              >
+                {t("identity.ais.legacySignIn")}
+              </button>
             ) : null}
-            {viewModel.identity.kind === "provider-password" &&
-            passwordHandoff !== undefined ? (
-              <ProviderPasswordHandoff
-                pubDress={viewModel.identity.pubDress}
-                onHandoff={passwordHandoff.open}
-                onReturn={passwordHandoff.returned}
-              />
-            ) : viewModel.identity.kind === "provider-password" ? (
-              <ProviderPasswordForm
-                key={viewModel.identity.pubDress}
-                pubDress={viewModel.identity.pubDress}
-                password={password}
-                busy={viewModel.identity.busy}
-                {...(viewModel.identity.error === undefined
-                  ? {}
-                  : { error: viewModel.identity.error })}
-                onPasswordChange={onPasswordChange}
-                onSubmit={onSubmit}
-              />
-            ) : viewModel.identity.kind === "form" ? (
-              <IdentityForm
-                identity={viewModel.identity}
-                password={password}
-                pubDressLabelDerivation={pubDressLabelDerivation}
-                pubDressLabelDerivationPending={pubDressLabelDerivationPending}
-                pubDressUrlResolution={pubDressUrlResolution}
-                selection={selection}
-                onCredentialAutofill={onCredentialAutofill}
-                onForgetRemembered={onForgetRemembered}
-                onPasswordChange={onPasswordChange}
-                onResolvePubDress={onResolvePubDress}
-                onSelectionChange={onSelectionChange}
-                onSubmit={onSubmit}
-              />
-            ) : viewModel.identity.kind === "avatar-choice" ? (
-              <AvatarChoiceView
-                state={viewModel.identity}
-                onChoose={(model) => onAvatarChoice?.(model)}
-                onSkip={() => onSkipAvatarChoice?.()}
-              />
-            ) : viewModel.identity.kind === "authenticated" ? (
-              <section className="authenticated-surface" aria-live="polite">
-                <span className="surface-kicker">
-                  {t("identity.authenticated")}
-                </span>
-                <strong>{viewModel.identity.pubDress}</strong>
-                {browserProviderAuth?.pendingProvider !== undefined ? (
-                  <button
-                    type="button"
-                    onClick={browserProviderAuth.onChooseExistingIdentity}
-                  >
-                    {t("identity.provider.connectExisting").replaceAll(
-                      "{pubDress}",
-                      viewModel.identity.pubDress,
-                    )}
-                  </button>
-                ) : null}
-                {viewModel.identity.native ? (
-                  <button type="button" onClick={onLogout}>
-                    {t("header.signOut")}
-                  </button>
-                ) : null}
-              </section>
-            ) : (
-              <section className="identity-message" aria-live="polite">
-                <span className="message-orbit" aria-hidden="true" />
-                <p>{translateCopy(t, viewModel.identity.detail)}</p>
-              </section>
-            )}
+            <div
+              id={legacySignInId}
+              className="identity-legacy-controls"
+              hidden={!showLegacySignIn}
+            >
+              {showLegacySignIn && viewModel.showProviderRow ? (
+                <>
+                  {aisSignIn !== undefined && identity.kind === "form" ? (
+                    <div className="identity-divider" aria-hidden="true">
+                      <span>{t("identity.or")}</span>
+                    </div>
+                  ) : null}
+                  <ProviderRow auth={browserProviderAuth} />
+                  <div className="identity-divider" aria-hidden="true">
+                    <span>{t("identity.or")}</span>
+                  </div>
+                </>
+              ) : null}
+              {viewModel.identity.kind === "provider-password" &&
+              passwordHandoff !== undefined ? (
+                <ProviderPasswordHandoff
+                  pubDress={viewModel.identity.pubDress}
+                  onHandoff={passwordHandoff.open}
+                  onReturn={passwordHandoff.returned}
+                />
+              ) : viewModel.identity.kind === "provider-password" ? (
+                <ProviderPasswordForm
+                  key={viewModel.identity.pubDress}
+                  pubDress={viewModel.identity.pubDress}
+                  password={password}
+                  busy={viewModel.identity.busy}
+                  {...(viewModel.identity.error === undefined
+                    ? {}
+                    : { error: viewModel.identity.error })}
+                  onPasswordChange={onPasswordChange}
+                  onSubmit={onSubmit}
+                />
+              ) : viewModel.identity.kind === "form" ? (
+                showLegacySignIn ? (
+                  <IdentityForm
+                    identity={viewModel.identity}
+                    password={password}
+                    pubDressLabelDerivation={pubDressLabelDerivation}
+                    pubDressLabelDerivationPending={
+                      pubDressLabelDerivationPending
+                    }
+                    pubDressUrlResolution={pubDressUrlResolution}
+                    selection={selection}
+                    onCredentialAutofill={onCredentialAutofill}
+                    onForgetRemembered={onForgetRemembered}
+                    onPasswordChange={onPasswordChange}
+                    onResolvePubDress={onResolvePubDress}
+                    onSelectionChange={onSelectionChange}
+                    onSubmit={onSubmit}
+                  />
+                ) : null
+              ) : viewModel.identity.kind === "avatar-choice" ? (
+                <AvatarChoiceView
+                  state={viewModel.identity}
+                  onChoose={(model) => onAvatarChoice?.(model)}
+                  onSkip={() => onSkipAvatarChoice?.()}
+                />
+              ) : viewModel.identity.kind === "authenticated" ? (
+                <section className="authenticated-surface" aria-live="polite">
+                  <span className="surface-kicker">
+                    {t("identity.authenticated")}
+                  </span>
+                  <strong>{viewModel.identity.pubDress}</strong>
+                  {browserProviderAuth?.pendingProvider !== undefined ? (
+                    <button
+                      type="button"
+                      onClick={browserProviderAuth.onChooseExistingIdentity}
+                    >
+                      {t("identity.provider.connectExisting").replaceAll(
+                        "{pubDress}",
+                        viewModel.identity.pubDress,
+                      )}
+                    </button>
+                  ) : null}
+                  {viewModel.identity.native ? (
+                    <button type="button" onClick={onLogout}>
+                      {t("header.signOut")}
+                    </button>
+                  ) : null}
+                </section>
+              ) : (
+                <section className="identity-message" aria-live="polite">
+                  <span className="message-orbit" aria-hidden="true" />
+                  <p>{translateCopy(t, viewModel.identity.detail)}</p>
+                </section>
+              )}
+            </div>
           </div>
 
           <RuntimeStatus
