@@ -76,19 +76,21 @@ describe("PublicBondWorld", () => {
 
     expect(renderer.avatars?.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        modelId: "sky-study",
+        modelId: "avaia",
         lngLat: [30.563, 50.4265],
         visible: true,
       }),
     );
   });
 
-  it("draws no body it does not know, and none without a location", () => {
+  it("uses the base chassis for unknown models and requires a published location", () => {
     const unknown = renderWorld("bond", {
       ...BOND,
       avaia: { ...BOND.avaia!, avatarModel: "future-study" },
     });
-    expect(unknown.renderer.avatars?.upsert).not.toHaveBeenCalled();
+    expect(unknown.renderer.avatars?.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: "avaia" }),
+    );
     cleanup();
     const { location: _location, ...nowhere } = BOND.avaia!;
     const placeless = renderWorld("bond", { ...BOND, avaia: nowhere });
@@ -102,7 +104,7 @@ describe("PublicBondWorld", () => {
       container.querySelector(".bond-dock__detail-header h2"),
     ).toHaveTextContent(/^x0skai$/);
     expect(screen.getByText("50.4265, 30.5630")).toBeVisible();
-    expect(screen.getByText("Sky")).toBeVisible();
+    expect(screen.getAllByText("Avaia").at(-1)).toBeVisible();
     expect(screen.getByText("0x0sky")).toBeVisible();
     expect(renderer.setCamera).toHaveBeenCalledWith(
       expect.objectContaining({ center: [30.563, 50.4265] }),

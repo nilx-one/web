@@ -167,7 +167,7 @@ parser.add_argument("--thumbnails", help="write one front-view PNG per study her
 # nobody rendered.
 parser.add_argument("--wardrobe", action="store_true",
                     help="also write one still per wardrobe item of a modular study")
-arguments = parser.parse_args()
+arguments = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 ASSETS = arguments.asset_dir
 
 

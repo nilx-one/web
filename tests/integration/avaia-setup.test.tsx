@@ -181,15 +181,11 @@ describe("Avaia setup from the Bond dock", () => {
     // the one thing that can be done about it.
     await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
 
-    // The address it already holds types itself out, and Kai stands in as its
+    // The address it already holds types itself out, and Avaia has its own
     // body, so there is nothing left to decide but Create.
     const address = await screen.findByLabelText("pub_dress");
     await waitFor(() => expect(address).toHaveValue("sk"));
-    expect(
-      screen.getByRole("button", {
-        name: /Change this Avaia's 3D model — currently Kai/,
-      }),
-    ).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "3D model" })).toBeVisible();
     // The world is the environment, not a screen the Dock replaced.
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
@@ -220,7 +216,7 @@ describe("Avaia setup from the Bond dock", () => {
       JSON.parse(
         window.localStorage.getItem("nilx-one.avatar.wardrobe") ?? "{}",
       ) as unknown,
-    ).toMatchObject({ x0skai: { modelId: "kai-study" } });
+    ).toMatchObject({ x0skai: { modelId: "avaia" } });
 
     // The Bond keeps the wheel; the Avaia can now be handed it.
     expect(

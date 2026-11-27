@@ -51,7 +51,10 @@ import {
   type AvaiaSetupViewState,
 } from "../avaia/avaia-setup-view-model";
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
-import { forgetAvatarChoices } from "../identity/avatar-wardrobe-store";
+import {
+  forgetAvatarChoices,
+  writeAvatarChoice,
+} from "../identity/avatar-wardrobe-store";
 import { createProfileSlugViewState } from "../identity/profile-slug-view-model";
 import type { AddressSlugViewState } from "../identity/profile-slug-view-model";
 import { chooseLocale } from "../../shell/localization";
@@ -61,7 +64,7 @@ import type {
 } from "../../shell/local-model-host";
 import type { ShellRoute, ShellSection } from "../../shell/routes";
 import type { AvaiaAvailability } from "./bond-dock-view-model";
-import { avaiaStudy } from "./avatar-presence";
+import { avaiaVoiceStudy } from "./avatar-presence";
 import { avaiaLines } from "./avaia-lines";
 import { avaiaVoiceUrl } from "./avaia-voice";
 import { forgetNotebookCache } from "./landmark-notebook";
@@ -1208,7 +1211,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(screen.getAllByText("Not connected")).toHaveLength(3);
   });
 
-  it("assigns no study, draws no fallback body, and offers the four in the editor", async () => {
+  it("assigns no human study to a Bond without a choice and offers four in its editor", async () => {
     const onAvatarChoice = vi.fn(async () => undefined);
     const mapRenderer = renderer();
     renderView({
@@ -1225,7 +1228,9 @@ describe("AuthenticatedMapHomeView", () => {
     ).toBeVisible();
     await screen.findByRole("button", { name: "Map centred on this device" });
     expect(mapRenderer.avatars).toBeDefined();
-    expect(vi.mocked(mapRenderer.avatars!.upsert)).not.toHaveBeenCalled();
+    expect(mapRenderer.avatars!.upsert).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "bond" }),
+    );
 
     fireEvent.click(
       screen.getByRole("button", { name: /Choose your 3D model/ }),
@@ -1513,12 +1518,8 @@ describe("AuthenticatedMapHomeView", () => {
     expect(handle?.visibleNodes).not.toContain("wear:shoes/loafers-black");
   });
 
-  // Regression: useAvatarSelection used to let the ambient default it was
-  // handed always win over a choice this device actually remembered, so an
-  // Avaia's own saved body silently reverted to the deterministic default on
-  // every render. This exercises the whole path a person actually uses —
-  // the field, the editor, Save — and checks the world, not just the field.
-  it("keeps the body chosen for an Avaia, over its own ambient default", async () => {
+  it("replaces legacy human choices with the robot and equips its cleaner outfit", async () => {
+    writeAvatarChoice("x0skai", { modelId: "kai-study" });
     const mapRenderer = createMapRendererDouble({ kind: "ready" });
     const avaiaSetup = createAvaiaSetupViewState({
       load: {
@@ -1545,35 +1546,18 @@ describe("AuthenticatedMapHomeView", () => {
         .mock.calls.map(([drawn]) => drawn)
         .findLast((drawn) => drawn.id === "avaia");
 
-    // Nothing chosen yet: the world draws the deterministic ambient study for
-    // this address ("Dasha 2.0", for "x0skai" against a "dasha-study" Bond).
-    await vi.waitFor(() =>
-      expect(avaiaHandle()?.modelId).toBe(avaiaStudy("x0skai", "dasha-study")),
-    );
-    expect(avaiaHandle()?.modelId).not.toBe("kai-study");
-
+    await vi.waitFor(() => expect(avaiaHandle()?.modelId).toBe("avaia"));
     fireEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: /Change this Avaia's 3D model — currently Dasha 2\.0/,
-      }),
+    const picker = screen.getByRole("combobox", { name: "3D model" });
+    fireEvent.change(picker, { target: { value: "avaia-cleaner" } });
+    await vi.waitFor(() =>
+      expect(avaiaHandle()?.modelId).toBe("avaia-cleaner"),
     );
-    fireEvent.click(screen.getByRole("radio", { name: /Kai/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    // The field itself reads back the saved choice…
-    expect(
-      await screen.findByRole("button", {
-        name: /Change this Avaia's 3D model — currently Kai/,
-      }),
-    ).toBeVisible();
-    // …and so does the world: not the ambient default, whatever it computes to.
-    await vi.waitFor(() => expect(avaiaHandle()?.modelId).toBe("kai-study"));
 
     // The card carries the same choice once the body is too far to read.
     const label = vi.mocked(mapRenderer.setObservedPositionLabel).mock
       .lastCall?.[0];
-    expect(label?.avatarUrl).toBe(avatarPreviewUrl("kai-study"));
+    expect(label?.avatarUrl).toBe(avatarPreviewUrl("avaia-cleaner"));
   });
 
   it("shows connected providers as marks that open the external account", () => {
@@ -2377,9 +2361,13 @@ describe("AuthenticatedMapHomeView", () => {
       );
       expect(mapRenderer.getCamera().bearing).toBe(45);
     });
-    // A missing study does not suppress tracking and does not invent an
-    // independent Avaia position or presence report.
-    expect(mapRenderer.avatars?.upsert).not.toHaveBeenCalled();
+    expect(mapRenderer.avatars?.upsert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        id: "avaia",
+        modelId: "avaia",
+        lngLat: [next.longitude, next.latitude],
+      }),
+    );
   });
 
   it("opens on a readable manual identity rather than a distant marker", async () => {
@@ -2524,7 +2512,7 @@ describe("AuthenticatedMapHomeView", () => {
     expect(new Set(drawn.map((handle) => handle.id))).toEqual(
       new Set(["avaia"]),
     );
-    expect(drawn.at(-1)?.modelId).toBe(avaiaStudy("x0skai", "dasha-study"));
+    expect(drawn.at(-1)?.modelId).toBe("avaia");
   });
 
   // Handing the wheel over and back hides each body in turn instead of
@@ -2626,7 +2614,7 @@ describe("AuthenticatedMapHomeView", () => {
 
     expect(label).toMatchObject({ title: "x0skai", detail: "This device" });
     expect(label?.avatarUrl).toBe(avatarPreviewUrl(drawn!));
-    expect(drawn).toBe(avaiaStudy("x0skai", "dasha-study"));
+    expect(drawn).toBe("avaia");
   });
 
   // The card names whoever took the wheel — an Avaia that hands back to its
@@ -2758,7 +2746,7 @@ describe("AuthenticatedMapHomeView", () => {
       );
     });
 
-    const voice = avaiaStudy("x0skai", "dasha-study");
+    const voice = avaiaVoiceStudy("x0skai", "dasha-study");
     const lastLabel = (mapRenderer: MapRenderer) =>
       vi.mocked(mapRenderer.setObservedPositionLabel).mock.lastCall?.[0];
     const lastAvaia = (mapRenderer: MapRenderer) =>
