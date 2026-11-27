@@ -27,6 +27,18 @@ class ProductSecretDeliveryTests(unittest.TestCase):
         self.assertNotIn("secrets.NATIVE_AUTH_SECRET", workflow)
         self.assertNotIn("secrets.PASSWORD_PEPPER", workflow)
 
+    def test_production_envelope_targets_live_identity_host(self):
+        workflow = Path(".github/workflows/package-identity-service.yml").read_text()
+        self.assertIn("contracts/servers/edge-dev-1.yaml", workflow)
+        self.assertNotIn("edge-prod-1", workflow)
+        self.assertIn("state: retired", workflow)
+        self.assertIn("    - nilxone-identity", workflow)
+        self.assertIn("encryptionRecipient", workflow)
+        self.assertIn("age --recipient", workflow)
+        self.assertIn("Missing production value $name", workflow)
+        self.assertNotIn("INFRA_DEPLOY_TOKEN", workflow)
+        self.assertNotIn("secrets.SSH_PRIVATE_KEY", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
