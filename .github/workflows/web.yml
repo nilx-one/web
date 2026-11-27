@@ -161,7 +161,22 @@ jobs:
       - name: Test contracts and integration
         run: pnpm test
       - name: Build every Web host
+        env:
+          VITE_ERRORS_COLLECTOR_ENDPOINT: https://api.aiaiaiai.org/4x-errors
         run: pnpm build
+      - name: Verify browser collector configuration in every host artifact
+        run: |
+          set -Eeuo pipefail
+          endpoint=https://api.aiaiaiai.org/4x-errors
+          grep -Fxq "  VITE_ERRORS_COLLECTOR_ENDPOINT: $endpoint" .github/workflows/package-web.yml
+          for host in site telegram-mini-app discord-activity; do
+            assets="apps/$host/dist/assets"
+            grep -R --include='*.js' --fixed-strings "$endpoint" "$assets" >/dev/null
+            if grep -R --include='*.js' --fixed-strings 'https://errors.aiaiaiai.org' "$assets" >/dev/null; then
+              echo "::error::$host bundle contains the dashboard URL as a collector endpoint"
+              exit 1
+            fi
+          done
       - name: Verify Core runtime in every host artifact
         run: |
           expected=53e72838af2184f1eee1919e2d23b405a9ebe3b708d3f98a7539d376bf6ad400
