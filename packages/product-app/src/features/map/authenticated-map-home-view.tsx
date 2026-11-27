@@ -3248,9 +3248,10 @@ export function AuthenticatedMapHomeView({
   }, [declaredPosition, handover, renderer, section, wheel]);
 
   // A reveal request belongs exclusively to the configured Avaia at the wheel.
+  const dismissFogReveal = fogReveal.dismiss;
   useEffect(() => {
-    if (wheel !== "avaia" || handover !== undefined) fogReveal.dismiss();
-  }, [fogReveal.dismiss, handover, wheel]);
+    if (wheel !== "avaia" || handover !== undefined) dismissFogReveal();
+  }, [dismissFogReveal, handover, wheel]);
 
   useEffect(() => {
     const subscribe = renderer.subscribeBodyActivation;
