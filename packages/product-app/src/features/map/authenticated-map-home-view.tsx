@@ -1147,13 +1147,11 @@ export function AuthenticatedMapHomeView({
   const [chosenWheel, setChosenWheel] = useState<DockSeat | undefined>(
     undefined,
   );
-  if (
-    chosenWheel === undefined &&
-    (avaiaSetup === undefined || avaiaConfiguration !== undefined)
-  ) {
+  if (chosenWheel === undefined && avaiaConfiguration !== undefined) {
     setChosenWheel(openingWheel(avaiaConfiguration));
   }
-  const wheel: DockSeat = chosenWheel ?? "avaia";
+  const wheel: DockSeat =
+    avaiaConfiguration === "configured" ? (chosenWheel ?? "avaia") : "bond";
   const [handover, setHandover] = useState<WheelHandover | undefined>(
     undefined,
   );
@@ -1843,7 +1841,11 @@ export function AuthenticatedMapHomeView({
     ? undefined
     : observedPosition?.latitude;
   useEffect(() => {
-    if (firstFixLongitude === undefined || firstFixLatitude === undefined) {
+    if (
+      avaiaConfiguration !== "configured" ||
+      firstFixLongitude === undefined ||
+      firstFixLatitude === undefined
+    ) {
       return;
     }
     if (avaiaPlacedFor.current === pubDress) return;
@@ -1860,14 +1862,16 @@ export function AuthenticatedMapHomeView({
         },
       });
     }
-  }, [firstFixLatitude, firstFixLongitude, pubDress]);
+  }, [avaiaConfiguration, firstFixLatitude, firstFixLongitude, pubDress]);
   // Camera and handover never define proximity; measure independent bodies.
   // Her place is what she stands at or was left at — never assumed to be the
   // Bond's device after that first putting-down, and unknown (not near)
   // whenever it cannot be read.
   const avaiaBodyPoint = (): MapPointSelection | undefined =>
-    avaiaWalk.stance(globalThis.performance.now())?.point ??
-    readWorldMemory(pubDress).avaia;
+    avaiaConfiguration === "configured"
+      ? (avaiaWalk.stance(globalThis.performance.now())?.point ??
+        readWorldMemory(pubDress).avaia)
+      : undefined;
   const avaiaProximity = useAvaiaProximity({
     core: findItems,
     owner: pubDress,
@@ -3228,29 +3232,26 @@ export function AuthenticatedMapHomeView({
   // Routing, fog reveal, position and ownership remain with their existing
   // listeners; this observes the same tap without consuming or altering it.
   useEffect(() => {
-    if (section !== "world") return;
+    if (section !== "world" || handover !== undefined) return;
+    if (wheel === "bond" && !declaredPosition) return;
     const subscribe = renderer.subscribeGroundTap;
     const show = renderer.showGroundTapFeedback;
     if (subscribe === undefined || show === undefined) return;
-    return subscribe.call(renderer, (tap) =>
+    return subscribe.call(renderer, (tap) => {
+      if (wheel === "bond" && tap.ground !== "open") return;
       show.call(
         renderer,
         { longitude: tap.longitude, latitude: tap.latitude },
         wheel,
-      ),
-    );
-  }, [renderer, section, wheel]);
-
-  // With the Bond at the wheel nobody walks, but reachable fog still answers
-  // a tap: the Avaia does the revealing either way.
-  useEffect(() => {
-    if (wheel !== "bond") return;
-    const subscribe = renderer.subscribeGroundTap;
-    if (subscribe === undefined) return;
-    return subscribe.call(renderer, (tap) => {
-      if (tap.ground === "fog") fogRevealRef.current?.handleFogTap(tap);
+      );
     });
-  }, [renderer, wheel]);
+  }, [declaredPosition, handover, renderer, section, wheel]);
+
+  // A reveal request belongs exclusively to the configured Avaia at the wheel.
+  const dismissFogReveal = fogReveal.dismiss;
+  useEffect(() => {
+    if (wheel !== "avaia" || handover !== undefined) dismissFogReveal();
+  }, [dismissFogReveal, handover, wheel]);
 
   useEffect(() => {
     const subscribe = renderer.subscribeBodyActivation;
@@ -3483,11 +3484,16 @@ export function AuthenticatedMapHomeView({
    * gesture, and what a device fetches to serve it is not a second decision.
    */
   function activateSpectator(): void {
+    if (wheel === "bond" && avaiaConfiguration !== "configured") {
+      openDetail("avaia");
+      return;
+    }
     if (dock.preparesRuntime) onPrepareAvaia?.();
     handWheel(wheel === "bond" ? "avaia" : "bond");
   }
 
   function handWheel(to: DockSeat): void {
+    if (to === "avaia" && avaiaConfiguration !== "configured") return;
     // Switching control changes neither identity's position. Freeze an
     // interrupted walk where the Avaia actually stands, including handover.
     const avaiaPoint = avaiaWalk.stop();
@@ -3518,6 +3524,7 @@ export function AuthenticatedMapHomeView({
    * It never walks into the fog.
    */
   function confirmFogReveal(): void {
+    if (wheel !== "avaia" || handover !== undefined) return;
     const job = fogReveal.confirm();
     if (job === undefined) return;
     if (wheel === "avaia" && handover === undefined) {
@@ -5139,7 +5146,13 @@ export function AuthenticatedMapHomeView({
             />
           )}
           <FogRevealPrompt
-            prompt={travelPrompt === undefined ? fogReveal.prompt : undefined}
+            prompt={
+              travelPrompt === undefined &&
+              wheel === "avaia" &&
+              handover === undefined
+                ? fogReveal.prompt
+                : undefined
+            }
             jobs={fogReveal.jobs}
             avaia={avaiaLabel}
             activities={flyover.expanded ? undefined : activities}

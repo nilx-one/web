@@ -569,32 +569,6 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
     },
   });
 
-  // Contract 8 answers for the Avaia its owner configured. A host whose identity
-  // client does not publish that capability simply has no profile to read, and
-  // the Dock stays what it was.
-  const avaiaProfileAccess = hasAvaiaProfileAccess(dependencies.identity)
-    ? dependencies.identity
-    : undefined;
-  // Only an authenticated Bond owns an Avaia to read, so the sign-in surface
-  // asks the service nothing it would answer with an authentication error.
-  const avaiaProfileEnabled =
-    avaiaProfileAccess !== undefined &&
-    (browserHost
-      ? nativeContextQuery.data?.kind === "authenticated"
-      : providerIdentityQuery.data?.kind === "registered");
-  const avaiaProfileQuery = useQuery({
-    queryKey: ["avaia-profile"],
-    queryFn: () => {
-      if (avaiaProfileAccess === undefined) {
-        throw new Error("This host cannot read an owned Avaia profile");
-      }
-      return new ReadAvaiaProfile(avaiaProfileAccess).execute();
-    },
-    enabled: avaiaProfileEnabled,
-    retry: false,
-    staleTime: 0,
-  });
-
   const nativeCanResolve =
     nativeContextQuery.data?.kind === "anonymous" ||
     (nativeContextQuery.data?.kind === "remembered" && !useRememberedHint);
@@ -669,6 +643,7 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         input.password,
       ),
   });
+
   const providerRegistration = useMutation({
     mutationFn: (selection: PubDressSelection) =>
       new RegisterProviderIdentity(dependencies.identity).execute(selection),
@@ -694,6 +669,39 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         await refreshIdentityProjections();
       }
     },
+  });
+
+  // Contract 8 answers for the Avaia its owner configured. A host whose identity
+  // client does not publish that capability simply has no profile to read, and
+  // the Dock stays what it was.
+  const avaiaProfileAccess = hasAvaiaProfileAccess(dependencies.identity)
+    ? dependencies.identity
+    : undefined;
+  // Only an authenticated Bond owns an Avaia to read, so the sign-in surface
+  // asks the service nothing it would answer with an authentication error.
+  // The identity queries are not refetched by a sign-in, registration or
+  // password creation in this tab, so the session those mutations just opened
+  // counts too: until the profile is read the Bond keeps the wheel, and it
+  // must not wait for a reload to learn its Avaia is configured.
+  const avaiaProfileEnabled =
+    avaiaProfileAccess !== undefined &&
+    (browserHost
+      ? nativeContextQuery.data?.kind === "authenticated" ||
+        nativeAuthentication.data?.kind === "authenticated" ||
+        nativeRegistration.data?.kind === "authenticated"
+      : providerIdentityQuery.data?.kind === "registered" ||
+        providerPassword.data?.kind === "authenticated");
+  const avaiaProfileQuery = useQuery({
+    queryKey: ["avaia-profile"],
+    queryFn: () => {
+      if (avaiaProfileAccess === undefined) {
+        throw new Error("This host cannot read an owned Avaia profile");
+      }
+      return new ReadAvaiaProfile(avaiaProfileAccess).execute();
+    },
+    enabled: avaiaProfileEnabled,
+    retry: false,
+    staleTime: 0,
   });
   const browserProviderLink = useMutation({
     mutationFn: (expectedPubDress: string) =>
