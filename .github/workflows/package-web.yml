@@ -21,7 +21,7 @@ concurrency:
 env:
   IMAGE: ghcr.io/nilx-one/0x1-web
   DELIVERY_IMAGE: ghcr.io/nilx-one/web
-  VITE_ERRORS_COLLECTOR_ENDPOINT: https://errors.aiaiaiai.org
+  VITE_ERRORS_COLLECTOR_ENDPOINT: https://api.aiaiaiai.org/4x-errors
 
 jobs:
   package:
@@ -117,7 +117,16 @@ jobs:
       - name: Build production Web hosts
         run: pnpm --filter @nilx-one/site --filter @nilx-one/telegram-mini-app --filter @nilx-one/discord-activity build
       - name: Verify browser error collector configuration
-        run: grep -R --fixed-strings "$VITE_ERRORS_COLLECTOR_ENDPOINT" apps/site/dist/assets >/dev/null
+        run: |
+          set -Eeuo pipefail
+          for host in site telegram-mini-app discord-activity; do
+            assets="apps/$host/dist/assets"
+            grep -R --include='*.js' --fixed-strings "$VITE_ERRORS_COLLECTOR_ENDPOINT" "$assets" >/dev/null
+            if grep -R --include='*.js' --fixed-strings 'https://errors.aiaiaiai.org' "$assets" >/dev/null; then
+              echo "::error::$host bundle contains the dashboard URL as a collector endpoint"
+              exit 1
+            fi
+          done
       - name: Validate client target manifest
         run: |
           jq -e '
