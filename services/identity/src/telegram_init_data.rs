@@ -3,6 +3,11 @@
 
 use std::collections::BTreeMap;
 
+use base64::{
+    Engine as _,
+    engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD},
+};
+use ed25519_dalek::{Signature, VerifyingKey};
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
@@ -13,20 +18,57 @@ type HmacSha256 = Hmac<Sha256>;
 
 const SECRET_KEY_LABEL: &[u8] = b"WebAppData";
 const FUTURE_SKEW_SECONDS: u64 = 30;
+const MAX_INIT_DATA_BYTES: usize = 16 * 1024;
+// Telegram's production third-party validation public key.
+// https://core.telegram.org/bots/webapps#validating-data-for-third-party-use
+const TELEGRAM_PRODUCTION_KEY: [u8; 32] = [
+    0xe7, 0xbf, 0x03, 0xa2, 0xfa, 0x46, 0x02, 0xaf, 0x45, 0x80, 0x70, 0x3d, 0x88, 0xdd, 0xa5, 0xbb,
+    0x59, 0xf3, 0x2e, 0xd8, 0xb0, 0x2a, 0x56, 0xc1, 0x87, 0xfe, 0x7d, 0x34, 0xca, 0xed, 0x24, 0x2d,
+];
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+enum TelegramProof {
+    // Retained for legacy fixtures and callers until the migration is complete.
+    LegacyHmac(String),
+    PublicSignature { bot_id: u64, key: VerifyingKey },
+}
+
+#[derive(Clone)]
 pub struct TelegramInitDataVerifier {
-    bot_token: String,
+    proof: TelegramProof,
     max_age_seconds: u64,
+}
+
+impl std::fmt::Debug for TelegramInitDataVerifier {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TelegramInitDataVerifier")
+            .field("max_age_seconds", &self.max_age_seconds)
+            .finish_non_exhaustive()
+    }
 }
 
 impl TelegramInitDataVerifier {
     #[must_use]
     pub fn new(bot_token: String, max_age_seconds: u64) -> Self {
         Self {
-            bot_token,
+            proof: TelegramProof::LegacyHmac(bot_token),
             max_age_seconds,
         }
+    }
+
+    /// Third-party verification: only the public bot identifier is required.
+    /// No HMAC fallback is attempted for absent or invalid Ed25519 evidence.
+    #[must_use]
+    pub fn for_production_bot(bot_id: u64, max_age_seconds: u64) -> Option<Self> {
+        if bot_id == 0 {
+            return None;
+        }
+        let key = VerifyingKey::from_bytes(&TELEGRAM_PRODUCTION_KEY).ok()?;
+        Some(Self {
+            proof: TelegramProof::PublicSignature { bot_id, key },
+            max_age_seconds: max_age_seconds.min(300),
+        })
     }
 
     pub fn verify(
@@ -35,7 +77,12 @@ impl TelegramInitDataVerifier {
         now_unix_seconds: u64,
     ) -> Result<VerifiedTelegramUser, TelegramInitDataError> {
         let fields = parse_fields(init_data)?;
-        verify_hash(&fields, &self.bot_token)?;
+        match &self.proof {
+            TelegramProof::LegacyHmac(token) => verify_hash(&fields, token)?,
+            TelegramProof::PublicSignature { bot_id, key } => {
+                verify_public_signature(&fields, *bot_id, key)?;
+            }
+        }
 
         let auth_date = fields
             .get("auth_date")
@@ -55,6 +102,9 @@ impl TelegramInitDataVerifier {
         let user: TelegramUser =
             serde_json::from_str(user).map_err(|_| TelegramInitDataError::InvalidUser)?;
 
+        if user.id <= 0 {
+            return Err(TelegramInitDataError::InvalidUser);
+        }
         if user.is_bot {
             return Err(TelegramInitDataError::BotUser);
         }
@@ -80,6 +130,9 @@ fn parse_fields(init_data: &str) -> Result<BTreeMap<String, String>, TelegramIni
         return Err(TelegramInitDataError::Empty);
     }
 
+    if init_data.len() > MAX_INIT_DATA_BYTES {
+        return Err(TelegramInitDataError::TooLarge);
+    }
     let mut fields = BTreeMap::new();
     for (key, value) in form_urlencoded::parse(init_data.as_bytes()) {
         if fields
@@ -94,6 +147,31 @@ fn parse_fields(init_data: &str) -> Result<BTreeMap<String, String>, TelegramIni
         return Err(TelegramInitDataError::Empty);
     }
     Ok(fields)
+}
+
+fn verify_public_signature(
+    fields: &BTreeMap<String, String>,
+    bot_id: u64,
+    key: &VerifyingKey,
+) -> Result<(), TelegramInitDataError> {
+    let encoded = fields
+        .get("signature")
+        .ok_or(TelegramInitDataError::MissingSignature)?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .or_else(|_| URL_SAFE.decode(encoded))
+        .map_err(|_| TelegramInitDataError::InvalidSignature)?;
+    let signature =
+        Signature::from_slice(&bytes).map_err(|_| TelegramInitDataError::InvalidSignature)?;
+    let check = fields
+        .iter()
+        .filter(|(name, _)| !matches!(name.as_str(), "hash" | "signature"))
+        .map(|(name, value)| format!("{name}={value}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let message = format!("{bot_id}:WebAppData\n{check}");
+    key.verify_strict(message.as_bytes(), &signature)
+        .map_err(|_| TelegramInitDataError::InvalidSignature)
 }
 
 fn verify_hash(
@@ -169,6 +247,12 @@ fn verify_freshness(
 pub enum TelegramInitDataError {
     #[error("Telegram initData is empty")]
     Empty,
+    #[error("Telegram initData exceeds the allowed size")]
+    TooLarge,
+    #[error("Telegram initData does not contain a public signature")]
+    MissingSignature,
+    #[error("Telegram initData public signature is invalid")]
+    InvalidSignature,
     #[error("Telegram initData contains a duplicate field")]
     DuplicateField,
     #[error("Telegram initData does not contain hash")]
@@ -195,13 +279,15 @@ pub enum TelegramInitDataError {
 mod tests {
     use std::collections::BTreeMap;
 
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use ed25519_dalek::{Signer, SigningKey};
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
     use url::form_urlencoded;
 
     use super::{
         FUTURE_SKEW_SECONDS, HmacSha256, SECRET_KEY_LABEL, TelegramInitDataError,
-        TelegramInitDataVerifier,
+        TelegramInitDataVerifier, TelegramProof,
     };
 
     const TOKEN: &str = "123456:development-token";
@@ -234,6 +320,25 @@ mod tests {
         form_urlencoded::Serializer::new(String::new())
             .extend_pairs(fields)
             .finish()
+    }
+
+    #[test]
+    fn production_constructor_pins_the_documented_telegram_key() {
+        let verifier = TelegramInitDataVerifier::for_production_bot(123456, 600).unwrap();
+        let TelegramProof::PublicSignature { bot_id, key } = verifier.proof else {
+            panic!("production must not use HMAC");
+        };
+        assert_eq!(bot_id, 123456);
+        assert_eq!(verifier.max_age_seconds, 300);
+        let hex = key
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(
+            hex,
+            "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"
+        );
     }
 
     #[test]
@@ -282,6 +387,82 @@ mod tests {
         assert_eq!(
             verifier.verify(&bot, NOW),
             Err(TelegramInitDataError::BotUser)
+        );
+    }
+
+    fn public_fixture(
+        bot_id: u64,
+        auth_date: u64,
+        user: &str,
+    ) -> (TelegramInitDataVerifier, String) {
+        let key = SigningKey::from_bytes(&[23; 32]);
+        let check =
+            format!("{bot_id}:WebAppData\nauth_date={auth_date}\nquery_id=query-1\nuser={user}");
+        let signature = URL_SAFE_NO_PAD.encode(key.sign(check.as_bytes()).to_bytes());
+        let data = form_urlencoded::Serializer::new(String::new())
+            .append_pair("user", user)
+            .append_pair("query_id", "query-1")
+            .append_pair("signature", &signature)
+            .append_pair("auth_date", &auth_date.to_string())
+            .append_pair("hash", "not-used-for-third-party-validation")
+            .finish();
+        (
+            TelegramInitDataVerifier {
+                proof: TelegramProof::PublicSignature {
+                    bot_id,
+                    key: key.verifying_key(),
+                },
+                max_age_seconds: 300,
+            },
+            data,
+        )
+    }
+
+    #[test]
+    fn public_signature_needs_no_bot_token_and_has_no_hmac_fallback() {
+        let (verifier, data) = public_fixture(123456, NOW, r#"{"id":42}"#);
+        assert_eq!(verifier.verify(&data, NOW).unwrap().id, 42);
+        assert_eq!(
+            verifier.verify(&data.replace("query-1", "query-2"), NOW),
+            Err(TelegramInitDataError::InvalidSignature)
+        );
+        let (other_bot, _) = public_fixture(123457, NOW, r#"{"id":42}"#);
+        assert_eq!(
+            other_bot.verify(&data, NOW),
+            Err(TelegramInitDataError::InvalidSignature)
+        );
+        let hmac_only = signed_init_data(NOW, r#"{"id":42}"#);
+        assert_eq!(
+            verifier.verify(&hmac_only, NOW),
+            Err(TelegramInitDataError::MissingSignature)
+        );
+        assert!(TelegramInitDataVerifier::for_production_bot(123456, 300).is_some());
+        assert!(TelegramInitDataVerifier::for_production_bot(0, 300).is_none());
+    }
+
+    #[test]
+    fn public_signature_still_requires_fresh_human_provider_evidence() {
+        for (date, user, expected) in [
+            (NOW - 301, r#"{"id":42}"#, TelegramInitDataError::Expired),
+            (
+                NOW + 31,
+                r#"{"id":42}"#,
+                TelegramInitDataError::FutureAuthDate,
+            ),
+            (NOW, r#"{"id":0}"#, TelegramInitDataError::InvalidUser),
+            (
+                NOW,
+                r#"{"id":42,"is_bot":true}"#,
+                TelegramInitDataError::BotUser,
+            ),
+        ] {
+            let (verifier, data) = public_fixture(123456, date, user);
+            assert_eq!(verifier.verify(&data, NOW), Err(expected));
+        }
+        let (verifier, data) = public_fixture(123456, NOW, r#"{"id":42}"#);
+        assert_eq!(
+            verifier.verify(&format!("{data}&auth_date={NOW}"), NOW),
+            Err(TelegramInitDataError::DuplicateField)
         );
     }
 }
