@@ -383,6 +383,12 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.ais.failure.unavailable":
     "Вход сейчас недоступен. Попробуйте чуть позже.",
   "identity.ais.failure.other": "Вход не завершился. Попробуйте ещё раз.",
+  "identity.legacy.summary":
+    "Есть Bond с паролем здесь? Перенесите его в aiaiaiai",
+  "identity.legacy.note":
+    "Войдите этим pub_dress и паролем один раз: Bond перейдёт к вашей идентичности aiaiaiai, и дальше вход будет только через aiaiaiai.",
+  "identity.legacy.noBond":
+    "Bond с таким pub_dress нет. Новые Bond создаются через aiaiaiai.",
   "identity.migration.title": "Перенести этот Bond в aiaiaiai",
   "identity.migration.lede":
     "Ваш Bond сохраняет имя, Avaia, опыт и всё остальное; меняется только способ входа.",

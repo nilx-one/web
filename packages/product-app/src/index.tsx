@@ -642,6 +642,10 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         input.pubDress,
         input.password,
       ),
+    // A browser password verifies an existing Bond before the move.
+    onSuccess: (result) => {
+      if (browserHost && result.kind === "authenticated") migrateToAis();
+    },
   });
 
   const providerRegistration = useMutation({
@@ -1183,6 +1187,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         break;
       }
       case "register": {
+        // New Bonds are created through aiaiaiai, never with a password here.
+        if (browserHost) return;
         const pubDress = resolvedNativePubDress();
         if (pubDress === undefined) {
           return;

@@ -48,6 +48,12 @@ export const IDENTITY_EN = {
   "identity.ais.failure.unavailable":
     "Sign-in is unavailable right now. Try again shortly.",
   "identity.ais.failure.other": "Sign-in did not complete. Try again.",
+  "identity.legacy.summary":
+    "Have a Bond with a password here? Move it to aiaiaiai",
+  "identity.legacy.note":
+    "Sign in with that pub_dress and password once: the Bond moves to your aiaiaiai identity, and from then on you sign in only through aiaiaiai.",
+  "identity.legacy.noBond":
+    "No Bond with this pub_dress. New Bonds are created through aiaiaiai.",
   "identity.migration.title": "Move this Bond to aiaiaiai",
   "identity.migration.lede":
     "Your Bond keeps its name, Avaia, experience and everything else; only how you sign in changes.",
@@ -269,6 +275,12 @@ export const IDENTITY_UK: Readonly<Record<keyof typeof IDENTITY_EN, string>> = {
   "identity.ais.failure.unavailable":
     "Вхід зараз недоступний. Спробуйте трохи згодом.",
   "identity.ais.failure.other": "Вхід не завершився. Спробуйте ще раз.",
+  "identity.legacy.summary":
+    "Маєте Bond із паролем тут? Перенесіть його в aiaiaiai",
+  "identity.legacy.note":
+    "Увійдіть цим pub_dress і паролем один раз: Bond перейде до вашої ідентичності aiaiaiai, і далі вхід буде лише через aiaiaiai.",
+  "identity.legacy.noBond":
+    "Bond із таким pub_dress немає. Нові Bond створюються через aiaiaiai.",
   "identity.migration.title": "Перенести цей Bond до aiaiaiai",
   "identity.migration.lede":
     "Ваш Bond зберігає ім’я, Avaia, досвід і все інше; змінюється лише спосіб входу.",

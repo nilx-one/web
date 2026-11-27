@@ -324,7 +324,8 @@ function AvatarChoiceView({
 }
 
 function IdentityForm({
-  identity,
+  identity: formIdentity,
+  legacyOnly = false,
   password,
   selection,
   pubDressLabelDerivation,
@@ -334,6 +335,12 @@ function IdentityForm({
   ...actions
 }: {
   identity: Extract<IdentityViewState, { kind: "form" }>;
+  /**
+   * Only an existing Bond may sign in here, and only to move to aiaiaiai: a
+   * free pub_dress is not offered for registration, because new Bonds are
+   * created through aiaiaiai.
+   */
+  legacyOnly?: boolean;
   password: string;
   pubDressLabelDerivation: CorePubDressLabelResult | undefined;
   pubDressLabelDerivationPending: boolean;
@@ -347,6 +354,14 @@ function IdentityForm({
   onSubmit(): void;
 }) {
   const { t } = useLocalization();
+  const identity: Extract<IdentityViewState, { kind: "form" }> =
+    legacyOnly && formIdentity.mode === "register"
+      ? {
+          ...formIdentity,
+          mode: "initial",
+          status: { kind: "invalid", detail: t("identity.legacy.noBond") },
+        }
+      : formIdentity;
   const [suffix, setSuffix] = useState("");
   const url = createPubDressUrlViewState({
     selection,
@@ -426,7 +441,9 @@ export function IdentityFoundationView({
   const identity = viewModel.identity;
   const legacySignInId = useId();
   const [legacySignInOpen, setLegacySignInOpen] = useState(
-    aisSignIn?.failure === "address-taken",
+    aisSignIn?.failure === "address-taken" ||
+      (identity.kind === "form" &&
+        (identity.mode === "remembered" || identity.error !== undefined)),
   );
   const aisPrimary =
     aisSignIn !== undefined &&
@@ -490,6 +507,19 @@ export function IdentityFoundationView({
             {aisSignIn !== undefined && viewModel.identity.kind === "form" ? (
               <AisSignIn ais={aisSignIn} />
             ) : null}
+            {viewModel.showProviderRow ? (
+              <>
+                {aisSignIn !== undefined && identity.kind === "form" ? (
+                  <div className="identity-divider" aria-hidden="true">
+                    <span>{t("identity.or")}</span>
+                  </div>
+                ) : null}
+                <ProviderRow auth={browserProviderAuth} />
+                <div className="identity-divider" aria-hidden="true">
+                  <span>{t("identity.or")}</span>
+                </div>
+              </>
+            ) : null}
             {aisPrimary ? (
               <button
                 className="identity-legacy-toggle"
@@ -498,7 +528,7 @@ export function IdentityFoundationView({
                 aria-controls={legacySignInId}
                 onClick={() => setLegacySignInOpen((open) => !open)}
               >
-                {t("identity.ais.legacySignIn")}
+                {t("identity.legacy.summary")}
               </button>
             ) : null}
             <div
@@ -506,18 +536,8 @@ export function IdentityFoundationView({
               className="identity-legacy-controls"
               hidden={!showLegacySignIn}
             >
-              {showLegacySignIn && viewModel.showProviderRow ? (
-                <>
-                  {aisSignIn !== undefined && identity.kind === "form" ? (
-                    <div className="identity-divider" aria-hidden="true">
-                      <span>{t("identity.or")}</span>
-                    </div>
-                  ) : null}
-                  <ProviderRow auth={browserProviderAuth} />
-                  <div className="identity-divider" aria-hidden="true">
-                    <span>{t("identity.or")}</span>
-                  </div>
-                </>
+              {aisPrimary && legacySignInOpen ? (
+                <p className="identity-status">{t("identity.legacy.note")}</p>
               ) : null}
               {viewModel.identity.kind === "provider-password" &&
               passwordHandoff !== undefined ? (
@@ -542,6 +562,7 @@ export function IdentityFoundationView({
                 showLegacySignIn ? (
                   <IdentityForm
                     identity={viewModel.identity}
+                    legacyOnly={aisSignIn !== undefined}
                     password={password}
                     pubDressLabelDerivation={pubDressLabelDerivation}
                     pubDressLabelDerivationPending={

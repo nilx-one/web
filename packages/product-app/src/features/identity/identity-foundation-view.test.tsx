@@ -730,8 +730,11 @@ describe("sign in through aiaiaiai", () => {
 
   const form = {
     kind: "form",
-    mode: "register",
-    status: { kind: "available", detail: "Available — create this identity" },
+    mode: "sign-in",
+    status: {
+      kind: "registered",
+      detail: "Registered — sign in to this identity",
+    },
     busy: false,
   };
 
@@ -747,7 +750,7 @@ describe("sign in through aiaiaiai", () => {
       document.querySelector('input[type="password"]'),
     ).not.toBeInTheDocument();
     const toggle = screen.getByRole("button", {
-      name: "Use an existing 0x1 Bond",
+      name: "Have a Bond with a password here? Move it to aiaiaiai",
     });
     toggle.focus();
     fireEvent.click(toggle);
@@ -780,5 +783,49 @@ describe("sign in through aiaiaiai", () => {
     expect(
       screen.queryByRole("link", { name: "Sign in with aiaiaiai" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the password form folded away, only for moving an existing Bond", () => {
+    view(
+      {
+        ...form,
+        mode: "initial",
+        status: { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+      },
+      { href: "/api/v1/auth/aiaiaiai/start?return=%2F" },
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Have a Bond with a password here? Move it to aiaiaiai",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("pub_dress")).not.toBeInTheDocument();
+  });
+
+  it("never offers to create a Bond with a password when aiaiaiai signs people in", () => {
+    view(
+      {
+        ...form,
+        mode: "register",
+        status: {
+          kind: "available",
+          detail: "Available — create this identity",
+        },
+      },
+      { href: "/api/v1/auth/aiaiaiai/start?return=%2F" },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Have a Bond with a password here? Move it to aiaiaiai",
+      }),
+    );
+    expect(
+      screen.queryByText("Available — create this identity"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No Bond with this pub_dress. New Bonds are created through aiaiaiai.",
+      ),
+    ).toBeInTheDocument();
   });
 });
