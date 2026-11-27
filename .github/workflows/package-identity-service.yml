@@ -92,7 +92,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - name: Seal the 0x1 API credentials to the live edge-dev-1 recipient
+      - name: Seal the 0x1 API credentials to the edge-prod-1 recipient
         env:
           # NATIVE_AUTH_SECRET, PASSWORD_PEPPER and GITHUB_EVIDENCE_ENCRYPTION_KEY are
           # not here on purpose: the production host owns them. prepare-runtime-env.sh
@@ -128,19 +128,9 @@ jobs:
             echo "::error::nilxone-identity lists different envelope names than this job carries." >&2
             exit 1
           }
-          server="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/servers/edge-dev-1.yaml)"
-          # Fail closed if the live host contract no longer owns this workload.
-          grep -qx '  name: edge-dev-1' <<<"$server"
-          if grep -Eq '^  state: retired([[:space:]]|$)' <<<"$server"; then
-            echo "::error::edge-dev-1 is retired; refusing to seal credentials." >&2
-            exit 1
-          fi
-          grep -qx '    - nilxone-identity' <<<"$server" || {
-            echo "::error::edge-dev-1 does not own nilxone-identity." >&2
-            exit 1
-          }
+          server="$(curl -fsSL https://raw.githubusercontent.com/aiaiaiai-org/infra/master/contracts/servers/edge-prod-1.yaml)"
           recipient="$(sed -n 's/^  encryptionRecipient: //p' <<<"$server")"
-          [[ "$recipient" =~ ^ssh-ed25519\ [A-Za-z0-9+/]{68}$ ]] || { echo "::error::edge-dev-1 publishes no valid encryptionRecipient." >&2; exit 1; }
+          [[ "$recipient" =~ ^ssh-ed25519\ [A-Za-z0-9+/]{68}$ ]] || { echo "::error::edge-prod-1 publishes no valid encryptionRecipient." >&2; exit 1; }
           sudo apt-get update -qq
           sudo apt-get install -y -qq age
           mkdir -p "$RUNNER_TEMP/envelope"

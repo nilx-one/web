@@ -323,6 +323,25 @@ mod tests {
     }
 
     #[test]
+    fn production_constructor_pins_the_documented_telegram_key() {
+        let verifier = TelegramInitDataVerifier::for_production_bot(123456, 600).unwrap();
+        let TelegramProof::PublicSignature { bot_id, key } = verifier.proof else {
+            panic!("production must not use HMAC");
+        };
+        assert_eq!(bot_id, 123456);
+        assert_eq!(verifier.max_age_seconds, 300);
+        let hex = key
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(
+            hex,
+            "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"
+        );
+    }
+
+    #[test]
     fn verifies_signature_freshness_and_user() {
         let verifier = TelegramInitDataVerifier::new(TOKEN.to_owned(), 300);
         let init_data = signed_init_data(NOW - 20, r#"{"id":42,"first_name":"Sasha"}"#);
