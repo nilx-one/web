@@ -128,10 +128,16 @@ function createNativeHost(authenticated = true): HostPort {
   };
 }
 
+/**
+ * The identity service answers as the Bond that just signed in. The world only
+ * reads the Avaia profile for a context the service confirms as authenticated,
+ * so a fixture that lets a sign-in succeed while its context stays anonymous
+ * describes a session no service would hold.
+ */
 function createIdentity(
   overrides: Partial<IdentityAccessPort> = {},
 ): IdentityAccessPort {
-  return withConfiguredAvaia({
+  const base = withConfiguredAvaia<IdentityAccessPort>({
     acknowledgeRecoveryKey: async () => ({ kind: "service-unavailable" }),
     authenticateNative: async () => ({ kind: "service-unavailable" }),
     forgetRememberedBond: async () => ({ kind: "completed" }),
@@ -153,6 +159,35 @@ function createIdentity(
     }),
     ...overrides,
   });
+  let session: Awaited<ReturnType<IdentityAccessPort["readNativeContext"]>> = {
+    kind: "anonymous",
+  };
+  let signedIn = false;
+  return {
+    ...base,
+    authenticateNative: async (pubDress, password) => {
+      const result = await base.authenticateNative(pubDress, password);
+      if (result.kind === "authenticated") {
+        session = result;
+        signedIn = true;
+      }
+      return result;
+    },
+    registerNative: async (pubDress, password, idempotencyKey) => {
+      const result = await base.registerNative(
+        pubDress,
+        password,
+        idempotencyKey,
+      );
+      if (result.kind === "authenticated") {
+        session = result;
+        signedIn = true;
+      }
+      return result;
+    },
+    readNativeContext: async () =>
+      signedIn ? session : await base.readNativeContext(),
+  };
 }
 
 describe("ProductApp identity", () => {
