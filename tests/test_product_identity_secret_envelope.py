@@ -3,6 +3,7 @@
 """Product-owned Telegram credential delivery contract."""
 
 from pathlib import Path
+import subprocess
 import unittest
 
 
@@ -26,6 +27,56 @@ class ProductSecretDeliveryTests(unittest.TestCase):
         self.assertNotIn("secrets.SSH_PRIVATE_KEY", workflow)
         self.assertNotIn("secrets.NATIVE_AUTH_SECRET", workflow)
         self.assertNotIn("secrets.PASSWORD_PEPPER", workflow)
+
+
+    def test_recipient_guard_uses_only_live_owning_contract(self):
+        recipient = "ssh-ed25519 " + "A" * 68
+        valid = (
+            "apiVersion: infra.nilx.one/v1\n"
+            "kind: ServerContract\n"
+            "metadata:\n"
+            "  name: edge-dev-1\n"
+            "spec:\n"
+            "  role: public-edge\n"
+            f"  encryptionRecipient: {recipient}\n"
+            "  workloads:\n"
+            "    - nilxone-identity\n"
+        )
+        command = ["bash", "scripts/identity-envelope-recipient.sh"]
+        result = subprocess.run(command, input=valid, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), recipient)
+        invalid = {
+            "wrong host": valid.replace("edge-dev-1", "edge-prod-1"),
+            "retired": valid.replace("spec:\n", "spec:\n  state: retired\n"),
+            "wrong list": valid.replace("workloads:", "retiredWorkloads:"),
+            "missing workload": valid.replace("nilxone-identity", "nilxone-web"),
+            "unowned but elsewhere": valid.replace(
+                "    - nilxone-identity\n",
+                "    - nilxone-web\n  previous:\n    - nilxone-identity\n",
+            ),
+            "duplicate recipient": valid.replace(
+                "  workloads:", f"  encryptionRecipient: {recipient}\n  workloads:"
+            ),
+            "invalid key": valid.replace(recipient, "ssh-rsa invalid"),
+        }
+        for label, contract in invalid.items():
+            with self.subTest(label=label):
+                result = subprocess.run(
+                    command, input=contract, text=True, capture_output=True
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("::error::", result.stderr)
+
+    def test_envelope_checks_reviewed_revision_and_live_contract(self):
+        workflow = Path(".github/workflows/package-identity-service.yml").read_text()
+        self.assertIn("infra_revision=88c4ac6f9a0c8270ea14ca411dcefa730776c990", workflow)
+        self.assertIn("verified_contract servers/edge-dev-1.yaml", workflow)
+        self.assertIn("verified_contract services/nilxone-identity.yaml", workflow)
+        self.assertIn('[[ "$pinned" != "$current" ]]', workflow)
+        self.assertIn("scripts/identity-envelope-recipient.sh", workflow)
+        self.assertNotIn("contracts/servers/edge-prod-1.yaml", workflow)
 
 
 if __name__ == "__main__":
