@@ -197,68 +197,30 @@ describe("ProductApp identity", () => {
     expect(results.violations).toEqual([]);
   });
 
-  it("adapts one browser form from availability to direct registration", async () => {
+  it("directs unregistered browser addresses to aiaiaiai", async () => {
     const user = userEvent.setup();
-    const registerNative = vi
-      .fn<IdentityAccessPort["registerNative"]>()
-      .mockResolvedValue({
-        kind: "authenticated",
-        identity: { pubDress: "0xaSky" },
-      });
-    const acknowledgeRecoveryKey = vi
-      .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
-      .mockResolvedValue({
-        kind: "authenticated",
-        identity: { pubDress: "0xaSky" },
-      });
-    const identity = createIdentity({
-      registerNative,
-      acknowledgeRecoveryKey,
-    });
-
+    const registerNative = vi.fn<IdentityAccessPort["registerNative"]>();
     render(
-      <ProductApp core={readyCore} host={createHost()} identity={identity} />,
+      <ProductApp
+        core={readyCore}
+        host={createHost()}
+        identity={createIdentity({ registerNative })}
+      />,
     );
-    const discriminator = await screen.findByRole("combobox", {
-      name: "pub_dress hexadecimal discriminator",
-    });
-    expect(discriminator).toHaveValue("0");
-    expect(discriminator.querySelector('option[value="0"]')).not.toBeNull();
-    await user.selectOptions(discriminator, "a");
+    await user.click(
+      await screen.findByText(
+        "Have a Bond with a password here? Move it to aiaiaiai",
+      ),
+    );
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
-    await screen.findByText(
-      "Available — create this identity",
-      {},
-      { timeout: 2_000 },
-    );
     await user.keyboard("{Enter}");
-    await user.type(
-      await screen.findByLabelText("Password"),
-      "a deliberately long password",
+    await screen.findByText(
+      "No Bond with this pub_dress. New Bonds are created through aiaiaiai.",
+      {},
+      { timeout: 3_000 },
     );
-    const create = screen.getByRole("button", { name: "Create 0xaSky" });
-    expect(create).toBeEnabled();
-    await user.click(create);
-
-    expect(registerNative).toHaveBeenCalledWith(
-      "0xaSky",
-      "a deliberately long password",
-      expect.any(String),
-    );
-    expect(acknowledgeRecoveryKey).not.toHaveBeenCalled();
-    expect(screen.queryByText(/recovery key/i)).not.toBeInTheDocument();
-    // A new Bond is asked for a body once, before its world opens. Deciding
-    // later is an answer, and it opens the world with no model recorded.
-    expect(
-      await screen.findByRole("heading", { name: "Choose your body." }),
-    ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Decide later" }));
-    expect(
-      await screen.findByRole("button", {
-        name: "Take the wheel as 0xaSky",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Authenticated as/)).toBeNull();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(registerNative).not.toHaveBeenCalled();
   });
 
   it("switches an existing exact address to native sign-in", async () => {
@@ -296,6 +258,9 @@ describe("ProductApp identity", () => {
   });
 
   it("switches the Bond atomically when saved credentials contain another pub_dress", async () => {
+    const migration = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 503 }));
     const resolvePubDress = vi
       .fn<IdentityAccessPort["resolvePubDress"]>()
       .mockImplementation(async (selection) => ({
@@ -357,12 +322,12 @@ describe("ProductApp identity", () => {
       ),
     );
     expect(registerNative).not.toHaveBeenCalled();
-    expect(
-      await screen.findByRole("button", {
-        name: "Take the wheel as 0xfrSb2",
-      }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Authenticated as/)).toBeNull();
+    await waitFor(() =>
+      expect(migration).toHaveBeenCalledWith(
+        "/api/v1/auth/aiaiaiai/migrate/start",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
   });
 
   it("submits saved-password autofill for the already entered pub_dress", async () => {
@@ -405,7 +370,7 @@ describe("ProductApp identity", () => {
     );
   });
 
-  it("requires explicit creation after filling an available saved username", async () => {
+  it("does not create a browser Bond after saved credentials are filled", async () => {
     const registerNative = vi
       .fn<IdentityAccessPort["registerNative"]>()
       .mockResolvedValue({
@@ -442,25 +407,23 @@ describe("ProductApp identity", () => {
       inputType: "insertReplacementText",
     });
 
-    const create = await screen.findByRole("button", { name: "Create 0xaSky" });
-    await waitFor(() => expect(create).toBeEnabled());
-    expect(registerNative).not.toHaveBeenCalled();
-    fireEvent.click(create);
-    await waitFor(() =>
-      expect(registerNative).toHaveBeenCalledWith(
-        "0xaSky",
-        "stored-secret",
-        expect.any(String),
-      ),
+    fireEvent.submit(username.closest("form")!);
+    await screen.findByText(
+      "No Bond with this pub_dress. New Bonds are created through aiaiaiai.",
+      {},
+      { timeout: 3_000 },
     );
-    await screen.findByRole("heading", { name: "Choose your body." });
+    expect(
+      screen.queryByRole("button", { name: "Create 0xaSky" }),
+    ).toBeDisabled();
+    expect(registerNative).not.toHaveBeenCalled();
   });
 
   it("waits for a typing pause unless the mobile go action resolves now", async () => {
     const user = userEvent.setup();
     const resolvePubDress = vi
       .fn<IdentityAccessPort["resolvePubDress"]>()
-      .mockResolvedValue({ kind: "available", pubDress: "0x0sky" });
+      .mockResolvedValue({ kind: "registered", pubDress: "0x0sky" });
     render(
       <ProductApp
         core={readyCore}
@@ -475,7 +438,7 @@ describe("ProductApp identity", () => {
     expect(resolvePubDress).not.toHaveBeenCalled();
 
     await user.keyboard("{Enter}");
-    await screen.findByText("Available — create this identity");
+    await screen.findByLabelText("Password");
     expect(resolvePubDress).toHaveBeenCalledOnce();
     const password = await screen.findByLabelText(
       "Password",
@@ -739,6 +702,7 @@ describe("ProductApp identity", () => {
     });
     await user.selectOptions(discriminator, "a");
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
+    await user.keyboard("{Enter}");
     await screen.findByText(
       "Available — create this identity",
       {},
@@ -1089,96 +1053,6 @@ describe("ProductApp identity", () => {
         value: width,
       });
     }
-  });
-
-  it("offers a body once a Bond exists, and remembers what it chose", async () => {
-    const user = userEvent.setup();
-    let avatarModel:
-      Parameters<IdentityAccessPort["chooseAvatarModel"]>[0] | undefined;
-    const chooseAvatarModel = vi
-      .fn<IdentityAccessPort["chooseAvatarModel"]>()
-      .mockImplementation(async (model) => {
-        avatarModel = model;
-        return {
-          kind: "chosen",
-          identity: { pubDress: "0xaSky", avatarModel: model },
-        };
-      });
-    const registerNative = vi
-      .fn<IdentityAccessPort["registerNative"]>()
-      .mockResolvedValue({
-        kind: "authenticated",
-        identity: { pubDress: "0xaSky" },
-      });
-    const acknowledgeRecoveryKey = vi
-      .fn<IdentityAccessPort["acknowledgeRecoveryKey"]>()
-      .mockImplementation(async () => ({
-        kind: "authenticated",
-        identity: {
-          pubDress: "0xaSky",
-          ...(avatarModel === undefined ? {} : { avatarModel }),
-        },
-      }));
-
-    render(
-      <ProductApp
-        core={readyCore}
-        host={createHost()}
-        identity={createIdentity({
-          registerNative,
-          acknowledgeRecoveryKey,
-          chooseAvatarModel,
-          // The session survives the choice, so the refreshed context is what
-          // carries the Bond — and the body it now has — into the world.
-          readNativeContext: async () =>
-            avatarModel === undefined
-              ? { kind: "anonymous" }
-              : {
-                  kind: "authenticated",
-                  identity: { pubDress: "0xaSky", avatarModel },
-                },
-        })}
-      />,
-    );
-
-    const discriminator = await screen.findByRole("combobox", {
-      name: "pub_dress hexadecimal discriminator",
-    });
-    await user.selectOptions(discriminator, "a");
-    await user.type(screen.getByLabelText("pub_dress"), "Sky");
-    await screen.findByText(
-      "Available — create this identity",
-      {},
-      { timeout: 2_000 },
-    );
-    await user.keyboard("{Enter}");
-    await user.type(
-      await screen.findByLabelText("Password"),
-      "a deliberately long password",
-    );
-    await user.click(screen.getByRole("button", { name: "Create 0xaSky" }));
-    expect(acknowledgeRecoveryKey).not.toHaveBeenCalled();
-    // Body choice is 0x1 onboarding, after authentication has completed.
-    expect(
-      await screen.findByRole("heading", { name: "Choose your body." }),
-    ).toBeVisible();
-    for (const study of ["Sky", "Dasha", "Kai", "Dasha 2.0"]) {
-      expect(
-        screen.getByRole("button", {
-          name: new RegExp(`${study}(?! 2\\.0)`),
-        }),
-      ).toBeVisible();
-    }
-
-    await user.click(screen.getByRole("button", { name: /Kai/ }));
-
-    expect(chooseAvatarModel).toHaveBeenCalledExactlyOnceWith("kai-study");
-    // Choosing ends the step: the world opens with that body recorded.
-    expect(
-      await screen.findByRole("button", {
-        name: "Take the wheel as 0xaSky",
-      }),
-    ).toBeVisible();
   });
 
   it("chooses an avatar study from the profile and stands it in the world", async () => {
