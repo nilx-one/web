@@ -1,6 +1,7 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
+import type { AvaiaProfileAccessPort } from "@nilx-one/application";
 import {
   UNSUPPORTED_GEOLOCATION,
   type GeolocationCapability,
@@ -253,4 +254,30 @@ export function createFogFieldDouble(
       for (const listener of [...listeners]) listener();
     },
   };
+}
+
+/**
+ * An identity client whose owner has a configured Avaia. The world hands the
+ * wheel to the Avaia only once a configured profile is confirmed, so a fixture
+ * that expects her at the wheel has to say so instead of inheriting it. A
+ * client that already answers for the profile keeps its own answers.
+ */
+export function withConfiguredAvaia<Identity extends object>(
+  identity: Identity,
+  owner = "0x0sky",
+  avaia = "x0skai",
+): Identity & AvaiaProfileAccessPort {
+  const base: AvaiaProfileAccessPort = {
+    readAvaiaProfile: async () => ({
+      kind: "available",
+      profile: {
+        pubDress: avaia,
+        ownerPubDress: owner,
+        configurationState: "configured",
+      },
+    }),
+    updateAvaiaProfile: async () => ({ kind: "service-unavailable" }),
+    publishAvaiaLocation: async () => ({ kind: "service-unavailable" }),
+  };
+  return { ...base, ...identity };
 }

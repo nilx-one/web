@@ -243,9 +243,19 @@ function renderView(overrides: ViewOverrides = {}) {
     ...(overrides.onAvatarChoice === undefined
       ? {}
       : { onAvatarChoice: overrides.onAvatarChoice }),
-    ...(overrides.avaiaSetup === undefined
-      ? {}
-      : { avaiaSetup: overrides.avaiaSetup }),
+    avaiaSetup:
+      overrides.avaiaSetup ??
+      createAvaiaSetupViewState({
+        load: {
+          kind: "available",
+          profile: {
+            pubDress: overrides.avaiaPubDress ?? "x0skai",
+            ownerPubDress: "0x0sky",
+            configurationState: "configured",
+          },
+        },
+        pending: false,
+      }),
     ...(overrides.onBringAvaia === undefined
       ? {}
       : { onBringAvaia: overrides.onBringAvaia }),
@@ -3257,6 +3267,38 @@ describe("AuthenticatedMapHomeView", () => {
             ),
           ),
       ).toBe(true);
+    });
+
+    it("ignores closed-cell taps with the Bond at the wheel", async () => {
+      vi.useFakeTimers();
+      const fog = createFogFieldDouble();
+      const mapRenderer = Object.assign(
+        createMapRendererDouble({ kind: "ready" }),
+        { fog, setFogMarks: vi.fn() },
+      );
+      avaiaStandsAt(here);
+      renderView({
+        mapRenderer,
+        findItems: nearbyProximityCore(),
+        geolocation: createGeolocationDouble({ position: here }),
+      });
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Map centred on this device" }),
+        ).toBeVisible(),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Take the wheel as 0x0sky" }),
+      );
+      act(() => vi.advanceTimersByTime(5_000));
+      const next = fog.cellAt(there).id;
+      expect(fog.isRevealed(next)).toBe(false);
+      act(() => mapRenderer.tapGround({ ...there, ground: "fog" }));
+      expect(
+        screen.queryByRole("dialog", { name: "Reveal this patch of fog?" }),
+      ).toBeNull();
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(fog.isRevealed(next)).toBe(false);
     });
 
     it("closes the fog prompt when a person moves the camera themselves", async () => {

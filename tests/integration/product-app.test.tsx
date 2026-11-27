@@ -27,7 +27,10 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createMapRendererDouble } from "../support/doubles";
+import {
+  createMapRendererDouble,
+  withConfiguredAvaia,
+} from "../support/doubles";
 
 const readyCore: CoreRuntimePort = {
   probe: async () => ({ kind: "ready", contractVersion: "0.1.0" }),
@@ -128,7 +131,7 @@ function createNativeHost(authenticated = true): HostPort {
 function createIdentity(
   overrides: Partial<IdentityAccessPort> = {},
 ): IdentityAccessPort {
-  return {
+  return withConfiguredAvaia<IdentityAccessPort>({
     acknowledgeRecoveryKey: async () => ({ kind: "service-unavailable" }),
     authenticateNative: async () => ({ kind: "service-unavailable" }),
     forgetRememberedBond: async () => ({ kind: "completed" }),
@@ -149,7 +152,7 @@ function createIdentity(
       pubDress: formatPubDress(selection),
     }),
     ...overrides,
-  };
+  });
 }
 
 describe("ProductApp identity", () => {

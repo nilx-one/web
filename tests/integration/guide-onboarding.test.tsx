@@ -401,7 +401,12 @@ describe("xSasha, the first time a Bond opens the world", () => {
       withoutAvaiaProfile(createIdentity()),
     );
 
-    await screen.findByRole("button", { name: "Take the wheel as 0x0sky" });
+    // The Bond keeps the wheel: no profile was confirmed, so no Avaia is
+    // handed one.
+    await screen.findByRole("button", { name: "Edit 0x0sky" });
+    expect(
+      screen.queryByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toBeNull();
     await act(() => new Promise((resolve) => setTimeout(resolve, 2_400)));
     expect(document.querySelector(".guide-cutscene")).toBeNull();
   }, 10_000);

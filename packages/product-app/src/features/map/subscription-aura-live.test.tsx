@@ -13,6 +13,7 @@ import {
   createMapRendererDouble,
   observation,
 } from "../../../../../tests/support/doubles";
+import { createAvaiaSetupViewState } from "../avaia/avaia-setup-view-model";
 import { createAvatarChoiceViewState } from "../identity/avatar-choice-view-model";
 import { SubscriptionStatusProvider } from "../subscription/subscription-status";
 import {
@@ -79,6 +80,17 @@ it("syncs subscription tiers for cached bodies without zooming", async () => {
         hostLabel="browser host"
         pubDress="0x0sky"
         avaiaPubDress="x0skai"
+        avaiaSetup={createAvaiaSetupViewState({
+          load: {
+            kind: "available",
+            profile: {
+              pubDress: "x0skai",
+              ownerPubDress: "0x0sky",
+              configurationState: "configured",
+            },
+          },
+          pending: false,
+        })}
         renderer={renderer}
         geolocation={geolocation}
         avatarChoice={createAvatarChoiceViewState("sky-study", undefined)}

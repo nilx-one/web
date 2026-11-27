@@ -27,6 +27,7 @@ import {
   createGeolocationDouble,
   createMapRendererDouble,
   observation,
+  withConfiguredAvaia,
   type GeolocationDouble,
 } from "../support/doubles";
 
@@ -53,7 +54,7 @@ function createHost(geolocation: GeolocationCapability): HostPort {
 }
 
 function createAuthenticatedIdentity(): IdentityAccessPort {
-  return {
+  return withConfiguredAvaia({
     acknowledgeRecoveryKey: async () => ({ kind: "service-unavailable" }),
     authenticateNative: async () => ({ kind: "service-unavailable" }),
     forgetRememberedBond: async () => ({ kind: "completed" }),
@@ -73,7 +74,7 @@ function createAuthenticatedIdentity(): IdentityAccessPort {
     resolvePubDressLabel: async (label) => ({ kind: "available", label }),
     linkTelegramProvider: async () => ({ kind: "linked" }),
     resolvePubDress: async () => ({ kind: "service-unavailable" }),
-  };
+  });
 }
 
 function createMapRenderer(): MapRenderer {
