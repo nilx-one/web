@@ -1147,10 +1147,7 @@ export function AuthenticatedMapHomeView({
   const [chosenWheel, setChosenWheel] = useState<DockSeat | undefined>(
     undefined,
   );
-  if (
-    chosenWheel === undefined &&
-    avaiaConfiguration !== undefined
-  ) {
+  if (chosenWheel === undefined && avaiaConfiguration !== undefined) {
     setChosenWheel(openingWheel(avaiaConfiguration));
   }
   const wheel: DockSeat =
