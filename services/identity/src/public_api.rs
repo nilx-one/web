@@ -580,10 +580,11 @@ mod tests {
             .configure_owned_avaia(&address, &avaia, 100)
             .await
             .expect("explicit Avaia creation");
-        assert!(repository
+        let chosen = repository
             .set_avatar_model(address.as_str(), "sky-study")
             .await
-            .expect("choose the Bond's human study"));
+            .expect("choose the Bond's human study");
+        assert!(chosen);
         let coordinate =
             crate::GeoCoordinate::from_degrees(30.5234, 50.4501).expect("valid coordinate");
         repository
