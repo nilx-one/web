@@ -324,7 +324,8 @@ function AvatarChoiceView({
 }
 
 function IdentityForm({
-  identity,
+  identity: formIdentity,
+  legacyOnly = false,
   password,
   selection,
   pubDressLabelDerivation,
@@ -334,6 +335,12 @@ function IdentityForm({
   ...actions
 }: {
   identity: Extract<IdentityViewState, { kind: "form" }>;
+  /**
+   * Only an existing Bond may sign in here, and only to move to aiaiaiai: a
+   * free pub_dress is not offered for registration, because new Bonds are
+   * created through aiaiaiai.
+   */
+  legacyOnly?: boolean;
   password: string;
   pubDressLabelDerivation: CorePubDressLabelResult | undefined;
   pubDressLabelDerivationPending: boolean;
@@ -347,6 +354,14 @@ function IdentityForm({
   onSubmit(): void;
 }) {
   const { t } = useLocalization();
+  const identity: Extract<IdentityViewState, { kind: "form" }> =
+    legacyOnly && formIdentity.mode === "register"
+      ? {
+          ...formIdentity,
+          mode: "initial",
+          status: { kind: "invalid", detail: t("identity.legacy.noBond") },
+        }
+      : formIdentity;
   const [suffix, setSuffix] = useState("");
   const url = createPubDressUrlViewState({
     selection,
@@ -508,20 +523,55 @@ export function IdentityFoundationView({
                 onSubmit={onSubmit}
               />
             ) : viewModel.identity.kind === "form" ? (
-              <IdentityForm
-                identity={viewModel.identity}
-                password={password}
-                pubDressLabelDerivation={pubDressLabelDerivation}
-                pubDressLabelDerivationPending={pubDressLabelDerivationPending}
-                pubDressUrlResolution={pubDressUrlResolution}
-                selection={selection}
-                onCredentialAutofill={onCredentialAutofill}
-                onForgetRemembered={onForgetRemembered}
-                onPasswordChange={onPasswordChange}
-                onResolvePubDress={onResolvePubDress}
-                onSelectionChange={onSelectionChange}
-                onSubmit={onSubmit}
-              />
+              aisSignIn === undefined ? (
+                <IdentityForm
+                  identity={viewModel.identity}
+                  password={password}
+                  pubDressLabelDerivation={pubDressLabelDerivation}
+                  pubDressLabelDerivationPending={
+                    pubDressLabelDerivationPending
+                  }
+                  pubDressUrlResolution={pubDressUrlResolution}
+                  selection={selection}
+                  onCredentialAutofill={onCredentialAutofill}
+                  onForgetRemembered={onForgetRemembered}
+                  onPasswordChange={onPasswordChange}
+                  onResolvePubDress={onResolvePubDress}
+                  onSelectionChange={onSelectionChange}
+                  onSubmit={onSubmit}
+                />
+              ) : (
+                // pub_dress and password are entered at auth.aiaiaiai.org
+                // only. A Bond that still has a password here may prove it
+                // once, to move to its aiaiaiai identity.
+                <details
+                  className="identity-legacy"
+                  open={
+                    viewModel.identity.mode === "remembered" ||
+                    viewModel.identity.error !== undefined
+                  }
+                >
+                  <summary>{t("identity.legacy.summary")}</summary>
+                  <p className="identity-status">{t("identity.legacy.note")}</p>
+                  <IdentityForm
+                    identity={viewModel.identity}
+                    legacyOnly
+                    password={password}
+                    pubDressLabelDerivation={pubDressLabelDerivation}
+                    pubDressLabelDerivationPending={
+                      pubDressLabelDerivationPending
+                    }
+                    pubDressUrlResolution={pubDressUrlResolution}
+                    selection={selection}
+                    onCredentialAutofill={onCredentialAutofill}
+                    onForgetRemembered={onForgetRemembered}
+                    onPasswordChange={onPasswordChange}
+                    onResolvePubDress={onResolvePubDress}
+                    onSelectionChange={onSelectionChange}
+                    onSubmit={onSubmit}
+                  />
+                </details>
+              )
             ) : viewModel.identity.kind === "avatar-choice" ? (
               <AvatarChoiceView
                 state={viewModel.identity}

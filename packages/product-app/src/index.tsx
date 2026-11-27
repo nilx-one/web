@@ -643,6 +643,21 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         input.password,
       ),
   });
+  // In a browser, pub_dress and password belong to auth.aiaiaiai.org. A
+  // password sign-in here only proves an existing Bond, and that proof is
+  // spent at once on moving the Bond to its aiaiaiai identity.
+  const movedAfterSignIn = useRef(false);
+  useEffect(() => {
+    if (
+      !browserHost ||
+      movedAfterSignIn.current ||
+      nativeAuthentication.data?.kind !== "authenticated"
+    ) {
+      return;
+    }
+    movedAfterSignIn.current = true;
+    migrateToAis();
+  });
 
   const providerRegistration = useMutation({
     mutationFn: (selection: PubDressSelection) =>
@@ -1183,6 +1198,8 @@ function FoundationSurface({ dependencies, section }: FoundationSurfaceProps) {
         break;
       }
       case "register": {
+        // New Bonds are created through aiaiaiai, never with a password here.
+        if (browserHost) return;
         const pubDress = resolvedNativePubDress();
         if (pubDress === undefined) {
           return;

@@ -763,4 +763,33 @@ describe("sign in through aiaiaiai", () => {
       screen.queryByRole("link", { name: "Sign in with aiaiaiai" }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps the password form folded away, only for moving an existing Bond", () => {
+    const { container } = view(
+      {
+        ...form,
+        mode: "initial",
+        status: { kind: "idle", detail: "Case-sensitive · 2–32 characters" },
+      },
+      { href: "/api/v1/auth/aiaiaiai/start?return=%2F" },
+    );
+    const legacy = container.querySelector("details.identity-legacy");
+    expect(legacy).not.toBeNull();
+    expect(legacy).not.toHaveAttribute("open");
+    expect(
+      screen.getByText("Have a Bond with a password here? Move it to aiaiaiai"),
+    ).toBeInTheDocument();
+  });
+
+  it("never offers to create a Bond with a password when aiaiaiai signs people in", () => {
+    view(form, { href: "/api/v1/auth/aiaiaiai/start?return=%2F" });
+    expect(
+      screen.queryByText("Available — create this identity"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No Bond with this pub_dress. New Bonds are created through aiaiaiai.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
