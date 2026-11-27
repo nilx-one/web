@@ -100,17 +100,6 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
 
     match state.repository.find_by_pub_dress_label(&label).await {
         Ok(Some(record)) => {
-            let avatar_model = match state
-                .repository
-                .avatar_model(&record.identity.pub_dress)
-                .await
-            {
-                Ok(value) => value,
-                Err(error) => {
-                    tracing::error!(%error, "public Bond avatar lookup failed");
-                    return unavailable();
-                }
-            };
             let owner: PubDress = match record.identity.pub_dress.parse() {
                 Ok(value) => value,
                 Err(_) => {
@@ -145,7 +134,7 @@ async fn read_public_identity(State(state): State<PublicApiState>, headers: Head
                         };
                     Some(PublicAvaiaProjection {
                         pub_dress: avaia_pub_dress.clone(),
-                        avatar_model,
+                        avatar_model: "avaia",
                         configuration_state,
                         location: location.map(|location| PublicAvaiaLocation {
                             coordinate: location.coordinate,
@@ -398,8 +387,8 @@ struct PublicExperience {
 #[derive(Debug, Serialize)]
 struct PublicAvaiaProjection {
     pub_dress: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_model: Option<String>,
+    // Outfits are device-local. The public identity exposes the shared chassis.
+    avatar_model: &'static str,
     configuration_state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     location: Option<PublicAvaiaLocation>,
@@ -591,6 +580,11 @@ mod tests {
             .configure_owned_avaia(&address, &avaia, 100)
             .await
             .expect("explicit Avaia creation");
+        let chosen = repository
+            .set_avatar_model(address.as_str(), "sky-study")
+            .await
+            .expect("choose the Bond's human study");
+        assert!(chosen);
         let coordinate =
             crate::GeoCoordinate::from_degrees(30.5234, 50.4501).expect("valid coordinate");
         repository
@@ -614,6 +608,7 @@ mod tests {
         let body = json(response).await;
         assert_eq!(body["pub_dress"], "0x1sky");
         assert_eq!(body["avaia"]["pub_dress"], "x1skai");
+        assert_eq!(body["avaia"]["avatar_model"], "avaia");
         assert_eq!(
             body["avaia"]["location"]["coordinate"]["longitude_e7"],
             "305234000"

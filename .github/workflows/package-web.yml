@@ -21,7 +21,7 @@ concurrency:
 env:
   IMAGE: ghcr.io/nilx-one/0x1-web
   DELIVERY_IMAGE: ghcr.io/nilx-one/web
-  VITE_ERRORS_COLLECTOR_ENDPOINT: https://errors.aiaiaiai.org
+  VITE_ERRORS_COLLECTOR_ENDPOINT: https://api.aiaiaiai.org/4x-errors
 
 jobs:
   package:
@@ -46,13 +46,13 @@ jobs:
             apps/site/public/core/0.1.0
             apps/telegram-mini-app/public/core/0.1.0
             apps/discord-activity/public/core/0.1.0
-          key: core-wasm-v1-${{ runner.os }}-22985e4f3cc08266b839debb3b7da6b0433d878b-wbg-0.2.127-${{ hashFiles('scripts/prepare_core_wasm_runtime.sh', 'scripts/core-wasm.Cargo.lock') }}
+          key: core-wasm-v1-${{ runner.os }}-296cd024f6cbf240ae701915709003fa80fbca1d-wbg-0.2.127-${{ hashFiles('scripts/prepare_core_wasm_runtime.sh', 'scripts/core-wasm.Cargo.lock') }}
       - name: Checkout pinned Core runtime source
         if: steps.core-runtime-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: nilx-one/core
-          ref: 22985e4f3cc08266b839debb3b7da6b0433d878b
+          ref: 296cd024f6cbf240ae701915709003fa80fbca1d
           path: .core-source
           persist-credentials: false
       - name: Install matching wasm-bindgen CLI
@@ -66,7 +66,7 @@ jobs:
       - name: Verify pinned Core Wasm runtime
         run: |
           set -Eeuo pipefail
-          expected_core=22985e4f3cc08266b839debb3b7da6b0433d878b
+          expected_core=296cd024f6cbf240ae701915709003fa80fbca1d
           expected_wasm=53e72838af2184f1eee1919e2d23b405a9ebe3b708d3f98a7539d376bf6ad400
           for host in site telegram-mini-app discord-activity; do
             runtime="apps/$host/public/core/0.1.0"
@@ -117,7 +117,16 @@ jobs:
       - name: Build production Web hosts
         run: pnpm --filter @nilx-one/site --filter @nilx-one/telegram-mini-app --filter @nilx-one/discord-activity build
       - name: Verify browser error collector configuration
-        run: grep -R --fixed-strings "$VITE_ERRORS_COLLECTOR_ENDPOINT" apps/site/dist/assets >/dev/null
+        run: |
+          set -Eeuo pipefail
+          for host in site telegram-mini-app discord-activity; do
+            assets="apps/$host/dist/assets"
+            grep -R --include='*.js' --fixed-strings "$VITE_ERRORS_COLLECTOR_ENDPOINT" "$assets" >/dev/null
+            if grep -R --include='*.js' --fixed-strings 'https://errors.aiaiaiai.org' "$assets" >/dev/null; then
+              echo "::error::$host bundle contains the dashboard URL as a collector endpoint"
+              exit 1
+            fi
+          done
       - name: Validate client target manifest
         run: |
           jq -e '

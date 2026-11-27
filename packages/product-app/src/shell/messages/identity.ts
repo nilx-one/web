@@ -42,7 +42,7 @@ export const IDENTITY_EN = {
   "identity.ais.note":
     "One account for every aiaiaiai product. Your Bond is created for you the first time.",
   "identity.ais.failure.addressTaken":
-    "That name already belongs to another Bond. If it is yours, choose your existing 0x1 Bond and move it to aiaiaiai.",
+    "That name already belongs to another Bond. If it is yours, use your existing 0x1 Bond and move it to aiaiaiai.",
   "identity.ais.failure.addressMissing":
     "aiaiaiai did not give a name for your Bond. Try again.",
   "identity.ais.failure.unavailable":

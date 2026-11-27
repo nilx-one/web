@@ -5,6 +5,7 @@ import { resolveAvatarScene } from "@nilx-one/application";
 import {
   MAP_BODY_HANDOVER_ZOOM,
   type AvatarModelId,
+  type AvaiaModelId,
   type MapCamera,
   type MapPointSelection,
   type MapRenderer,
@@ -122,8 +123,7 @@ export interface GuideCutsceneInput {
   readonly bondModel: AvatarModelId | undefined;
   /** The body the Bond's Avaia wears, and what it has on, when it joins them. */
   readonly avaia?: {
-    readonly model: AvatarModelId;
-    readonly appearance: Parameters<typeof resolveAvatarScene>[1];
+    readonly model: AvaiaModelId;
     readonly backpack?: boolean;
   };
   readonly bondName: string;
@@ -490,16 +490,11 @@ export function useGuideCutscene({
   const model = guideModel(bondModel);
   const voice = studyVoice(guideModel(bondModel));
   const avaiaModel = avaia?.model;
-  const avaiaAppearance = avaia?.appearance;
   const avaiaBackpack = avaia?.backpack ?? false;
   useEffect(() => {
     const avatars = renderer.avatars;
     if (!active || avatars === undefined) return;
     const visibleNodes = resolveAvatarScene(model, undefined).visibleNodes;
-    const avaiaNodes =
-      avaiaModel === undefined
-        ? undefined
-        : resolveAvatarScene(avaiaModel, avaiaAppearance).visibleNodes;
     let frame: number | undefined;
 
     function draw(nowMs: number): void {
@@ -519,7 +514,6 @@ export function useGuideCutscene({
           clipPhase: pose.clipPhase,
           scale: 1,
           visible,
-          ...(avaiaNodes === undefined ? {} : { visibleNodes: avaiaNodes }),
         });
       }
       const motion = motionRef.current;
@@ -549,15 +543,7 @@ export function useGuideCutscene({
       avatars.remove(GUIDE_HANDLE_ID);
       avatars.remove(GUIDE_AVAIA_HANDLE_ID);
     };
-  }, [
-    active,
-    model,
-    avaiaModel,
-    avaiaAppearance,
-    avaiaBackpack,
-    reducedMotion,
-    renderer,
-  ]);
+  }, [active, model, avaiaModel, avaiaBackpack, reducedMotion, renderer]);
 
   const bondVoice = studyVoice(bondModel);
   const state: GuideCutsceneState | undefined =

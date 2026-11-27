@@ -181,15 +181,11 @@ describe("Avaia setup from the Bond dock", () => {
     // the one thing that can be done about it.
     await user.click(screen.getByRole("button", { name: "Set up x0skai" }));
 
-    // The address it already holds types itself out, and Kai stands in as its
+    // The address it already holds types itself out, and Avaia has its own
     // body, so there is nothing left to decide but Create.
     const address = await screen.findByLabelText("pub_dress");
     await waitFor(() => expect(address).toHaveValue("sk"));
-    expect(
-      screen.getByRole("button", {
-        name: /Change this Avaia's 3D model — currently Kai/,
-      }),
-    ).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "3D model" })).toBeVisible();
     // The world is the environment, not a screen the Dock replaced.
     expect(renderer.mount).toHaveBeenCalledOnce();
     expect(renderer.unmount).not.toHaveBeenCalled();
@@ -220,7 +216,7 @@ describe("Avaia setup from the Bond dock", () => {
       JSON.parse(
         window.localStorage.getItem("nilx-one.avatar.wardrobe") ?? "{}",
       ) as unknown,
-    ).toMatchObject({ x0skai: { modelId: "kai-study" } });
+    ).toMatchObject({ x0skai: { modelId: "avaia" } });
 
     // The Bond keeps the wheel; the Avaia can now be handed it.
     expect(
@@ -370,7 +366,7 @@ describe("Avaia setup from the Bond dock", () => {
     expect(screen.getByText("configured")).toBeVisible();
   });
 
-  it("leaves a host without the capability the Dock it already had", async () => {
+  it("keeps the Bond at the wheel on a host without the capability", async () => {
     render(
       <ProductApp
         core={readyCore}
@@ -380,22 +376,16 @@ describe("Avaia setup from the Bond dock", () => {
       />,
     );
 
-    // The world opens on the Avaia, so the Dock offers the wheel back to the
-    // Bond rather than onward.
+    // No profile can be confirmed on this host, so the world opens with the
+    // Bond driving and offers the wheel to no Avaia it cannot read.
     expect(
-      await screen.findByRole("button", { name: "Take the wheel as 0x0sky" }),
+      await screen.findByRole("button", { name: "Edit 0x0sky" }),
     ).toBeVisible();
-    // Nothing is synthesised in place of a profile this host cannot read: the
-    // Avaia keeps its seat and its address, and gains no configure action.
-    expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
-    // The Dock's own edit action still names whoever is driving, but on this
-    // host it opens no configuration: there is no address field to invent.
-    await userEvent.click(screen.getByRole("button", { name: "Edit x0skai" }));
-    expect(screen.queryByLabelText("pub_dress")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(
-      screen.getByRole("button", { name: "Focus the world on x0skai" }),
-    ).toHaveTextContent("AI");
+      screen.queryByRole("button", { name: "Take the wheel as 0x0sky" }),
+    ).toBeNull();
+    // Nothing is synthesised in place of a profile: no configure action.
+    expect(screen.queryByRole("button", { name: /Set up/ })).toBeNull();
   });
 
   it("has no automatically detectable accessibility violations", async () => {

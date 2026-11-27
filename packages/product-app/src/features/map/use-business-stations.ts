@@ -1,26 +1,18 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import {
-  resolveAvatarScene,
-  type AVATAR_MODELS,
-  type BusinessStationAccessPort,
-  type BusinessStationView,
+import type {
+  BusinessStationAccessPort,
+  BusinessStationView,
 } from "@nilx-one/application";
 import {
-  AVATAR_MODEL_IDS,
   mapDistanceMeters,
   type AvatarHandle,
   type AvatarLayerContract,
 } from "@nilx-one/map-contract";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  AVATAR_MIN_ZOOM,
-  AVATAR_PRESENTATION_SCALE,
-  DEFAULT_AVAIA_STUDY,
-  avatarSeed,
-} from "./avatar-presence";
+import { AVATAR_MIN_ZOOM, AVATAR_PRESENTATION_SCALE } from "./avatar-presence";
 
 /** Stations change when a business opens a shop, not while anyone watches. */
 export const STATIONS_REFRESH_MS = 10 * 60_000;
@@ -34,30 +26,21 @@ export function stationHandleId(station: BusinessStationView): string {
 
 /**
  * A station standing at its shop. It never walks, so it never takes a walking
- * clip: it idles where the business put it. Its body is chosen from its own
- * address, so the same shop keeps the same Avaia on every device.
+ * clip: it idles where the business put it. A station uses the base Avaia chassis.
  */
 export function createStationHandle(
   station: BusinessStationView,
   visible: boolean,
 ): AvatarHandle {
-  const modelId =
-    AVATAR_MODEL_IDS[avatarSeed(station.pubDress) % AVATAR_MODEL_IDS.length] ??
-    DEFAULT_AVAIA_STUDY;
-  const scene = resolveAvatarScene(
-    modelId as (typeof AVATAR_MODELS)[number],
-    undefined,
-  );
   return {
     id: stationHandleId(station),
-    modelId,
+    modelId: "avaia",
     lngLat: [station.longitude, station.latitude],
     bearingDeg: 0,
     clipId: "idle",
     clipPhase: 0,
     scale: AVATAR_PRESENTATION_SCALE,
     visible,
-    visibleNodes: scene.visibleNodes,
   };
 }
 
