@@ -784,10 +784,20 @@ export interface MapRenderer {
 export type AvatarModelId =
   "sky-study" | "dasha-study" | "kai-study" | "dasha-v2-study";
 
+export type AvaiaModelId = "avaia" | "avaia-cleaner";
+export type BodyModelId = AvatarModelId | AvaiaModelId;
+
+/** Legacy human studies and unrecognised device choices resolve to the bare chassis. */
+export function resolveAvaiaModel(stored?: string): AvaiaModelId {
+  return stored === "avaia-cleaner" ? stored : "avaia";
+}
+
 /** The original studies retain their immutable published paths. */
 export const AVATAR_ASSET_VERSION = "0.1.0";
 
-export const AVATAR_ASSET_VERSIONS: Readonly<Record<AvatarModelId, string>> = {
+export const AVATAR_ASSET_VERSIONS: Readonly<Record<BodyModelId, string>> = {
+  avaia: "0.6.0",
+  "avaia-cleaner": "0.6.0",
   "sky-study": AVATAR_ASSET_VERSION,
   "dasha-study": AVATAR_ASSET_VERSION,
   "kai-study": AVATAR_ASSET_VERSION,
@@ -795,7 +805,7 @@ export const AVATAR_ASSET_VERSIONS: Readonly<Record<AvatarModelId, string>> = {
 };
 
 /** The still image a picker shows for a study, generated from that study. */
-export function avatarPreviewUrl(modelId: AvatarModelId): string {
+export function avatarPreviewUrl(modelId: BodyModelId): string {
   return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.png`;
 }
 
@@ -818,7 +828,7 @@ export function avatarWardrobeThumbnailUrl(
  * so settings, the editor and the world can never be looking at different
  * bytes for the same chosen body.
  */
-export function avatarAssetUrl(modelId: AvatarModelId): string {
+export function avatarAssetUrl(modelId: BodyModelId): string {
   return `/avatars/${AVATAR_ASSET_VERSIONS[modelId]}/${modelId}.glb`;
 }
 
@@ -849,7 +859,7 @@ export interface AvatarHandle {
   /** Equipped carry supplied by the application, independent of wardrobe. */
   readonly backpack?: boolean;
   readonly id: string;
-  readonly modelId: AvatarModelId;
+  readonly modelId: BodyModelId;
   readonly lngLat: readonly [longitude: number, latitude: number];
   /**
    * Absolute altitude in metres above sea level. It is not a terrain-relative
@@ -885,7 +895,7 @@ export interface AvatarHandle {
  */
 export interface AvatarLayerContract {
   /** Fetch and decode known study assets without asserting world presence. */
-  preload?(models: readonly AvatarModelId[]): Promise<void>;
+  preload?(models: readonly BodyModelId[]): Promise<void>;
   upsert(handle: AvatarHandle): void;
   remove(id: string): void;
   setCamera(camera: MapCamera): void;

@@ -3,6 +3,7 @@
 
 import {
   AVATAR_ASSET_VERSIONS,
+  avatarAssetUrl,
   FLIGHT_LOOT_COLORS,
 } from "@nilx-one/map-contract";
 import type {
@@ -12,7 +13,7 @@ import type {
   AvatarClipId,
   AvatarHandle,
   AvatarLayerContract,
-  AvatarModelId,
+  BodyModelId,
   FlightLootRarity,
   MapFlightLoot,
   SystemDroneHandle,
@@ -75,7 +76,9 @@ import {
 export const AVATAR_LAYER_ID = "nilx-one-local-avatars";
 export { AVATAR_ASSET_VERSION } from "@nilx-one/map-contract";
 
-export const AVATAR_ASSET_URLS: Readonly<Record<AvatarModelId, string>> = {
+export const AVATAR_ASSET_URLS: Readonly<Record<BodyModelId, string>> = {
+  avaia: avatarAssetUrl("avaia"),
+  "avaia-cleaner": avatarAssetUrl("avaia-cleaner"),
   "sky-study": `/avatars/${AVATAR_ASSET_VERSIONS["sky-study"]}/sky-study.glb`,
   "dasha-study": `/avatars/${AVATAR_ASSET_VERSIONS["dasha-study"]}/dasha-study.glb`,
   "kai-study": `/avatars/${AVATAR_ASSET_VERSIONS["kai-study"]}/kai-study.glb`,
@@ -85,7 +88,7 @@ export const AVATAR_ASSET_URLS: Readonly<Record<AvatarModelId, string>> = {
 /** An ambient animal's asset, kept apart from the avatar catalogue. */
 type AnimalModelId = `animal-${AmbientAnimalKind}`;
 /** Everything the layer loads from a glTF asset. */
-type AssetModelId = AvatarModelId | AnimalModelId;
+type AssetModelId = BodyModelId | AnimalModelId;
 
 /** Ambient animals share the layer with bodies under ids of their own. */
 const ANIMAL_ID_PREFIX = "animal:";
@@ -93,7 +96,7 @@ const ANIMAL_ID_PREFIX = "animal:";
 export function assetUrl(modelId: AssetModelId): string {
   return modelId.startsWith("animal-")
     ? ANIMAL_ASSET_URLS[modelId.slice("animal-".length) as AmbientAnimalKind]
-    : AVATAR_ASSET_URLS[modelId as AvatarModelId];
+    : AVATAR_ASSET_URLS[modelId as BodyModelId];
 }
 
 type AssetLoader = (
@@ -218,7 +221,7 @@ export interface AvatarCustomLayer
   removeAnimal(id: string): void;
   setFlightLoot(handles: readonly MapFlightLoot[]): void;
   hasInstances(): boolean;
-  preload(models: readonly AvatarModelId[]): Promise<void>;
+  preload(models: readonly BodyModelId[]): Promise<void>;
   assetsSettled(): boolean;
   dispose(): void;
 }

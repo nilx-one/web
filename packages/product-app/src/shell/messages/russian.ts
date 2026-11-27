@@ -237,6 +237,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Аккаунт провайдера — это идентичность, на которую указывает этот Bond; по одному аккаунту на провайдера. Отключение отвязывает его от этого Bond и никогда не удаляет аккаунт у провайдера.",
   "dock.model": "Модель",
   "dock.threeDModel": "3D-модель",
+  "dock.avaiaCleaner": "Avaia-уборщица",
   "dock.fixed": "не меняется",
   "dock.cancel": "Отмена",
   "dock.unsavedModel": "Изменения в этой 3D-модели не сохранены.",
@@ -370,11 +371,13 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
   "identity.provider.signInWith": "Войти через",
   "identity.provider.signInWithNamed": "Войти через {provider}",
   "identity.provider.web": "веб",
+  "identity.ais.heading": "Вход в 0x1",
   "identity.ais.signIn": "Войти через aiaiaiai",
+  "identity.ais.legacySignIn": "Войти с существующим 0x1 Bond",
   "identity.ais.note":
     "Один аккаунт для всех продуктов aiaiaiai. Bond создастся сам при первом входе.",
   "identity.ais.failure.addressTaken":
-    "Это имя уже принадлежит другому Bond. Если это ваш Bond, войдите ниже и перенесите его в aiaiaiai.",
+    "Это имя уже принадлежит другому Bond. Если это ваш Bond, выберите вход с существующим 0x1 Bond и перенесите его в aiaiaiai.",
   "identity.ais.failure.addressMissing":
     "aiaiaiai не передал имя для вашего Bond. Попробуйте ещё раз.",
   "identity.ais.failure.unavailable":

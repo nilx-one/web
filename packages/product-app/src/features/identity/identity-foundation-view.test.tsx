@@ -665,6 +665,7 @@ describe("verified Telegram username suggestion", () => {
             busy: false,
           },
         }}
+        aisSignIn={{ href: "/api/v1/auth/aiaiaiai/start?return=%2F" }}
         browserProviderAuth={{
           available: { telegram: true, discord: true, github: false },
           pendingProvider: "telegram",
@@ -684,6 +685,7 @@ describe("verified Telegram username suggestion", () => {
       />,
     );
 
+    expect(screen.getByLabelText("pub_dress")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create 0xboss_zhab" }));
     expect(onApplySuggestedPubDress).toHaveBeenCalledWith("0xboss_zhab");
     fireEvent.click(
@@ -728,8 +730,11 @@ describe("sign in through aiaiaiai", () => {
 
   const form = {
     kind: "form",
-    mode: "register",
-    status: { kind: "available", detail: "Available — create this identity" },
+    mode: "sign-in",
+    status: {
+      kind: "registered",
+      detail: "Registered — sign in to this identity",
+    },
     busy: false,
   };
 
@@ -741,6 +746,19 @@ describe("sign in through aiaiaiai", () => {
       "/api/v1/auth/aiaiaiai/start?return=%2F",
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", {
+      name: "Have a Bond with a password here? Move it to aiaiaiai",
+    });
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).toBeInTheDocument();
   });
 
   it("says why the last return did not sign the person in, in their language", () => {
@@ -749,6 +767,9 @@ describe("sign in through aiaiaiai", () => {
       href: "/api/v1/auth/aiaiaiai/start?return=%2F",
       failure: "address-taken",
     });
+    expect(
+      document.querySelector('input[type="password"]'),
+    ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Це ім’я вже належить іншому Bond",
     );
@@ -765,7 +786,7 @@ describe("sign in through aiaiaiai", () => {
   });
 
   it("keeps the password form folded away, only for moving an existing Bond", () => {
-    const { container } = view(
+    view(
       {
         ...form,
         mode: "initial",
@@ -773,16 +794,31 @@ describe("sign in through aiaiaiai", () => {
       },
       { href: "/api/v1/auth/aiaiaiai/start?return=%2F" },
     );
-    const legacy = container.querySelector("details.identity-legacy");
-    expect(legacy).not.toBeNull();
-    expect(legacy).not.toHaveAttribute("open");
     expect(
-      screen.getByText("Have a Bond with a password here? Move it to aiaiaiai"),
-    ).toBeInTheDocument();
+      screen.getByRole("button", {
+        name: "Have a Bond with a password here? Move it to aiaiaiai",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("pub_dress")).not.toBeInTheDocument();
   });
 
   it("never offers to create a Bond with a password when aiaiaiai signs people in", () => {
-    view(form, { href: "/api/v1/auth/aiaiaiai/start?return=%2F" });
+    view(
+      {
+        ...form,
+        mode: "register",
+        status: {
+          kind: "available",
+          detail: "Available — create this identity",
+        },
+      },
+      { href: "/api/v1/auth/aiaiaiai/start?return=%2F" },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Have a Bond with a password here? Move it to aiaiaiai",
+      }),
+    );
     expect(
       screen.queryByText("Available — create this identity"),
     ).not.toBeInTheDocument();

@@ -155,6 +155,13 @@ function createIdentity(
   });
 }
 
+async function openFoldedBondMigration() {
+  const toggle = await screen.findByRole("button", {
+    name: "Have a Bond with a password here? Move it to aiaiaiai",
+  });
+  if (toggle.getAttribute("aria-expanded") === "false") fireEvent.click(toggle);
+}
+
 describe("ProductApp identity", () => {
   afterEach(() => {
     window.history.replaceState({}, "", "/");
@@ -171,6 +178,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity()}
       />,
     );
+    await openFoldedBondMigration();
 
     expect(
       await screen.findByRole("heading", { name: "Enter your pub_dress." }),
@@ -192,6 +200,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity()}
       />,
     );
+    await openFoldedBondMigration();
     await screen.findByLabelText("pub_dress");
     const results = await act(() => axe.run(container));
     expect(results.violations).toEqual([]);
@@ -207,11 +216,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity({ registerNative })}
       />,
     );
-    await user.click(
-      await screen.findByText(
-        "Have a Bond with a password here? Move it to aiaiaiai",
-      ),
-    );
+    await openFoldedBondMigration();
     await user.type(screen.getByLabelText("pub_dress"), "Sky");
     await user.keyboard("{Enter}");
     await screen.findByText(
@@ -241,6 +246,7 @@ describe("ProductApp identity", () => {
     render(
       <ProductApp core={readyCore} host={createHost()} identity={identity} />,
     );
+    await openFoldedBondMigration();
 
     await user.type(await screen.findByLabelText("pub_dress"), "sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
@@ -289,6 +295,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     const slug = await screen.findByLabelText("pub_dress");
     const password = await screen.findByLabelText("Password");
@@ -351,6 +358,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     await user.type(await screen.findByLabelText("pub_dress"), "0x0sky");
     await screen.findByText("Bond found — sign in", {}, { timeout: 2_000 });
@@ -390,6 +398,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     const username = await screen.findByLabelText("pub_dress");
     const password = container.querySelector<HTMLInputElement>(
@@ -431,6 +440,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity({ resolvePubDress })}
       />,
     );
+    await openFoldedBondMigration();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
@@ -468,6 +478,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
@@ -502,6 +513,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity()}
       />,
     );
+    await openFoldedBondMigration();
     const slug = await screen.findByLabelText("pub_dress");
     await user.click(slug);
     await user.paste("0xaSky");
@@ -527,6 +539,7 @@ describe("ProductApp identity", () => {
         identity={createIdentity({ resolvePubDress: () => resolution })}
       />,
     );
+    await openFoldedBondMigration();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sky");
@@ -562,6 +575,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     fireEvent.change(
       await screen.findByRole("combobox", {
@@ -596,6 +610,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     const slug = await screen.findByLabelText("pub_dress");
     await user.type(slug, "sk y");
@@ -638,6 +653,7 @@ describe("ProductApp identity", () => {
         })}
       />,
     );
+    await openFoldedBondMigration();
 
     expect(await screen.findByLabelText("Password")).not.toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Edit 0x0sky" }));

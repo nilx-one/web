@@ -12,6 +12,8 @@ import {
   sampleAmbientAvatar,
   type AvatarClipId,
   type AvatarHandle,
+  type AvaiaModelId,
+  resolveAvaiaModel,
   type AvatarModelId,
   type SubscriptionAuraTier,
 } from "@nilx-one/map-contract";
@@ -54,30 +56,14 @@ export const BODY_ACTIVITY_KEYS: Readonly<
   quiesce: "map.card.activity.quiesce",
 };
 
-/** A study is a body, not a name: an Avaia never wears its Bond's own. */
-export function avaiaStudy(
+/** Preserve the existing voice library independently of the robot chassis. */
+export function avaiaVoiceStudy(
   avaiaAddress: string,
   bondStudy: AvatarModelId,
 ): AvatarModelId {
   const others = AVATAR_MODEL_IDS.filter((model) => model !== bondStudy);
   const choice = others[avatarSeed(avaiaAddress) % others.length];
   return choice ?? bondStudy;
-}
-
-/** The body an Avaia is offered while its owner is still setting it up. */
-export const DEFAULT_AVAIA_STUDY: AvatarModelId = "kai-study";
-
-/**
- * Kai, so accepting the setup as offered is one tap — unless Kai is the body
- * the Bond itself wears, in which case the ambient study stands in.
- */
-export function unconfiguredAvaiaStudy(
-  avaiaAddress: string,
-  bondStudy: AvatarModelId,
-): AvatarModelId {
-  return bondStudy === DEFAULT_AVAIA_STUDY
-    ? avaiaStudy(avaiaAddress, bondStudy)
-    : DEFAULT_AVAIA_STUDY;
 }
 
 /** A deterministic seed, so the same identity keeps the same ambient rhythm. */
@@ -119,7 +105,8 @@ export interface WheelBodyInput {
   readonly body: WheelBody;
   /** The address that seeds this identity's own ambient rhythm. */
   readonly address: string;
-  readonly study: PublishedAvatarModel;
+  readonly study?: PublishedAvatarModel;
+  readonly avaiaModel?: AvaiaModelId;
   /**
    * What this identity is wearing. Absent means nothing was ever chosen, which
    * the study's own default answers — never an empty body.
@@ -162,6 +149,7 @@ export function createWheelBodyHandle({
   body,
   address,
   study,
+  avaiaModel,
   appearance,
   location,
   zoom,
@@ -187,7 +175,12 @@ export function createWheelBodyHandle({
     stance?.clipId !== undefined && !reducedMotion ? stance : undefined;
   // The same resolver the settings preview and the editor draw from, so a
   // person cannot be wearing one thing in the editor and another on the world.
-  const scene = resolveAvatarScene(study, appearance);
+  const modelId = body.seat === "avaia" ? resolveAvaiaModel(avaiaModel) : study;
+  if (modelId === undefined) return null;
+  const visibleNodes =
+    body.seat === "bond" && study !== undefined
+      ? resolveAvatarScene(study, appearance).visibleNodes
+      : [];
 
   return {
     ...(subscriptionAura === undefined ? {} : { subscriptionAura }),
@@ -197,7 +190,7 @@ export function createWheelBodyHandle({
     id: BODY_HANDLE_IDS[body.seat],
     // The application and the map contract publish the same study names, so a
     // chosen body needs no translation table between them.
-    modelId: study as AvatarModelId,
+    modelId,
     lngLat: [position.longitude, position.latitude],
     ...(liftMeters === undefined || liftMeters <= 0 ? {} : { liftMeters }),
     // Heading is not observed here, so a body at the device faces the world's
@@ -214,6 +207,6 @@ export function createWheelBodyHandle({
         : ambient.clipPhase,
     scale: AVATAR_PRESENTATION_SCALE,
     visible: zoom >= AVATAR_MIN_ZOOM,
-    visibleNodes: scene.visibleNodes,
+    visibleNodes,
   };
 }

@@ -1,11 +1,9 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-import { AVATAR_CATALOG } from "@nilx-one/application";
 import {
-  AVATAR_MODEL_IDS,
+  resolveAvaiaModel,
   MAP_SCALE_ZOOM,
-  type AvatarModelId,
   type MapAppearance,
   type MapRenderer,
 } from "@nilx-one/map-contract";
@@ -13,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "../../shell/app-shell";
 import { DockWindow } from "../../shell/dock-window";
-import { translateCopy, useLocalization } from "../../shell/localization";
+import { useLocalization } from "../../shell/localization";
 import { useShellPresentation } from "../../shell/shell-presentation";
 import {
   BondProfileSummary,
@@ -61,15 +59,6 @@ export interface PublicBondWorldProps {
 
 const PUBLIC_AVAIA_BODY = "public-avaia";
 
-function knownModel(model: string | undefined): AvatarModelId | undefined {
-  return AVATAR_MODEL_IDS.find((id) => id === model);
-}
-
-function modelName(model: string | undefined): string | undefined {
-  if (model === undefined) return undefined;
-  return AVATAR_CATALOG.find((entry) => entry.id === model)?.name ?? model;
-}
-
 function PublicWorldMap({
   renderer,
   appearance,
@@ -90,12 +79,12 @@ function PublicWorldMap({
   // The Avaia stands where its owner published it, in the body it was given.
   // Nothing else is drawn: a public page knows of no one's live position.
   const location = bond.avaia?.location;
-  const model = knownModel(bond.avaia?.avatarModel);
+  const model = resolveAvaiaModel(bond.avaia?.avatarModel);
   const ready = status.kind === "ready";
   useEffect(() => {
     const avatars = renderer.avatars;
     if (avatars === undefined || !ready) return;
-    if (location === undefined || model === undefined) return;
+    if (location === undefined) return;
     avatars.upsert({
       id: PUBLIC_AVAIA_BODY,
       modelId: model,
@@ -149,7 +138,10 @@ function AvaiaScreen({
   const { t } = useLocalization();
   const avaia = bond.avaia;
   if (avaia === undefined) return null;
-  const name = modelName(avaia.avatarModel);
+  const name =
+    resolveAvaiaModel(avaia.avatarModel) === "avaia-cleaner"
+      ? t("dock.avaiaCleaner")
+      : "Avaia";
   return (
     <div className="bond-profile bond-profile--summary">
       <SubscriptionIdentity address={avaia.pubDress} badge />
@@ -162,12 +154,10 @@ function AvaiaScreen({
           <dt>Bond</dt>
           <dd>{bond.pubDress}</dd>
         </div>
-        {name === undefined ? null : (
-          <div>
-            <dt>{t("dock.threeDModel")}</dt>
-            <dd>{translateCopy(t, name)}</dd>
-          </div>
-        )}
+        <div>
+          <dt>{t("dock.threeDModel")}</dt>
+          <dd>{name}</dd>
+        </div>
         {avaia.location === undefined ? null : (
           <div>
             <dt>{t("public.location")}</dt>

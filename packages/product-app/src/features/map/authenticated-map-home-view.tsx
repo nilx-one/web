@@ -32,7 +32,6 @@ import {
   type AvaiaProfileUpdateResult,
   type AvaiaTravelResult,
   type AvatarModelResult,
-  type AvatarSelection,
   type BusinessPoint,
   type BondProviderConnections,
   type BondProviderType,
@@ -52,6 +51,7 @@ import type {
 } from "@nilx-one/host-contract";
 import {
   avatarPreviewUrl,
+  resolveAvaiaModel,
   mapDistanceMeters,
   type AvatarHandle,
   type AvatarModelId,
@@ -152,6 +152,11 @@ import {
   type AvatarDraft,
   type AvatarSubject,
 } from "../identity/avatar-editor-view-model";
+import {
+  readAvatarChoice,
+  useAvatarChoice,
+  writeAvatarChoice,
+} from "../identity/avatar-wardrobe-store";
 import { AvatarModelField } from "../identity/avatar-model-field";
 import {
   useAvatarSelection,
@@ -191,12 +196,11 @@ import {
 } from "./location-camera-policy";
 import { createMapFoundationViewModel } from "./map-foundation-view-model";
 import {
-  avaiaStudy,
+  avaiaVoiceStudy,
   BODY_ACTIVITY_KEYS,
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
   type BodyStance,
-  unconfiguredAvaiaStudy,
 } from "./avatar-presence";
 
 import {
@@ -1421,22 +1425,9 @@ export function AuthenticatedMapHomeView({
   // Reading them together in one place keeps the two halves from being
   // resolved differently on different screens.
   const bondAvatar = useAvatarSelection(pubDress, avatarChoice?.rendered);
-  const avaiaAvatar = useAvatarSelection(
-    avaiaAddress,
-    bondAvatar === undefined
-      ? undefined
-      : avaiaConfiguration === "unconfigured"
-        ? unconfiguredAvaiaStudy(avaiaAddress, bondAvatar.modelId)
-        : avaiaStudy(avaiaAddress, bondAvatar.modelId),
-  );
-
-  // The study of whoever is at the wheel: the body on the world, and the still
-  // the label falls back to once that body is too far away to read. Reads
-  // through bondAvatar/avaiaAvatar rather than recomputing the ambient study
-  // directly, so a body either identity actually chose is what is shown —
-  // avaiaAvatar already is that ambient study whenever nothing was chosen.
-  const wheelStudy =
-    wheel === "bond" ? bondAvatar?.modelId : avaiaAvatar?.modelId;
+  const storedAvaia = useAvatarChoice(avaiaAddress);
+  const avaiaModel = resolveAvaiaModel(storedAvaia.modelId);
+  const wheelStudy = wheel === "bond" ? bondAvatar?.modelId : avaiaModel;
   // The card names whoever is driving, not the Bond regardless of the wheel —
   // the observation is drawn at this device's own position either way, but
   // the identity standing there changes hands with the wheel.
@@ -1552,10 +1543,10 @@ export function AuthenticatedMapHomeView({
       ? []
       : [{ id: "sign-out", label: t("header.signOut"), perform: onLogout }]),
   ];
-  // The study the Avaia is drawn in, whose voice it speaks in. No body drawn
-  // means no voice either: a card does not talk on behalf of nobody.
-  const avaiaVoice: AvatarModelId | undefined = avaiaAvatar?.modelId as
-    AvatarModelId | undefined;
+  const avaiaVoice =
+    bondAvatar === undefined
+      ? undefined
+      : avaiaVoiceStudy(avaiaAddress, bondAvatar.modelId);
   // A declared point stands the Bond somewhere; only a real observation says
   // this device is anywhere.
   const declaredPosition = observedPosition?.declared === true;
@@ -2062,15 +2053,10 @@ export function AuthenticatedMapHomeView({
     renderer,
     anchor: observedPosition,
     bondModel: bondAvatar?.modelId as AvatarModelId | undefined,
-    ...(avaiaAvatar === undefined
-      ? {}
-      : {
-          avaia: {
-            model: avaiaAvatar.modelId as AvatarModelId,
-            appearance: avaiaAvatar.appearance,
-            backpack: carriedInventory.avaia.carry === "backpack",
-          },
-        }),
+    avaia: {
+      model: avaiaModel,
+      backpack: carriedInventory.avaia.carry === "backpack",
+    },
     bondName: pubDress,
     names: { avaia: avaiaLabel, bond: pubDress },
     reducedMotion,
@@ -2870,8 +2856,8 @@ export function AuthenticatedMapHomeView({
    * exactly what is saved. Nothing in the editor is persisted until Save, so
    * the draft is discarded whenever the editor is left.
    */
-  function openAvatarEditor(subject: AvatarSubject): void {
-    const selection = subject === "bond" ? bondAvatar : avaiaAvatar;
+  function openAvatarEditor(): void {
+    const selection = bondAvatar;
     // An identity that has chosen nothing still needs a way in. The editor
     // opens on the first published study with nothing saved behind it, so the
     // first choice is already something to save.
@@ -2885,18 +2871,15 @@ export function AuthenticatedMapHomeView({
     setAvatarDraftOpened(draft);
     setAvatarLeaveAsked(false);
     setAvatarError(undefined);
-    openDetail("avatar", subject);
+    openDetail("avatar", "bond");
   }
 
   function closeAvatarEditor(): void {
-    const returnTo = detailState?.subject === "avaia" ? "avaia" : undefined;
     setAvatarDraft(undefined);
     setAvatarDraftOpened(undefined);
     setAvatarLeaveAsked(false);
     setAvatarError(undefined);
-    setDetailState(
-      returnTo === undefined ? undefined : { section, detail: returnTo },
-    );
+    setDetailState(undefined);
   }
 
   /**
@@ -2908,18 +2891,15 @@ export function AuthenticatedMapHomeView({
    * unwritten too: a half-saved body is not what a person asked for.
    */
   async function saveAvatarDraft(): Promise<void> {
-    const subject = detailState?.subject ?? "bond";
     if (avatarDraft === undefined) return;
     // Save answers the leave prompt. Left standing, its discard would close an
     // editor whose save is still on its way, and that save would commit the
     // very model a person had just thrown away.
     setAvatarLeaveAsked(false);
-    const persisted = subject === "bond" ? bondAvatar : avaiaAvatar;
+    const persisted = bondAvatar;
     const selection = draftSelection(avatarDraft);
-    const address = subject === "bond" ? pubDress : avaiaAddress;
 
     if (
-      subject === "bond" &&
       selection.modelId !== persisted?.modelId &&
       onAvatarChoice !== undefined
     ) {
@@ -2933,10 +2913,10 @@ export function AuthenticatedMapHomeView({
     }
 
     commitAvatar({
-      subject,
-      address,
+      subject: "bond",
+      address: pubDress,
       selection,
-      modelIsLocal: subject !== "bond",
+      modelIsLocal: false,
     });
     closeAvatarEditor();
   }
@@ -3010,14 +2990,14 @@ export function AuthenticatedMapHomeView({
   // camera or first visible map frame requires their geometry. Loading is
   // presentation-only; the current wheel/position still decides what is drawn.
   useEffect(() => {
-    const models = [avatarChoice?.rendered, avaiaAvatar?.modelId].filter(
-      (model): model is AvatarModelId => model !== undefined,
-    );
-    if (models.length === 0) return;
+    const models =
+      avatarChoice?.rendered === undefined
+        ? [avaiaModel]
+        : [avatarChoice.rendered, avaiaModel];
     void renderer.avatars?.preload?.(models).catch(() => {
       // A failed prefetch is retried by the layer when a body is requested.
     });
-  }, [renderer, avatarChoice?.rendered, avaiaAvatar?.modelId]);
+  }, [renderer, avatarChoice?.rendered, avaiaModel]);
 
   useEffect(() => {
     const avatars = renderer.avatars;
@@ -3032,25 +3012,9 @@ export function AuthenticatedMapHomeView({
       drawn[seat] = hidden;
       avatarLayer.upsert(hidden);
     }
-    if (bondStudy === undefined) {
-      for (const seat of Object.keys(BODY_HANDLE_IDS) as DockSeat[]) hide(seat);
-      return;
-    }
-
     const reducedMotion = prefersReducedMotion();
-    // The world draws whatever body was actually chosen for each identity —
-    // avaiaAvatar already falls back to the ambient study on its own when
-    // nothing was, so there is no separate raw computation to keep in step
-    // with it.
-    const study = (seat: DockSeat) =>
-      seat === "bond" ? bondStudy : (avaiaAvatar?.modelId ?? bondStudy);
     const address = (seat: DockSeat) =>
       seat === "bond" ? pubDress : avaiaAddress;
-    // What each identity is wearing, resolved exactly once and drawn by the
-    // world the same way the settings preview and the editor draw it.
-    const worn = (seat: DockSeat) =>
-      seat === "bond" ? bondAvatar?.appearance : avaiaAvatar?.appearance;
-
     let frame: number | undefined;
     let active = true;
 
@@ -3091,8 +3055,9 @@ export function AuthenticatedMapHomeView({
               carry: carriedInventory[body.seat].carry,
               body,
               address: address(body.seat),
-              study: study(body.seat),
-              appearance: worn(body.seat),
+              ...(bondStudy === undefined ? {} : { study: bondStudy }),
+              avaiaModel,
+              appearance: bondAvatar?.appearance,
               location: location.state,
               zoom: cameraZoom,
               timeMs: nowMs,
@@ -3166,8 +3131,7 @@ export function AuthenticatedMapHomeView({
   }, [
     subscriptionTier,
     avaiaAddress,
-    avaiaAvatar?.appearance,
-    avaiaAvatar?.modelId,
+    avaiaModel,
     avatarChoice?.rendered,
     avaiaWalk,
     bondAvatar?.appearance,
@@ -3360,7 +3324,6 @@ export function AuthenticatedMapHomeView({
    */
   async function submitAvaiaSetup(): Promise<void> {
     const firstConfiguration = avaiaConfiguration === "unconfigured";
-    const offeredBody = avaiaAvatar;
     const result = await onAvaiaSetupSubmit?.();
     if (result?.kind !== "updated") return;
     setDetailState(undefined);
@@ -3376,16 +3339,10 @@ export function AuthenticatedMapHomeView({
     ) {
       return;
     }
-    // The body the setup offered is the one that was accepted, so it becomes a
-    // choice this device remembers under the address the service stored.
-    if (offeredBody !== undefined) {
-      commitAvatar({
-        subject: "avaia",
-        address: result.profile.pubDress,
-        selection: offeredBody,
-        modelIsLocal: true,
-      });
-    }
+    writeAvatarChoice(result.profile.pubDress, {
+      ...readAvatarChoice(result.profile.pubDress),
+      modelId: avaiaModel,
+    });
     // She comes back to say what it paid.
     const current = progressionSnapshot(pubDress);
     guide.play("reward", {
@@ -4497,7 +4454,7 @@ export function AuthenticatedMapHomeView({
                               "bond",
                               bondAvatar,
                             )}
-                            onOpen={() => openAvatarEditor("bond")}
+                            onOpen={() => openAvatarEditor()}
                           />
                           <p className="profile-edit__note">
                             {avatarChoice.unsupportedModel !== undefined
@@ -4812,13 +4769,25 @@ export function AuthenticatedMapHomeView({
                             }
                             onSubmit={() => void submitAvaiaSetup()}
                           />
-                          <AvatarModelField
-                            state={createAvatarFieldViewState(
-                              "avaia",
-                              avaiaAvatar,
-                            )}
-                            onOpen={() => openAvatarEditor("avaia")}
-                          />
+                          <label>
+                            {t("dock.threeDModel")}
+                            <select
+                              value={avaiaModel}
+                              onChange={(event) =>
+                                writeAvatarChoice(avaiaAddress, {
+                                  ...storedAvaia,
+                                  modelId: resolveAvaiaModel(
+                                    event.target.value,
+                                  ),
+                                })
+                              }
+                            >
+                              <option value="avaia">Avaia</option>
+                              <option value="avaia-cleaner">
+                                {t("dock.avaiaCleaner")}
+                              </option>
+                            </select>
+                          </label>
                         </>
                       )}
                       {avaiaWalk.favourites.length === 0 ? null : (
@@ -4943,15 +4912,9 @@ export function AuthenticatedMapHomeView({
                     <AvatarEditorView
                       state={createAvatarEditorViewState({
                         subject: detailState?.subject ?? "bond",
-                        ...((detailState?.subject === "avaia"
-                          ? avaiaAvatar
-                          : bondAvatar) === undefined
+                        ...(bondAvatar === undefined
                           ? {}
-                          : {
-                              persisted: (detailState?.subject === "avaia"
-                                ? avaiaAvatar
-                                : bondAvatar) as AvatarSelection,
-                            }),
+                          : { persisted: bondAvatar }),
                         draft: avatarDraft,
                         busy: avatarSaving,
                         ...(avatarError === undefined

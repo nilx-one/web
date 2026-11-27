@@ -105,6 +105,13 @@ export function mountBackpack(
   body: Object3D,
   asset: Object3D,
 ): Object3D | undefined {
+  const socket = body.getObjectByName("avaia_backpack_socket");
+  if (socket !== undefined) {
+    const bag = asset.clone(true);
+    bag.rotation.y = Math.PI;
+    socket.add(bag);
+    return bag;
+  }
   const chest = body.getObjectByName("chest");
   const torso = chest === undefined ? undefined : readTorso(body, chest);
   const chestBind = torso?.bind("chest");
