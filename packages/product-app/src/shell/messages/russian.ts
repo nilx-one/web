@@ -237,6 +237,7 @@ export const RU_MESSAGES: Readonly<Record<TranslationKey, string>> = {
     "Аккаунт провайдера — это идентичность, на которую указывает этот Bond; по одному аккаунту на провайдера. Отключение отвязывает его от этого Bond и никогда не удаляет аккаунт у провайдера.",
   "dock.model": "Модель",
   "dock.threeDModel": "3D-модель",
+  "dock.avaiaCleaner": "Avaia-уборщица",
   "dock.fixed": "не меняется",
   "dock.cancel": "Отмена",
   "dock.unsavedModel": "Изменения в этой 3D-модели не сохранены.",

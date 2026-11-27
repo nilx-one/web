@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 import {
   AVATAR_MIN_ZOOM,
   AVATAR_PRESENTATION_SCALE,
-  avaiaStudy,
   avatarSeed,
   BODY_HANDLE_IDS,
   createWheelBodyHandle,
@@ -154,14 +153,10 @@ describe("which body an Avaia wears", () => {
       "kai-study",
       "dasha-v2-study",
     ] as const) {
-      expect(avaiaStudy("0x0sky.avaia", bond)).not.toBe(bond);
+      expect(
+        wheelBodyHandle({ body: { seat: "avaia" }, study: bond })?.modelId,
+      ).toBe("avaia");
     }
-  });
-
-  it("wears the same study every time it is drawn", () => {
-    expect(avaiaStudy("0x0sky.avaia", "sky-study")).toBe(
-      avaiaStudy("0x0sky.avaia", "sky-study"),
-    );
   });
 });
 

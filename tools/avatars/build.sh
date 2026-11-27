@@ -4,6 +4,7 @@
 
 set -eu
 cd "$(dirname "$0")/../.."
+python tools/avatars/avaia/build_model.py deploy/web/avatars/0.6.0
 for model in sky dasha kai; do
     python "tools/avatars/$model/build_model.py" --output deploy/web/avatars/0.1.0
 done

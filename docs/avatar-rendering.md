@@ -13,6 +13,16 @@ artistic studies: none of them is a claim about any person's body, gender or
 presentation, and a person chooses which represents them rather than being
 assigned one (`docs/profile-editing.md`).
 
+## Avaia chassis
+
+Avaia uses the articulated ceramic chassis in `tools/avatars/avaia/build_model.py`.
+The bare body and cleaner share one set of rigid joints and five animation clips.
+The cleaner adds a cap, bib overalls, apron pocket and mop. The two baked outfits
+are served from `/avatars/0.6.0/`. The Avaia picker stores the outfit per address
+on this device. Legacy human model choices resolve to the bare chassis on the
+map, in the card, in shared cutscenes and on the public profile. Stations use the
+bare chassis. Bond's picker and the voice library retain their human study IDs.
+
 ## Asset contract 0.1.0
 
 `tools/avatars/{sky,dasha}/build_model.py` preserves the supplied geometry and
@@ -165,8 +175,7 @@ Delivery: [asset pipeline #93](https://github.com/nilx-one/web/issues/93),
 
 ## Preparing bodies before revealing the world
 
-When a Bond's and Avaia's studies are known, the Web host preloads both
-versioned GLBs while the world is being prepared. The MapLibre avatar layer
+The Web host preloads Avaia's chassis and the Bond's selected study versioned GLBs while the world is being prepared. The MapLibre avatar layer
 shares in-flight fetch/decode promises with later body hydration. The GPU
 context and the first map custom-layer paint remain renderer-owned; the
 scene's startup barrier waits for active hydrated bodies and stable painted
