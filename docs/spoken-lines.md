@@ -29,7 +29,8 @@ flowchart LR
     Channel["Telegram channel"] --> Signal["prism-signal (Evidence)"]
     Signal --> Hub["prism-hub"]
     Hub -->|"POST /api/v1/speech (service token)"| Identity["services/identity"]
-    Identity -->|"within_earshot"| Telegram["Bot: private chats"]
+    Identity -->|"within_earshot + atomic record"| Outbox["Core speech outbox"]
+    Outbox -->|"signed pull / ACK"| Telegram["Bot: private chats"]
     Client["Web / Mini App / Activity"] -->|"GET /api/v1/speech/nearby"| Identity
 ```
 
@@ -63,14 +64,14 @@ built yet; the ingest contract below is what it will call.
 - `spoken_at` may not be more than 60 s ahead. A line older than ten minutes
   (`SPEECH_TTL_SECONDS`) answers `200 expired` and is neither stored nor copied,
   so a producer replaying a backlog can never be answered with a retry loop.
-- New line: `201 recorded` with `relayed_to`. Same line again: `200 duplicate`.
+- New line: `201 recorded` with `queued_to`, the number of recipient jobs committed in Core. `relayed_to` is retained as a compatibility alias for this count, not proof of delivery. Same line again: `200 duplicate`, both counts zero.
 
 ## Who hears it
 
-| Where             | Who                                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Web / Mini App    | The speaker, always. Any other signed-in Bond whose current location is within earshot of the speaker's current location. |
-| Telegram bot copy | Telegram-bound Bonds within earshot, nearest first, at most 100, never the speaker. Plain text `0x0sky: …`.               |
+| Where             | Who                                                                                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web / Mini App    | The speaker, always. Any other signed-in Bond whose current location is within earshot of the speaker's current location.                                         |
+| Telegram bot copy | Telegram-bound Bonds within earshot with a live AIS chat attached to that Bond, nearest first, at most 100 candidates, never the speaker. Plain text `0x0sky: …`. |
 
 A `live` location older than 30 minutes no longer places its Bond anywhere; a
 declared `manual` point does not age. A Bond with no current location hears no
@@ -103,6 +104,16 @@ The web edge proxies only `GET /api/v1/speech/nearby` to the identity service.
 `POST /api/v1/speech` is not routed publicly: the producer reaches it on the
 private `nilxone-identity:1927` alias, and the service token is a second lock,
 not the only one.
+
+## Transport cutover
+
+This producer requires Core's speech outbox (core#188), the Bot consumer
+(bot#45), and the signed Gateway routes on ingress. Keep the PR in draft
+until those dependencies are reviewed and the Core dependency is pinned to a
+merged master commit. The old Web Bot API speech relay is removed here, so do
+not activate this producer before the consumer and routes are ready. Telegram
+delivery is asynchronous; an external send/ACK crash gap may retry. No
+Telegram Bot API credential is needed by the speech producer.
 
 ## Off by default
 

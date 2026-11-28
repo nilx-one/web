@@ -91,8 +91,35 @@ if [ -n "$partner_token" ]; then
   fi
 fi
 
-telegram_token="$(read_provider_value TELEGRAM_BOT_TOKEN)"
-test -n "$telegram_token"
+# Only the public Bot ID may enter Web. An old runtime token is never copied.
+if grep -Eq '^TELEGRAM_BOT_TOKEN=' "$provider_env"; then
+  echo "provider environment must not contain TELEGRAM_BOT_TOKEN" >&2
+  exit 1
+fi
+telegram_bot_id="$(read_provider_value TELEGRAM_BOT_ID)"
+[ "$(grep -c '^TELEGRAM_BOT_ID=' "$provider_env" || true)" -eq 1 ] || {
+  echo "provider environment must carry exactly one TELEGRAM_BOT_ID" >&2
+  exit 1
+}
+if ! printf '%s\n' "$telegram_bot_id" | grep -Eq '^[1-9][0-9]{0,19}$' ||
+   ! printf '%s\n' "$telegram_bot_id" | LC_ALL=C awk 'length($0) == 20 && ("x" $0) > "x18446744073709551615" { exit 1 }'; then
+  echo "TELEGRAM_BOT_ID must be a positive public identifier" >&2
+  exit 1
+fi
+previous_bot_id="$(read_existing_value TELEGRAM_BOT_ID)"
+if [ -z "$previous_bot_id" ]; then
+  # Migration only: extract the numeric ID from the old environment without
+  # copying or printing its credential. Refuse unexpected identity changes.
+  previous_token="$(read_existing_value TELEGRAM_BOT_TOKEN)"
+  if [ -n "$previous_token" ]; then
+    previous_bot_id="${previous_token%%:*}"
+    unset previous_token
+  fi
+fi
+if [ -n "$previous_bot_id" ] && [ "$previous_bot_id" != "$telegram_bot_id" ]; then
+  echo "public Telegram bot identity differs from existing runtime" >&2
+  exit 1
+fi
 
 public_origin="$(read_provider_value PUBLIC_ORIGIN)"
 if [ -n "$public_origin" ]; then
