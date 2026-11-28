@@ -185,4 +185,18 @@ for mode in missing zero duplicate wrong token empty-token; do
   fi
   cmp "$runtime" "$tmp/before-authority.env"
 done
+# A fresh runtime must reject noncanonical or overflowing IDs before writing.
+fresh="$tmp/fresh/runtime.env"
+for invalid in 0123456 +123456 18446744073709551616 99999999999999999999; do
+  printf 'TELEGRAM_BOT_ID=%s\n' "$invalid" >"$provider"
+  if sh "$prepare" "$fresh" "$provider" >/dev/null 2>&1; then
+    echo 'invalid fresh public bot ID accepted' >&2
+    exit 1
+  fi
+  [ ! -e "$fresh" ]
+done
+printf '%s\n' 'TELEGRAM_BOT_ID=18446744073709551615' >"$provider"
+sh "$prepare" "$fresh" "$provider"
+[ "$(value_of TELEGRAM_BOT_ID "$fresh")" = 18446744073709551615 ]
+
 echo 'Token-free public authority migration validated'
