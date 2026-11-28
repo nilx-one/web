@@ -21,8 +21,6 @@ on:
     secrets:
       INFRA_DEPLOY_TOKEN:
         required: false
-      TELEGRAM_BOT_TOKEN:
-        required: false
       TELEGRAM_OIDC_CLIENT_SECRET:
         required: false
       DISCORD_CLIENT_SECRET:
@@ -51,6 +49,7 @@ jobs:
       IMAGE_REPOSITORY: ghcr.io/nilx-one/0x1-identity
       INFRA_REPOSITORY: aiaiaiai-org/infra
       INFRA_DEPLOY_TOKEN: ${{ secrets.INFRA_DEPLOY_TOKEN }}
+      TELEGRAM_BOT_ID: ${{ vars.TELEGRAM_BOT_ID }}
       TELEGRAM_OIDC_CLIENT_ID: ${{ vars.TELEGRAM_OIDC_CLIENT_ID }}
       DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
 
@@ -64,6 +63,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(tr -d '[:space:]' < services/identity/deploy/contract.version)" = 20 || { echo 'Token-free Identity contract 20 required.' >&2; exit 1; }
           [[ "$REQUIRED_IDENTITY_CONTRACT" =~ ^[0-9]+$ ]]
           test -n "$INFRA_DEPLOY_TOKEN" || { echo "Missing repository secret INFRA_DEPLOY_TOKEN." >&2; exit 1; }
           test -n "$TELEGRAM_OIDC_CLIENT_ID" || { echo "Missing repository variable TELEGRAM_OIDC_CLIENT_ID." >&2; exit 1; }
@@ -149,7 +149,6 @@ jobs:
         name: Encrypt provider credentials for scoped infra handoff
         if: steps.need.outputs.deploy == 'true'
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_OIDC_CLIENT_SECRET: ${{ secrets.TELEGRAM_OIDC_CLIENT_SECRET }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
           NILX_BROWSER_HANDOFF_TOKEN: ${{ secrets.NILX_BROWSER_HANDOFF_TOKEN }}
@@ -159,10 +158,11 @@ jobs:
         run: |
           set -Eeuo pipefail
           umask 077
-          for name in TELEGRAM_BOT_TOKEN TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN PARTNER_LOOKUP_TOKEN INFRA_AGE_RECIPIENT REGISTRY_TOKEN; do
+          for name in TELEGRAM_BOT_ID TELEGRAM_OIDC_CLIENT_SECRET DISCORD_CLIENT_SECRET NILX_BROWSER_HANDOFF_TOKEN PARTNER_LOOKUP_TOKEN INFRA_AGE_RECIPIENT REGISTRY_TOKEN; do
             test -n "${!name:-}" || { echo "Required production credential/recipient $name missing." >&2; exit 1; }
             [[ "${!name}" != *$'\n'* && "${!name}" != *$'\r'* ]] || exit 1
           done
+          [[ "$TELEGRAM_BOT_ID" =~ ^[1-9][0-9]{0,19}$ ]] || { echo 'Verified public Telegram bot ID missing or invalid.' >&2; exit 1; }
           # Match the server-side handoff contract in bytes independent of runner locale.
           token_bytes="$(printf %s "$NILX_BROWSER_HANDOFF_TOKEN" | wc -c)"
           (( token_bytes >= 32 )) || { echo "NILX_BROWSER_HANDOFF_TOKEN must contain at least 32 bytes." >&2; exit 1; }
@@ -172,7 +172,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq age
           {
-            printf 'TELEGRAM_BOT_TOKEN=%s\n' "$TELEGRAM_BOT_TOKEN"
+            printf 'TELEGRAM_BOT_ID=%s\n' "$TELEGRAM_BOT_ID"
             printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$TELEGRAM_OIDC_CLIENT_SECRET"
             printf 'DISCORD_CLIENT_SECRET=%s\n' "$DISCORD_CLIENT_SECRET"
             printf 'NILX_BROWSER_HANDOFF_TOKEN=%s\n' "$NILX_BROWSER_HANDOFF_TOKEN"

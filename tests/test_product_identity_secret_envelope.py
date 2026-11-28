@@ -8,26 +8,29 @@ import unittest
 
 
 class ProductSecretDeliveryTests(unittest.TestCase):
-    def test_encrypted_product_envelope_is_manual_and_signed(self):
+    def test_retired_fresh_envelope_cannot_package_a_bot_token(self):
         workflow = Path(".github/workflows/package-fresh-identity-secrets.yml").read_text()
         self.assertIn("on:\n  workflow_dispatch:", workflow)
         self.assertIn("github.ref == 'refs/heads/master'", workflow)
-        self.assertIn("name: production", workflow)
-        self.assertIn("TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}", workflow)
-        self.assertIn("RECIPIENT: ${{ vars.EDGE_DEV_1_IDENTITY_AGE_RECIPIENT }}", workflow)
-        self.assertIn("age --recipient", workflow)
-        self.assertIn("COPY secrets.age /secrets.age", workflow)
-        self.assertIn("actions/attest-build-provenance@", workflow)
-        self.assertIn("subject-digest: ${{ steps.publish.outputs.digest }}", workflow)
-        self.assertIn("ghcr.io/nilx-one/0x1-identity-fresh-secrets", workflow)
-        self.assertNotIn("aiaiaiai-org/infra/settings/secrets", workflow)
-        self.assertNotIn("INFRA_DEPLOY_TOKEN", workflow)
-        self.assertNotIn("repository_dispatch", workflow)
-        self.assertNotIn("ssh ", workflow)
-        self.assertNotIn("secrets.SSH_PRIVATE_KEY", workflow)
-        self.assertNotIn("secrets.NATIVE_AUTH_SECRET", workflow)
-        self.assertNotIn("secrets.PASSWORD_PEPPER", workflow)
+        self.assertIn("Refuse retired fresh token package", workflow)
+        self.assertIn("exit 1", workflow)
+        self.assertNotIn("secrets.", workflow)
+        self.assertNotIn("age --recipient", workflow)
+        self.assertNotIn("push: true", workflow)
 
+    def test_only_public_bot_identity_enters_provider_envelopes(self):
+        package = Path(".github/workflows/package-identity-service.yml").read_text()
+        handoff = Path(".github/workflows/deploy-identity-service.yml").read_text()
+        for workflow in (package, handoff):
+            self.assertIn("TELEGRAM_BOT_ID: ${{ vars.TELEGRAM_BOT_ID }}", workflow)
+            self.assertNotIn("secrets.TELEGRAM_BOT_TOKEN", workflow)
+            self.assertNotIn("TELEGRAM_BOT_TOKEN=", workflow)
+            self.assertIn("contract.version", workflow)
+        self.assertIn("names=(TELEGRAM_BOT_ID ", package)
+        self.assertIn("printf 'TELEGRAM_BOT_ID=%s\\n'", handoff)
+        self.assertIn("actions/attest-build-provenance@", package)
+        self.assertIn("age --recipient", package)
+        self.assertIn("age --armor --recipient", handoff)
 
     def test_recipient_guard_uses_only_live_owning_contract(self):
         recipient = "ssh-ed25519 " + "A" * 68
@@ -71,7 +74,7 @@ class ProductSecretDeliveryTests(unittest.TestCase):
 
     def test_envelope_checks_reviewed_revision_and_live_contract(self):
         workflow = Path(".github/workflows/package-identity-service.yml").read_text()
-        self.assertIn("infra_revision=88c4ac6f9a0c8270ea14ca411dcefa730776c990", workflow)
+        self.assertIn("infra_revision=7bb26c592177546594bda2b27d1837c7ecc04707", workflow)
         self.assertIn("verified_contract servers/edge-dev-1.yaml", workflow)
         self.assertIn("verified_contract services/nilxone-identity.yaml", workflow)
         self.assertIn('[[ "$pinned" != "$current" ]]', workflow)
