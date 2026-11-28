@@ -43,9 +43,10 @@ rollback have passed. No production deployment is automatic.
 
 ## Identity envelope (automatic delivery)
 
-`Package Identity Service` publishes the 0x1 API image and, once the repository
-variable `API_DELIVERY=enabled` is set, an age-encrypted `<sha>.secrets`
-envelope that `aiaiaiai-org/infra` delivers on its own. The envelope carries
+`Package Identity Service` publishes the 0x1 API image and, on every master
+build, an age-encrypted `<sha>.secrets` envelope that `aiaiaiai-org/infra`
+delivers on its own. There is no switch: until the `production` Environment
+holds every value below, the envelope job fails and names the missing one. The envelope carries
 exactly the names `nilxone-identity` lists under `delivery.envelope` in infra:
 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_OIDC_CLIENT_ID`, `TELEGRAM_OIDC_CLIENT_SECRET`,
 `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `NILX_BROWSER_HANDOFF_TOKEN` and

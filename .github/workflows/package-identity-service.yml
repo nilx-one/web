@@ -75,14 +75,14 @@ jobs:
           push-to-registry: true
 
   # The 0x1 API's secret envelope for infra's automatic delivery of
-  # nilxone-identity. It runs only once the owner set the repository variable
-  # API_DELIVERY=enabled after filling the production Environment, so master
-  # never depends on production secrets before then. This repository holds no
-  # infra credential; infra holds none of these values.
+  # nilxone-identity. It runs on every master build and fails, naming the
+  # missing value, until the production Environment is filled: there is no
+  # switch to turn it on. This repository holds no infra credential; infra
+  # holds none of these values.
   envelope:
     name: Publish the production secret envelope
     needs: package
-    if: github.ref == 'refs/heads/master' && vars.API_DELIVERY == 'enabled'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:
       name: production
