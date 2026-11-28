@@ -559,25 +559,34 @@ mod tests {
 
     async fn attach_chat(harness: &Harness, address: &str, actor: i64) {
         let now = unix_now();
-        let owner = harness
-            .product
-            .attach(&nilxone_identity::aiaiaiai_sign_in::VerifiedSignIn {
-                issuer: "https://auth.aiaiaiai.org".into(),
-                subject: format!("test-subject-{actor}"),
-                pub_dress: None,
-                auth_time: now,
-            })
-            .await
-            .unwrap();
         let token = format!("{actor:064x}");
-        harness
-            .product
-            .open_session(&owner, &token, "Telegram · Chat", None, now, now + 3600)
-            .await
-            .unwrap();
+        let subject = format!("test-subject-{actor}");
+        let now = i64::try_from(now).unwrap();
         let pool = sqlx::SqlitePool::connect(&harness.database_url)
             .await
             .unwrap();
+        let profile_id: String = sqlx::query_scalar(
+            "INSERT INTO public_profiles (issuer, subject, last_auth_time)
+             VALUES ('https://auth.aiaiaiai.org', ?, ?) RETURNING profile_id",
+        )
+        .bind(&subject)
+        .bind(now)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_sessions
+             (token_hash, issuer, subject, profile_id, created_at, expires_at, active, client_label)
+             VALUES (?, 'https://auth.aiaiaiai.org', ?, ?, ?, ?, 1, 'Telegram · Chat')",
+        )
+        .bind(&token)
+        .bind(subject)
+        .bind(&profile_id)
+        .bind(now)
+        .bind(now + 3600)
+        .execute(&pool)
+        .await
+        .unwrap();
         let bond_id: String = sqlx::query_scalar(
             "INSERT INTO legacy_bond_keys (legacy_pub_dress) VALUES (?) RETURNING bond_id",
         )
@@ -587,8 +596,8 @@ mod tests {
         .unwrap();
         sqlx::query("INSERT INTO legacy_bond_bindings VALUES (?, ?, ?)")
             .bind(bond_id)
-            .bind(&owner.public_profile().profile_id)
-            .bind(i64::try_from(now).unwrap())
+            .bind(profile_id)
+            .bind(now)
             .execute(&pool)
             .await
             .unwrap();
