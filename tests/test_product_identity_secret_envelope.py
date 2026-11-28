@@ -74,7 +74,7 @@ class ProductSecretDeliveryTests(unittest.TestCase):
 
     def test_envelope_checks_reviewed_revision_and_live_contract(self):
         workflow = Path(".github/workflows/package-identity-service.yml").read_text()
-        self.assertIn("infra_revision=7bb26c592177546594bda2b27d1837c7ecc04707", workflow)
+        self.assertIn("infra_revision=9eab46fde0e4cf721a8ab9cd7220c20e60df4d6c", workflow)
         self.assertIn("verified_contract servers/edge-dev-1.yaml", workflow)
         self.assertIn("verified_contract services/nilxone-identity.yaml", workflow)
         self.assertIn('[[ "$pinned" != "$current" ]]', workflow)

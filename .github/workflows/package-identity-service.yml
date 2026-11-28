@@ -127,7 +127,7 @@ jobs:
           # delivery.envelope (aiaiaiai-org/infra docs/automatic-delivery.md).
           # Reviewed placement on infra master, owner retirement decision 2026-11-26.
           # Reject drift rather than silently encrypting to a new recipient.
-          infra_revision=7bb26c592177546594bda2b27d1837c7ecc04707
+          infra_revision=9eab46fde0e4cf721a8ab9cd7220c20e60df4d6c
           verified_contract() {
             local path="$1" pinned current
             pinned="$(curl -fsSL "https://raw.githubusercontent.com/aiaiaiai-org/infra/$infra_revision/contracts/$path")" || return 1
