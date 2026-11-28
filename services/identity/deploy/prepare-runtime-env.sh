@@ -91,8 +91,112 @@ if [ -n "$partner_token" ]; then
   fi
 fi
 
-telegram_token="$(read_provider_value TELEGRAM_BOT_TOKEN)"
-test -n "$telegram_token"
+# Only the public Bot ID may enter Web. An old runtime token is never copied.
+if grep -Eq '^TELEGRAM_BOT_TOKEN=' "$provider_env"; then
+  echo "provider environment must not contain TELEGRAM_BOT_TOKEN" >&2
+  exit 1
+fi
+telegram_bot_id="$(read_provider_value TELEGRAM_BOT_ID)"
+[ "$(grep -c '^TELEGRAM_BOT_ID=' "$provider_env" || true)" -eq 1 ] || {
+  echo "provider environment must carry exactly one TELEGRAM_BOT_ID" >&2
+  exit 1
+}
+printf '%s' "$telegram_bot_id" | grep -Eq '^[1-9][0-9]{0,19}
+
+public_origin="$(read_provider_value PUBLIC_ORIGIN)"
+if [ -n "$public_origin" ]; then
+  case "$public_origin" in
+    https://*) ;;
+    *)
+      echo "PUBLIC_ORIGIN must use https" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+telegram_oidc_client_id="$(read_provider_value TELEGRAM_OIDC_CLIENT_ID)"
+telegram_oidc_client_secret="$(read_provider_value TELEGRAM_OIDC_CLIENT_SECRET)"
+telegram_oidc_from_provider=false
+if [ -n "$telegram_oidc_client_id" ] || [ -n "$telegram_oidc_client_secret" ]; then
+  telegram_oidc_from_provider=true
+else
+  telegram_oidc_client_id="$(read_existing_value TELEGRAM_OIDC_CLIENT_ID)"
+  telegram_oidc_client_secret="$(read_existing_value TELEGRAM_OIDC_CLIENT_SECRET)"
+fi
+validate_pair "Telegram browser OAuth" "$telegram_oidc_client_id" "$telegram_oidc_client_secret"
+
+discord_client_id="$(read_provider_value DISCORD_CLIENT_ID)"
+discord_client_secret="$(read_provider_value DISCORD_CLIENT_SECRET)"
+validate_pair "Discord OAuth" "$discord_client_id" "$discord_client_secret"
+
+github_auth_client_id="$(read_provider_value GITHUB_AUTH_CLIENT_ID)"
+github_auth_client_secret="$(read_provider_value GITHUB_AUTH_CLIENT_SECRET)"
+github_auth_from_provider=false
+if [ -n "$github_auth_client_id" ] || [ -n "$github_auth_client_secret" ]; then
+  github_auth_from_provider=true
+else
+  github_auth_client_id="$(read_existing_value GITHUB_AUTH_CLIENT_ID)"
+  github_auth_client_secret="$(read_existing_value GITHUB_AUTH_CLIENT_SECRET)"
+fi
+validate_pair "GitHub browser OAuth" "$github_auth_client_id" "$github_auth_client_secret"
+
+github_evidence_client_id="$(read_provider_value GITHUB_EVIDENCE_CLIENT_ID)"
+github_evidence_client_secret="$(read_provider_value GITHUB_EVIDENCE_CLIENT_SECRET)"
+github_evidence_from_provider=false
+if [ -n "$github_evidence_client_id" ] || [ -n "$github_evidence_client_secret" ]; then
+  github_evidence_from_provider=true
+else
+  github_evidence_client_id="$(read_existing_value GITHUB_EVIDENCE_CLIENT_ID)"
+  github_evidence_client_secret="$(read_existing_value GITHUB_EVIDENCE_CLIENT_SECRET)"
+fi
+validate_pair "GitHub evidence OAuth" "$github_evidence_client_id" "$github_evidence_client_secret"
+if [ -n "$github_auth_client_id" ] && [ -n "$github_evidence_client_id" ] && [ "$github_auth_client_id" = "$github_evidence_client_id" ]; then
+  echo "GitHub browser authentication and evidence access must use different OAuth clients" >&2
+  exit 1
+fi
+
+next_env="$(mktemp "$runtime_dir/.runtime.env.XXXXXX")"
+trap 'rm -f "$next_env"' EXIT HUP INT TERM
+
+{
+  printf 'NATIVE_AUTH_SECRET=%s\n' "$native_auth_secret"
+  printf 'PASSWORD_PEPPER=%s\n' "$password_pepper"
+  printf 'GITHUB_EVIDENCE_ENCRYPTION_KEY=%s\n' "$github_evidence_encryption_key"
+  if [ "$telegram_oidc_from_provider" = false ] && [ -n "$telegram_oidc_client_id" ]; then
+    printf 'TELEGRAM_OIDC_CLIENT_ID=%s\n' "$telegram_oidc_client_id"
+    printf 'TELEGRAM_OIDC_CLIENT_SECRET=%s\n' "$telegram_oidc_client_secret"
+  fi
+  if [ "$github_auth_from_provider" = false ] && [ -n "$github_auth_client_id" ]; then
+    printf 'GITHUB_AUTH_CLIENT_ID=%s\n' "$github_auth_client_id"
+    printf 'GITHUB_AUTH_CLIENT_SECRET=%s\n' "$github_auth_client_secret"
+  fi
+  if [ "$github_evidence_from_provider" = false ] && [ -n "$github_evidence_client_id" ]; then
+    printf 'GITHUB_EVIDENCE_CLIENT_ID=%s\n' "$github_evidence_client_id"
+    printf 'GITHUB_EVIDENCE_CLIENT_SECRET=%s\n' "$github_evidence_client_secret"
+  fi
+  cat "$provider_env"
+} >"$next_env"
+chmod 0600 "$next_env"
+mv "$next_env" "$runtime_env"
+trap - EXIT HUP INT TERM
+ || {
+  echo "TELEGRAM_BOT_ID must be a positive public identifier" >&2
+  exit 1
+}
+previous_bot_id="$(read_existing_value TELEGRAM_BOT_ID)"
+if [ -z "$previous_bot_id" ]; then
+  # Migration only: extract the numeric ID from the old environment without
+  # copying or printing its credential. Refuse unexpected identity changes.
+  previous_token="$(read_existing_value TELEGRAM_BOT_TOKEN)"
+  if [ -n "$previous_token" ]; then
+    previous_bot_id="${previous_token%%:*}"
+    unset previous_token
+  fi
+fi
+if [ -n "$previous_bot_id" ] && [ "$previous_bot_id" != "$telegram_bot_id" ]; then
+  echo "public Telegram bot identity differs from existing runtime" >&2
+  exit 1
+fi
 
 public_origin="$(read_provider_value PUBLIC_ORIGIN)"
 if [ -n "$public_origin" ]; then
