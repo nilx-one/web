@@ -250,7 +250,11 @@ async fn ingest_line(
         }
     };
     json(
-        if created { StatusCode::CREATED } else { StatusCode::OK },
+        if created {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
         IngestResponse {
             line_id: line.id().as_str().to_owned(),
             status: if created {
@@ -571,7 +575,9 @@ mod tests {
             .open_session(&owner, &token, "Telegram · Chat", None, now, now + 3600)
             .await
             .unwrap();
-        let pool = sqlx::SqlitePool::connect(&harness.database_url).await.unwrap();
+        let pool = sqlx::SqlitePool::connect(&harness.database_url)
+            .await
+            .unwrap();
         let bond_id: String = sqlx::query_scalar(
             "INSERT INTO legacy_bond_keys (legacy_pub_dress) VALUES (?) RETURNING bond_id",
         )
@@ -599,7 +605,11 @@ mod tests {
     }
 
     async fn deliveries(harness: &Harness) -> Vec<nilxone_api::bot_speech::SpeechDelivery> {
-        harness.product.claim_speech_deliveries("bot", 10, unix_now()).await.unwrap()
+        harness
+            .product
+            .claim_speech_deliveries("bot", 10, unix_now())
+            .await
+            .unwrap()
     }
 
     async fn place(harness: &Harness, pub_dress: &str, at: GeoCoordinate, updated_at: u64) {
