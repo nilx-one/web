@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Product-owned Telegram credential delivery contract."""
 
+import os
 from pathlib import Path
 import subprocess
 import unittest
@@ -31,6 +32,42 @@ class ProductSecretDeliveryTests(unittest.TestCase):
         self.assertIn("actions/attest-build-provenance@", package)
         self.assertIn("age --recipient", package)
         self.assertIn("age --armor --recipient", handoff)
+
+    def test_public_bot_id_check_rejects_noncanonical_and_overflowing_values(self):
+        # Run the workflows' own check line, so the test cannot drift from it.
+        for path in (
+            ".github/workflows/package-identity-service.yml",
+            ".github/workflows/deploy-identity-service.yml",
+        ):
+            line = next(
+                line.strip()
+                for line in Path(path).read_text().splitlines()
+                if '"$TELEGRAM_BOT_ID" =~' in line
+            )
+
+            def accepted(value):
+                return (
+                    subprocess.run(
+                        ["bash", "-c", line],
+                        env={"TELEGRAM_BOT_ID": value, "PATH": os.environ["PATH"]},
+                        capture_output=True,
+                    ).returncode
+                    == 0
+                )
+
+            for good in ("1", "123456", "18446744073709551615", "9999999999999999999"):
+                self.assertTrue(accepted(good), (path, good))
+            for bad in (
+                "",
+                "0",
+                "0123456",
+                "+123456",
+                "12 34",
+                "18446744073709551616",
+                "99999999999999999999",
+                "100000000000000000000",
+            ):
+                self.assertFalse(accepted(bad), (path, bad))
 
     def test_recipient_guard_uses_only_live_owning_contract(self):
         recipient = "ssh-ed25519 " + "A" * 68
