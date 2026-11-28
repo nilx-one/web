@@ -1,7 +1,12 @@
 // © 2026 aiaiaiai · aiaiaiai.org
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{
+    env,
+    net::SocketAddr,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use identity_bot::{
     BondLocationRepository, BrowserOAuthConfig, DiscordOAuthClient, GithubEvidenceConfig,
@@ -608,7 +613,15 @@ mod tests {
         for polling in ["enabled", "", "unknown"] {
             assert!(public_telegram_verifier(Some("123456"), false, Some(polling), 300).is_err());
         }
-        for bot_id in [None, Some(""), Some("0"), Some("0123"), Some("+123"), Some("123:token"), Some("18446744073709551616")] {
+        for bot_id in [
+            None,
+            Some(""),
+            Some("0"),
+            Some("0123"),
+            Some("+123"),
+            Some("123:token"),
+            Some("18446744073709551616"),
+        ] {
             assert!(public_telegram_verifier(bot_id, false, None, 300).is_err());
         }
     }
