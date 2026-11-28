@@ -68,10 +68,10 @@ built yet; the ingest contract below is what it will call.
 
 ## Who hears it
 
-| Where             | Who                                                                                                                       |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Web / Mini App    | The speaker, always. Any other signed-in Bond whose current location is within earshot of the speaker's current location. |
-| Telegram bot copy | Telegram-bound Bonds within earshot with a live AIS chat attached to that Bond, nearest first, at most 100 candidates, never the speaker. Plain text `0x0sky: …`.               |
+| Where             | Who                                                                                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web / Mini App    | The speaker, always. Any other signed-in Bond whose current location is within earshot of the speaker's current location.                                         |
+| Telegram bot copy | Telegram-bound Bonds within earshot with a live AIS chat attached to that Bond, nearest first, at most 100 candidates, never the speaker. Plain text `0x0sky: …`. |
 
 A `live` location older than 30 minutes no longer places its Bond anywhere; a
 declared `manual` point does not age. A Bond with no current location hears no
