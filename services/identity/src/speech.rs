@@ -15,10 +15,7 @@
 //! `bond_speakers` row.
 
 use std::{
-    future::Future,
-    pin::Pin,
     str::FromStr,
-    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -101,36 +98,12 @@ impl SpeechConfig {
     }
 }
 
-/// Delivers a spoken line to Telegram users. The port keeps the Bot API out
-/// of the router and out of the tests.
-pub trait SpeechRelay: Send + Sync + 'static {
-    fn deliver(
-        &self,
-        telegram_user_ids: Vec<i64>,
-        text: String,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
-}
-
-/// A relay for deployments and tests that have no Telegram bot.
-pub struct NoRelay;
-
-impl SpeechRelay for NoRelay {
-    fn deliver(
-        &self,
-        _telegram_user_ids: Vec<i64>,
-        _text: String,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
-        Box::pin(async {})
-    }
-}
-
 pub use nilxone_identity::speech::{Listener, SpeechRepository, SpeechRepositoryError};
 
 #[derive(Clone)]
 struct SpeechApiState {
     auth: LocationControlApiState,
     speech: SpeechRepository,
-    relay: Arc<dyn SpeechRelay>,
     config: SpeechConfig,
 }
 
@@ -142,7 +115,6 @@ pub fn speech_router(
     telegram_verifier: TelegramInitDataVerifier,
     discord_oauth: Option<DiscordOAuthClient>,
     native_auth: NativeAuthConfig,
-    relay: Arc<dyn SpeechRelay>,
     config: SpeechConfig,
     product: Option<crate::product_bond_auth::ProductBondAuth>,
 ) -> Router {
@@ -160,7 +132,6 @@ pub fn speech_router(
                 product,
             },
             speech,
-            relay,
             config,
         })
 }
@@ -183,7 +154,9 @@ struct IngestRequest {
 struct IngestResponse {
     line_id: String,
     status: IngestStatus,
-    relayed_to: usize,
+    // Compatibility field: counts accepted outbox recipients, not Telegram receipts.
+    relayed_to: u64,
+    queued_to: u64,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -245,6 +218,7 @@ async fn ingest_line(
                 line_id: id.as_str().to_owned(),
                 status: IngestStatus::Expired,
                 relayed_to: 0,
+                queued_to: 0,
             },
         );
     }
@@ -254,43 +228,42 @@ async fn ingest_line(
         text,
         DecimalU64::new(request.spoken_at),
     );
-    let created = match state.speech.record(&line, now).await {
-        Ok(created) => created,
-        Err(error) => {
-            tracing::error!(%error, "spoken line write failed");
-            return failure(StatusCode::SERVICE_UNAVAILABLE, "unavailable");
-        }
-    };
-    if !created {
-        return json(
-            StatusCode::OK,
-            IngestResponse {
-                line_id: line.id().as_str().to_owned(),
-                status: IngestStatus::Duplicate,
-                relayed_to: 0,
-            },
-        );
-    }
     let recipients = match telegram_recipients(&state, &speaker, now).await {
         Ok(recipients) => recipients,
         Err(error) => {
-            // The line is stored and audible on the web; only the copy fails.
+            // Preserve map speech even when recipient lookup is unavailable.
             tracing::error!(%error, "spoken line recipient lookup failed");
             Vec::new()
         }
     };
-    let relayed_to = recipients.len();
-    if !recipients.is_empty() {
-        let relay = Arc::clone(&state.relay);
-        let copy = format!("{speaker}: {}", line.text());
-        tokio::spawn(async move { relay.deliver(recipients, copy).await });
-    }
+    // Core owns the transaction: a duplicate cannot enqueue a second copy,
+    // and a failed insert cannot leave a partially recorded delivery.
+    let (created, queued_to) = match state
+        .speech
+        .record_with_telegram_recipients(&line, now, &recipients)
+        .await
+    {
+        Ok(result) => result,
+        Err(error) => {
+            tracing::error!(%error, "spoken line outbox write failed");
+            return failure(StatusCode::SERVICE_UNAVAILABLE, "unavailable");
+        }
+    };
     json(
-        StatusCode::CREATED,
+        if created {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
         IngestResponse {
             line_id: line.id().as_str().to_owned(),
-            status: IngestStatus::Recorded,
-            relayed_to,
+            status: if created {
+                IngestStatus::Recorded
+            } else {
+                IngestStatus::Duplicate
+            },
+            relayed_to: queued_to,
+            queued_to,
         },
     )
 }
@@ -478,7 +451,6 @@ mod tests {
     };
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
-    use tokio::sync::mpsc;
     use tower::ServiceExt as _;
     use url::form_urlencoded;
 
@@ -489,26 +461,13 @@ mod tests {
     const INGEST_TOKEN: &str = "speech-ingest-token-that-is-long-enough-to-pass";
     const KYIV: (f64, f64) = (30.5234, 50.4501);
 
-    struct RecordingRelay(mpsc::UnboundedSender<(Vec<i64>, String)>);
-
-    impl SpeechRelay for RecordingRelay {
-        fn deliver(
-            &self,
-            telegram_user_ids: Vec<i64>,
-            text: String,
-        ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
-            let _ = self.0.send((telegram_user_ids, text));
-            Box::pin(async {})
-        }
-    }
-
     struct Harness {
         app: Router,
         database_url: String,
         identities: IdentityRepository,
         locations: BondLocationRepository,
         speech: SpeechRepository,
-        relayed: mpsc::UnboundedReceiver<(Vec<i64>, String)>,
+        product: nilxone_identity::public_info::PublicInfoRepository,
         _database: tempfile::NamedTempFile,
     }
 
@@ -557,7 +516,12 @@ mod tests {
         let speech = SpeechRepository::connect(&database_url)
             .await
             .expect("speech repository");
-        let (sender, relayed) = mpsc::unbounded_channel();
+        let product = nilxone_identity::public_info::PublicInfoRepository::connect(&database_url)
+            .await
+            .expect("product repository");
+        nilxone_identity::public_info::LegacyBondMigrationRepository::prepare(product.clone())
+            .await
+            .expect("legacy attachment schema");
         let app = speech_router(
             identities.clone(),
             locations.clone(),
@@ -569,19 +533,20 @@ mod tests {
                 "test-password-pepper-that-is-at-least-thirty-two-bytes",
             )
             .expect("valid native auth configuration"),
-            Arc::new(RecordingRelay(sender)),
             SpeechConfig::new(INGEST_TOKEN, 500).expect("speech config"),
             None,
         );
-        Harness {
+        let harness = Harness {
             app,
             database_url,
             identities,
             locations,
             speech,
-            relayed,
+            product,
             _database: database,
-        }
+        };
+        attach_chat(&harness, "0xfrSb", 2).await;
+        harness
     }
 
     async fn register(identities: &IdentityRepository, pub_dress: &str, telegram: i64) {
@@ -590,6 +555,70 @@ mod tests {
             .register(&pub_dress, &ProviderIdentity::telegram(telegram), 10)
             .await
             .expect("registration");
+    }
+
+    async fn attach_chat(harness: &Harness, address: &str, actor: i64) {
+        let now = unix_now();
+        let token = format!("{actor:064x}");
+        let subject = format!("test-subject-{actor}");
+        let now = i64::try_from(now).unwrap();
+        let pool = sqlx::SqlitePool::connect(&harness.database_url)
+            .await
+            .unwrap();
+        let profile_id: String = sqlx::query_scalar(
+            "INSERT INTO public_profiles (issuer, subject, last_auth_time)
+             VALUES ('https://auth.aiaiaiai.org', ?, ?) RETURNING profile_id",
+        )
+        .bind(&subject)
+        .bind(now)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO product_sessions
+             (token_hash, issuer, subject, profile_id, created_at, expires_at, active, client_label)
+             VALUES (?, 'https://auth.aiaiaiai.org', ?, ?, ?, ?, 1, 'Telegram · Chat')",
+        )
+        .bind(&token)
+        .bind(subject)
+        .bind(&profile_id)
+        .bind(now)
+        .bind(now + 3600)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let bond_id: String = sqlx::query_scalar(
+            "INSERT INTO legacy_bond_keys (legacy_pub_dress) VALUES (?) RETURNING bond_id",
+        )
+        .bind(address)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO legacy_bond_bindings VALUES (?, ?, ?)")
+            .bind(bond_id)
+            .bind(profile_id)
+            .bind(now)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO telegram_chat_sessions (workload_subject, actor_id, token_hash)
+             VALUES ('bot', ?, ?)",
+        )
+        .bind(actor)
+        .bind(token)
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+    }
+
+    async fn deliveries(harness: &Harness) -> Vec<nilxone_api::bot_speech::SpeechDelivery> {
+        harness
+            .product
+            .claim_speech_deliveries("bot", 10, unix_now())
+            .await
+            .unwrap()
     }
 
     async fn place(harness: &Harness, pub_dress: &str, at: GeoCoordinate, updated_at: u64) {
@@ -789,12 +818,13 @@ mod tests {
 
     #[tokio::test]
     async fn a_redelivered_utterance_is_one_line_and_one_copy() {
-        let mut harness = harness().await;
+        let harness = harness().await;
         let now = unix_now();
         place(&harness, "0x0sky", point(0.0, 0.0), now).await;
         register(&harness.identities, "0x1near", 7).await;
         place(&harness, "0x1near", point(100.0, 0.0), now).await;
 
+        attach_chat(&harness, "0x1near", 7).await;
         let body = ingest_body("sky/9", "0x0sky", "привіт усім", now);
         let (first, first_body) = ingest(&harness, Some(INGEST_TOKEN), body.clone()).await;
         assert_eq!(first, StatusCode::CREATED);
@@ -805,19 +835,20 @@ mod tests {
         assert_eq!(second_body["status"], "duplicate");
         assert_eq!(second_body["line_id"], first_body["line_id"]);
 
-        let (recipients, text) = harness.relayed.recv().await.expect("one copy");
-        assert_eq!(recipients, vec![7]);
-        assert_eq!(text, "0x0sky: привіт усім");
-        assert!(
-            harness.relayed.try_recv().is_err(),
-            "a duplicate must not relay again"
-        );
+        assert_eq!(first_body["queued_to"], 1);
+        assert_eq!(second_body["queued_to"], 0);
+        let copies = deliveries(&harness).await;
+        assert_eq!(copies.len(), 1);
+        assert_eq!(copies[0].provider_actor_id, 7);
+        assert_eq!(copies[0].speaker, "0x0sky");
+        assert_eq!(copies[0].text, "привіт усім");
+        assert!(deliveries(&harness).await.is_empty());
         assert_eq!(harness.speech.recent(0).await.expect("recent").len(), 1);
     }
 
     #[tokio::test]
     async fn an_expired_line_is_acknowledged_but_never_stored_or_relayed() {
-        let mut harness = harness().await;
+        let harness = harness().await;
         let old = unix_now() - SPEECH_TTL_SECONDS - 5;
         let (status, body) = ingest(
             &harness,
@@ -828,12 +859,12 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["status"], "expired");
         assert!(harness.speech.recent(0).await.expect("recent").is_empty());
-        assert!(harness.relayed.try_recv().is_err());
+        assert!(deliveries(&harness).await.is_empty());
     }
 
     #[tokio::test]
     async fn the_telegram_copy_goes_only_to_bonds_within_earshot() {
-        let mut harness = harness().await;
+        let harness = harness().await;
         let now = unix_now();
         place(&harness, "0x0sky", point(0.0, 0.0), now).await;
         for (name, telegram, east, updated_at) in [
@@ -843,8 +874,12 @@ mod tests {
             ("0x1stale", 13, 100.0, now - LOCATION_MAX_AGE_SECONDS - 60),
         ] {
             register(&harness.identities, name, telegram).await;
+            attach_chat(&harness, name, telegram).await;
             place(&harness, name, point(east, 0.0), updated_at).await;
         }
+        // A nearby legacy Telegram link without an AIS chat does not receive a copy.
+        register(&harness.identities, "0x1guest", 15).await;
+        place(&harness, "0x1guest", point(75.0, 0.0), now).await;
         // Registered and nearby, but never placed anywhere: hears nothing.
         register(&harness.identities, "0x1unplaced", 14).await;
         // The other permitted speaker is close by; the speaker is never echoed.
@@ -857,15 +892,20 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::CREATED);
-        let (mut recipients, _) = harness.relayed.recv().await.expect("one copy");
+        let mut recipients: Vec<_> = deliveries(&harness)
+            .await
+            .into_iter()
+            .map(|delivery| delivery.provider_actor_id)
+            .collect();
         recipients.sort_unstable();
         assert_eq!(recipients, vec![2, 10, 11]);
         assert_eq!(body["relayed_to"], 3);
+        assert_eq!(body["queued_to"], 3);
     }
 
     #[tokio::test]
     async fn a_speaker_with_no_current_location_is_heard_by_nobody_over_telegram() {
-        let mut harness = harness().await;
+        let harness = harness().await;
         let now = unix_now();
         register(&harness.identities, "0x1near", 7).await;
         place(&harness, "0x1near", point(0.0, 0.0), now).await;
@@ -877,7 +917,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::CREATED);
         assert_eq!(body["relayed_to"], 0);
-        assert!(harness.relayed.try_recv().is_err());
+        assert!(deliveries(&harness).await.is_empty());
     }
 
     #[tokio::test]
