@@ -7,9 +7,7 @@ use telegram_surface::{CompactBot, TelegramSurfaces};
 use std::{
     collections::HashMap,
     env,
-    future::Future,
     net::SocketAddr,
-    pin::Pin,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -23,7 +21,7 @@ use identity_bot::{
     TelegramInitDataVerifier, TelegramLocationIntents, aiaiaiai_sign_in, api, browser_web_auth,
     business_command, github_evidence, issuer, location_control_router, partner_account_router,
     partner_lookup_router, product_sign_in, provider_self_service_router, public_api, public_info,
-    speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRelay, SpeechRepository, speech_router},
+    speech::{DEFAULT_EARSHOT_METERS, SpeechConfig, SpeechRepository, speech_router},
 };
 use teloxide::{
     prelude::*,
@@ -157,38 +155,6 @@ impl PendingUnlinkConfirmations {
             Some(started) => started.elapsed() <= UNLINK_CONFIRMATION_TTL,
             None => false,
         }
-    }
-}
-
-/// Copies a spoken line into the private chats of the Telegram users who
-/// are within earshot. Plain text on purpose: a line is never parsed as
-/// markup. A user who has blocked the bot only costs a log line.
-struct TelegramSpeechRelay {
-    bot: Bot,
-    surfaces: Arc<TelegramSurfaces>,
-}
-
-impl SpeechRelay for TelegramSpeechRelay {
-    fn deliver(
-        &self,
-        telegram_user_ids: Vec<i64>,
-        text: String,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
-        Box::pin(async move {
-            for telegram_user_id in telegram_user_ids {
-                let compact = CompactBot::new(
-                    self.bot.clone(),
-                    ChatId(telegram_user_id),
-                    Arc::clone(&self.surfaces),
-                );
-                if let Err(error) = compact
-                    .send_message(ChatId(telegram_user_id), text.clone())
-                    .await
-                {
-                    error!(%error, "spoken line copy was not delivered");
-                }
-            }
-        })
     }
 }
 
@@ -472,10 +438,6 @@ async fn main() {
             telegram_activity_verifier.clone(),
             discord_activity_oauth.clone(),
             native_auth.clone(),
-            Arc::new(TelegramSpeechRelay {
-                bot: bot.clone(),
-                surfaces: Arc::clone(&surfaces),
-            }),
             config,
             product_bonds.clone(),
         )
